@@ -87,7 +87,8 @@ export default defineSchema({
     source: v.union(
       v.literal("manual"),
       v.literal("calendar"),
-      v.literal("api")
+      v.literal("api"),
+      v.literal("email")
     ),
     provider: v.string(),
     status: v.union(
@@ -126,4 +127,16 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_type", ["type"])
     .index("by_date", ["startDate"]),
+
+  // Email account connections for booking import
+  emailAccounts: defineTable({
+    provider: v.union(v.literal("gmail"), v.literal("outlook")),
+    email: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.string(),
+    tokenExpiry: v.number(),
+    isConnected: v.boolean(),
+    lastScanTime: v.optional(v.string()),
+    lastScanMessageId: v.optional(v.string()),
+  }).index("by_provider", ["provider"]),
 });

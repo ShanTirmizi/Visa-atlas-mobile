@@ -14,7 +14,8 @@ const bookingTypeValidator = v.union(
 const bookingSourceValidator = v.union(
   v.literal("manual"),
   v.literal("calendar"),
-  v.literal("api")
+  v.literal("api"),
+  v.literal("email")
 );
 
 const bookingStatusValidator = v.union(
