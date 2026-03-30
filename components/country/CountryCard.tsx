@@ -9,16 +9,15 @@ import {
   Spacing,
   Radius,
   Shadows,
+  BentoRadius,
 } from '@/constants/theme';
 import type { CountryVisa, VisaCategory, HeldVisaType } from '@/data/visaData';
 import { resolveCountry } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
 import { travelData } from '@/data/travelData';
-import VisaBadge from './VisaBadge';
 
 // Convert ISO 3166-1 alpha-3 code to flag emoji via regional indicator symbols
 function isoToFlag(code: string): string {
-  // Map alpha-3 to alpha-2 for the flag
   const alpha2 = alpha3ToAlpha2(code);
   if (!alpha2) return '';
   return alpha2
@@ -28,8 +27,6 @@ function isoToFlag(code: string): string {
     .join('');
 }
 
-// Minimal alpha-3 to alpha-2 mapping for common codes
-// We only need the first two letters for most, but some differ
 const ALPHA3_TO_ALPHA2: Record<string, string> = {
   AFG: 'AF', ALB: 'AL', DZA: 'DZ', AND: 'AD', AGO: 'AO',
   ATG: 'AG', ARG: 'AR', ARM: 'AM', AUS: 'AU', AUT: 'AT',
@@ -76,23 +73,21 @@ function alpha3ToAlpha2(alpha3: string): string | undefined {
   return ALPHA3_TO_ALPHA2[alpha3.toUpperCase()];
 }
 
-function getCategoryColor(
-  category: VisaCategory,
-  colors: ThemeColors,
-): string {
+// Get SOLID card background color — punchy like HabitQuest category cards
+function getCardBgColor(category: VisaCategory, colors: ThemeColors): string {
   switch (category) {
     case 'visa-free':
-      return colors.visaFree;
+      return colors.visaFreeCard;
     case 'visa-on-arrival':
-      return colors.visaOnArrival;
+      return colors.visaOnArrivalCard;
     case 'evisa':
-      return colors.evisa;
+      return colors.evisaCard;
     case 'visa-required':
-      return colors.visaRequired;
+      return colors.visaRequiredCard;
     case 'home':
       return colors.primary;
     default:
-      return colors.textMuted;
+      return colors.primary;
   }
 }
 
@@ -126,73 +121,55 @@ function CountryCardComponent({
   const meta = countryMeta[country.code];
   const travel = travelData[country.code];
   const flag = isoToFlag(country.code);
-  const stripeColor = getCategoryColor(resolved.category, colors);
+  const cardBg = getCardBgColor(resolved.category, colors);
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.7}
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.borderSubtle,
-        },
-      ]}
+      activeOpacity={0.8}
+      style={[styles.card, { backgroundColor: cardBg }, Shadows.card]}
     >
-      {/* Left color stripe */}
-      <View style={[styles.stripe, { backgroundColor: stripeColor }]} />
-
       {/* Content */}
       <View style={styles.content}>
-        {/* Top row: flag + name + region */}
+        {/* Top row: flag + name + visa label */}
         <View style={styles.mainRow}>
           <Text style={styles.flag}>{flag}</Text>
           <View style={styles.nameColumn}>
-            <Text
-              style={[styles.name, { color: colors.foreground }]}
-              numberOfLines={1}
-            >
+            <Text style={styles.name} numberOfLines={1}>
               {country.name}
             </Text>
             {meta && (
-              <Text
-                style={[styles.region, { color: colors.textMuted }]}
-                numberOfLines={1}
-              >
+              <Text style={styles.region} numberOfLines={1}>
                 {meta.region}
               </Text>
             )}
           </View>
         </View>
 
-        {/* Bottom row: badge + cost + flight hours */}
+        {/* Bottom row: visa label + cost + flight hours */}
         <View style={styles.metaRow}>
-          <VisaBadge category={resolved.category} />
+          <View style={styles.visaLabel}>
+            <Text style={styles.visaLabelText}>
+              {resolved.category === 'visa-free' ? 'Visa Free' :
+               resolved.category === 'visa-on-arrival' ? 'On Arrival' :
+               resolved.category === 'evisa' ? 'eVisa' :
+               resolved.category === 'visa-required' ? 'Required' :
+               resolved.category === 'home' ? 'Home' : ''}
+            </Text>
+          </View>
 
           <View style={styles.indicators}>
             {travel && (
               <>
                 <View style={styles.indicator}>
-                  <DollarSign size={12} color={colors.textMuted} />
-                  <Text
-                    style={[
-                      styles.indicatorText,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
+                  <DollarSign size={12} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.indicatorText}>
                     {getCostIndicator(travel.costLevel)}
                   </Text>
                 </View>
-
                 <View style={styles.indicator}>
-                  <Clock size={12} color={colors.textMuted} />
-                  <Text
-                    style={[
-                      styles.indicatorText,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
+                  <Clock size={12} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.indicatorText}>
                     {travel.flightHoursFromLondon}h
                   </Text>
                 </View>
@@ -210,8 +187,8 @@ function CountryCardComponent({
       >
         <Star
           size={18}
-          color={isFavorite ? colors.secondary : colors.textMuted}
-          fill={isFavorite ? colors.secondary : 'transparent'}
+          color={isFavorite ? '#FFFFFF' : 'rgba(255,255,255,0.5)'}
+          fill={isFavorite ? '#FFFFFF' : 'transparent'}
         />
       </TouchableOpacity>
     </TouchableOpacity>
@@ -225,42 +202,38 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: Radius.sm,
-    borderWidth: 1,
+    borderRadius: BentoRadius,
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.sm + 2,
     overflow: 'hidden',
-    ...Shadows.subtle,
-  },
-  stripe: {
-    width: 5,
-    alignSelf: 'stretch',
   },
   content: {
     flex: 1,
-    paddingVertical: Spacing.sm + 2,
-    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
   },
   mainRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.xs + 2,
+    marginBottom: Spacing.sm,
   },
   flag: {
-    fontSize: 24,
-    marginRight: Spacing.sm,
+    fontSize: 28,
+    marginRight: Spacing.sm + 2,
   },
   nameColumn: {
     flex: 1,
   },
   name: {
-    fontFamily: FontFamily.condensedSemibold,
+    fontFamily: FontFamily.bold,
     fontSize: FontSize.lg,
-    letterSpacing: 0.3,
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   region: {
-    fontFamily: FontFamily.condensed,
+    fontFamily: FontFamily.regular,
     fontSize: FontSize.xs,
+    color: 'rgba(255, 255, 255, 0.70)',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 1,
@@ -269,6 +242,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  visaLabel: {
+    backgroundColor: 'rgba(255, 255, 255, 0.20)',
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 3,
+    borderRadius: Radius.xs,
+  },
+  visaLabelText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.xs,
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   indicators: {
     flexDirection: 'row',
@@ -281,8 +267,9 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   indicatorText: {
-    fontFamily: FontFamily.condensedMedium,
+    fontFamily: FontFamily.medium,
     fontSize: FontSize.xs,
+    color: 'rgba(255, 255, 255, 0.80)',
   },
   favoriteButton: {
     paddingHorizontal: Spacing.md,

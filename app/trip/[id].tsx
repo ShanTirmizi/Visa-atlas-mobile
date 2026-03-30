@@ -298,10 +298,10 @@ export default function TripDetailScreen() {
           {/* Back button */}
           <TouchableOpacity
             onPress={() => router.back()}
-            style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]}
+            style={[styles.backBtn]}
             hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
           >
-            <ArrowLeft color="#fff" size={20} />
+            <ArrowLeft color={colors.foreground} size={20} />
           </TouchableOpacity>
 
           {/* Hero content */}
@@ -312,15 +312,33 @@ export default function TripDetailScreen() {
                 { color: heroImage?.url ? '#fff' : colors.foreground },
               ]}
             >
-              {trip.countryName}
+              {trip.isMultiCountry && trip.routeTitle
+                ? trip.routeTitle.split(/\s*→\s*/)[0]
+                : trip.countryName}
             </Text>
+            {trip.isMultiCountry && trip.routeTitle && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                {trip.routeTitle.split(/\s*→\s*/).map((country: string, idx: number) => (
+                  <React.Fragment key={idx}>
+                    {idx > 0 && (
+                      <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' }}>
+                        <ArrowLeft color="#fff" size={10} style={{ transform: [{ rotate: '180deg' }] }} />
+                      </View>
+                    )}
+                    <View style={{ backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                      <Text style={{ fontFamily: FontFamily.condensedSemibold, fontSize: 12, color: '#fff' }}>{country}</Text>
+                    </View>
+                  </React.Fragment>
+                ))}
+              </View>
+            )}
             <Text
               style={[
                 styles.heroSubtitle,
                 { color: heroImage?.url ? 'rgba(255,255,255,0.8)' : colors.textSecondary },
               ]}
             >
-              {trip.region} {'\u00B7'} {trip.capital}
+              {trip.isMultiCountry ? 'Multi-country route' : `${trip.region} \u00B7 ${trip.capital}`}
             </Text>
 
             {/* Hero badges */}
@@ -434,11 +452,11 @@ function OverviewContent({
     <View style={{ gap: Spacing.lg }}>
       {/* Highlights */}
       {highlights.length > 0 && (
-        <SectionCard title="Highlights" icon={<Star color={colors.secondary} size={15} />} colors={colors}>
+        <SectionCard title="Highlights" icon={<Star color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.secondary}>
           {highlights.map((h, i) => (
             <View key={i} style={styles.highlightRow}>
-              <Text style={[styles.highlightBullet, { color: colors.secondary }]}>{'\u2022'}</Text>
-              <Text style={[styles.highlightText, { color: colors.foreground }]}>{h}</Text>
+              <Text style={[styles.highlightBullet, { color: 'rgba(255,255,255,0.80)' }]}>{'\u2022'}</Text>
+              <Text style={[styles.highlightText, { color: '#FFFFFF' }]}>{h}</Text>
             </View>
           ))}
         </SectionCard>
@@ -446,7 +464,7 @@ function OverviewContent({
 
       {/* Seasonal Guide */}
       {seasonalGuide && (
-        <SectionCard title="Best Time to Visit" icon={<Sun color={colors.accent} size={15} />} colors={colors}>
+        <SectionCard title="Best Time to Visit" icon={<Sun color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.accent}>
           <View style={{ gap: 10 }}>
             {[
               { label: 'Best Weather', data: seasonalGuide.bestWeather, color: colors.primary },
@@ -454,21 +472,21 @@ function OverviewContent({
               { label: 'Fewest Crowds', data: seasonalGuide.fewestCrowds, color: colors.accent },
               { label: 'Festivals', data: seasonalGuide.festivals, color: colors.danger },
             ].map((item) => (
-              <View key={item.label} style={[styles.seasonRow, { borderLeftColor: item.color }]}>
-                <Text style={[styles.seasonLabel, { color: item.color }]}>{item.label}</Text>
-                <Text style={[styles.seasonMonths, { color: colors.foreground }]}>
+              <View key={item.label} style={[styles.seasonRow, { borderLeftColor: 'rgba(255,255,255,0.40)' }]}>
+                <Text style={[styles.seasonLabel, { color: 'rgba(255,255,255,0.80)' }]}>{item.label}</Text>
+                <Text style={[styles.seasonMonths, { color: '#FFFFFF' }]}>
                   {item.data.months}
                 </Text>
-                <Text style={[styles.seasonNote, { color: colors.textSecondary }]}>
+                <Text style={[styles.seasonNote, { color: 'rgba(255,255,255,0.70)' }]}>
                   {item.data.note}
                 </Text>
               </View>
             ))}
           </View>
           {seasonalGuide.sweetSpot ? (
-            <View style={[styles.sweetSpot, { backgroundColor: colors.primaryBg, borderColor: colors.primary }]}>
-              <Text style={[styles.sweetSpotLabel, { color: colors.primary }]}>Sweet Spot</Text>
-              <Text style={[styles.sweetSpotText, { color: colors.foreground }]}>
+            <View style={[styles.sweetSpot, { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)' }]}>
+              <Text style={[styles.sweetSpotLabel, { color: 'rgba(255,255,255,0.80)' }]}>Sweet Spot</Text>
+              <Text style={[styles.sweetSpotText, { color: '#FFFFFF' }]}>
                 {seasonalGuide.sweetSpot}
               </Text>
             </View>
@@ -477,13 +495,13 @@ function OverviewContent({
       )}
 
       {/* Quick Stats */}
-      <SectionCard title="Quick Stats" icon={<Info color={colors.info} size={15} />} colors={colors}>
+      <SectionCard title="Quick Stats" icon={<Info color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.info}>
         <View style={styles.statsGrid}>
           <StatItem label="Visa" value={getVisaLabel(trip.visaCategory)} color={catColor} colors={colors} />
           <StatItem label="Currency" value={trip.currency} color={colors.secondary} colors={colors} />
           <StatItem label="Language" value={trip.language} color={colors.accent} colors={colors} />
-          <StatItem label="Timezone" value={trip.timezone} color={colors.info} colors={colors} />
-          <StatItem label="Capital" value={trip.capital} color={colors.primary} colors={colors} />
+          <StatItem label="Timezone" value={trip.timezone} color={colors.warning} colors={colors} />
+          <StatItem label="Capital" value={trip.capital} color={'#D95E8A'} colors={colors} />
           <StatItem label="Budget" value={trip.dailyBudget} color={colors.secondary} colors={colors} />
         </View>
       </SectionCard>
@@ -493,9 +511,9 @@ function OverviewContent({
 
 function StatItem({ label, value, color, colors }: { label: string; value: string; color: string; colors: any }) {
   return (
-    <View style={[styles.statItem, { backgroundColor: colors.shimmer }]}>
-      <Text style={[styles.statLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.statValue, { color }]} numberOfLines={2}>{value}</Text>
+    <View style={[styles.statItem, { backgroundColor: color }]}>
+      <Text style={[styles.statLabel, { color: 'rgba(255,255,255,0.70)' }]}>{label}</Text>
+      <Text style={[styles.statValue, { color: '#FFFFFF' }]} numberOfLines={2}>{value}</Text>
     </View>
   );
 }
@@ -523,14 +541,17 @@ function ItineraryContent({
     );
   }
 
+  const dayColors = [colors.primary, colors.secondary, colors.accent, '#D95E8A', colors.warning, colors.info, '#8B5CF6'];
+
   return (
     <View style={{ gap: Spacing.md }}>
       {itinerary.map((day, idx) => {
         const img = dayImages[idx];
+        const dayAccent = dayColors[idx % dayColors.length];
         return (
           <View
             key={day.day}
-            style={[styles.dayCard, Shadows.card, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+            style={[styles.dayCard, Shadows.card, { backgroundColor: dayAccent, borderColor: 'transparent' }]}
           >
             {/* Day image */}
             {img?.url && (
@@ -543,12 +564,12 @@ function ItineraryContent({
 
             {/* Day header */}
             <View style={styles.dayHeader}>
-              <View style={[styles.dayBadge, { backgroundColor: colors.primaryBg }]}>
-                <Text style={[styles.dayBadgeText, { color: colors.primary }]}>
+              <View style={[styles.dayBadge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+                <Text style={[styles.dayBadgeText, { color: '#FFFFFF' }]}>
                   Day {day.day}
                 </Text>
               </View>
-              <Text style={[styles.dayTitle, { color: colors.foreground }]} numberOfLines={2}>
+              <Text style={[styles.dayTitle, { color: '#FFFFFF' }]} numberOfLines={2}>
                 {day.title}
               </Text>
             </View>
@@ -556,30 +577,33 @@ function ItineraryContent({
             {/* Time slots */}
             <View style={styles.timeSlots}>
               <TimeSlot
-                icon={<Coffee color={colors.accent} size={14} />}
+                icon={<Coffee color="rgba(255,255,255,0.80)" size={14} />}
                 label="Morning"
                 text={day.morning}
                 colors={colors}
+                labelColor="rgba(255,255,255,0.80)"
               />
               <TimeSlot
-                icon={<Sun color={colors.secondary} size={14} />}
+                icon={<Sun color="rgba(255,255,255,0.80)" size={14} />}
                 label="Afternoon"
                 text={day.afternoon}
                 colors={colors}
+                labelColor="rgba(255,255,255,0.80)"
               />
               <TimeSlot
-                icon={<Moon color={colors.info} size={14} />}
+                icon={<Moon color="rgba(255,255,255,0.80)" size={14} />}
                 label="Evening"
                 text={day.evening}
                 colors={colors}
+                labelColor="rgba(255,255,255,0.80)"
               />
             </View>
 
             {/* Tip */}
             {day.tip ? (
-              <View style={[styles.tipRow, { backgroundColor: colors.secondaryBg }]}>
-                <Lightbulb color={colors.secondary} size={13} />
-                <Text style={[styles.tipText, { color: colors.foreground }]}>{day.tip}</Text>
+              <View style={[styles.tipRow, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+                <Lightbulb color="#FFFFFF" size={13} />
+                <Text style={[styles.tipText, { color: '#FFFFFF' }]}>{day.tip}</Text>
               </View>
             ) : null}
           </View>
@@ -594,20 +618,22 @@ function TimeSlot({
   label,
   text,
   colors,
+  labelColor,
 }: {
   icon: React.ReactNode;
   label: string;
   text: string;
   colors: any;
+  labelColor?: string;
 }) {
   if (!text) return null;
   return (
     <View style={styles.timeSlot}>
       <View style={styles.timeSlotHeader}>
         {icon}
-        <Text style={[styles.timeSlotLabel, { color: colors.textMuted }]}>{label}</Text>
+        <Text style={[styles.timeSlotLabel, { color: 'rgba(255,255,255,0.80)' }]}>{label}</Text>
       </View>
-      <Text style={[styles.timeSlotText, { color: colors.foreground }]}>{text}</Text>
+      <Text style={[styles.timeSlotText, { color: '#FFFFFF' }]}>{text}</Text>
     </View>
   );
 }
@@ -638,38 +664,54 @@ function LogisticsContent({
     <View style={{ gap: Spacing.lg }}>
       {/* Budget Breakdown */}
       {budget.totalPerDay && (
-        <SectionCard title="Budget Breakdown" icon={<BarChart3 color={colors.secondary} size={15} />} colors={colors}>
+        <SectionCard title="Budget Breakdown" icon={<BarChart3 color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.secondary}>
           <View style={{ gap: 8 }}>
             {[
               { label: 'Accommodation', value: budget.accommodation },
               { label: 'Food', value: budget.food },
-              { label: 'Transport', value: budget.transport },
+              ...(!budget.transport || typeof budget.transport === 'string'
+                ? [{ label: 'Transport', value: budget.transport }]
+                : []),
               { label: 'Activities', value: budget.activities },
-            ].map((item) => (
+            ].filter((item) => typeof item.value === 'string' && item.value).map((item) => (
               <View key={item.label} style={styles.budgetRow}>
-                <Text style={[styles.budgetLabel, { color: colors.textSecondary }]}>{item.label}</Text>
-                <Text style={[styles.budgetValue, { color: colors.foreground }]}>{item.value}</Text>
+                <Text style={[styles.budgetLabel, { color: 'rgba(255,255,255,0.70)' }]}>{item.label}</Text>
+                <Text style={[styles.budgetValue, { color: '#FFFFFF' }]}>{item.value}</Text>
               </View>
             ))}
-            <View style={[styles.budgetDivider, { backgroundColor: colors.border }]} />
+            {/* Multi-country transport legs */}
+            {typeof budget.transport === 'object' && Array.isArray(budget.transport) && (
+              <View style={{ gap: 4 }}>
+                <Text style={[styles.budgetLabel, { color: 'rgba(255,255,255,0.70)', marginBottom: 2 }]}>Transport</Text>
+                {(budget.transport as any[]).map((leg: any, i: number) => (
+                  <View key={i} style={[styles.budgetRow, { paddingLeft: 8 }]}>
+                    <Text style={[styles.budgetValue, { color: 'rgba(255,255,255,0.85)', flex: 1 }]} numberOfLines={1}>
+                      {leg.from} → {leg.to}
+                    </Text>
+                    <Text style={[styles.budgetValue, { color: '#FFFFFF' }]}>{leg.cost}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <View style={[styles.budgetDivider, { backgroundColor: 'rgba(255,255,255,0.20)' }]} />
             <View style={styles.budgetRow}>
-              <Text style={[styles.budgetTotalLabel, { color: colors.primary }]}>Per Day</Text>
-              <Text style={[styles.budgetTotalValue, { color: colors.primary }]}>
+              <Text style={[styles.budgetTotalLabel, { color: 'rgba(255,255,255,0.80)' }]}>Per Day</Text>
+              <Text style={[styles.budgetTotalValue, { color: '#FFFFFF' }]}>
                 {budget.totalPerDay}
               </Text>
             </View>
             <View style={styles.budgetRow}>
-              <Text style={[styles.budgetTotalLabel, { color: colors.foreground }]}>Total Trip</Text>
-              <Text style={[styles.budgetTotalValue, { color: colors.foreground }]}>
+              <Text style={[styles.budgetTotalLabel, { color: '#FFFFFF' }]}>Total Trip</Text>
+              <Text style={[styles.budgetTotalValue, { color: '#FFFFFF' }]}>
                 {budget.totalTrip}
               </Text>
             </View>
             {budget.flightEstimate ? (
               <View style={styles.budgetRow}>
-                <Text style={[styles.budgetLabel, { color: colors.textMuted }]}>
+                <Text style={[styles.budgetLabel, { color: 'rgba(255,255,255,0.60)' }]}>
                   Flights (est.)
                 </Text>
-                <Text style={[styles.budgetValue, { color: colors.textMuted }]}>
+                <Text style={[styles.budgetValue, { color: 'rgba(255,255,255,0.60)' }]}>
                   {budget.flightEstimate}
                 </Text>
               </View>
@@ -680,7 +722,7 @@ function LogisticsContent({
 
       {/* Visa Checklist */}
       {visaChecklist.length > 0 && (
-        <SectionCard title="Visa Checklist" icon={<Shield color={colors.primary} size={15} />} colors={colors}>
+        <SectionCard title="Visa Checklist" icon={<Shield color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.primary}>
           <View style={{ gap: 8 }}>
             {visaChecklist.map((item, i) => (
               <View key={i} style={styles.checklistRow}>
@@ -688,29 +730,24 @@ function LogisticsContent({
                   style={[
                     styles.checklistIcon,
                     {
-                      backgroundColor:
-                        item.status === 'done'
-                          ? colors.primaryBg
-                          : item.status === 'action'
-                          ? colors.secondaryBg
-                          : colors.shimmer,
+                      backgroundColor: 'rgba(255,255,255,0.20)',
                     },
                   ]}
                 >
                   {item.status === 'done' ? (
-                    <Check color={colors.primary} size={12} />
+                    <Check color="#FFFFFF" size={12} />
                   ) : item.status === 'action' ? (
-                    <AlertCircle color={colors.secondary} size={12} />
+                    <AlertCircle color="#FFFFFF" size={12} />
                   ) : (
-                    <Info color={colors.textMuted} size={12} />
+                    <Info color="#FFFFFF" size={12} />
                   )}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.checklistLabel, { color: colors.foreground }]}>
+                  <Text style={[styles.checklistLabel, { color: '#FFFFFF' }]}>
                     {item.label}
                   </Text>
                   {item.detail ? (
-                    <Text style={[styles.checklistDetail, { color: colors.textMuted }]}>
+                    <Text style={[styles.checklistDetail, { color: 'rgba(255,255,255,0.60)' }]}>
                       {item.detail}
                     </Text>
                   ) : null}
@@ -726,31 +763,35 @@ function LogisticsContent({
         packing.clothing.length > 0 ||
         packing.tech.length > 0 ||
         packing.regionSpecific.length > 0) && (
-        <SectionCard title="Packing List" icon={<Package color={colors.accent} size={15} />} colors={colors}>
+        <SectionCard title="Packing List" icon={<Package color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.accent}>
           <View style={{ gap: Spacing.md }}>
             <PackingCategory
               label="Essentials"
-              icon={<Package color={colors.primary} size={13} />}
+              icon={<Package color="rgba(255,255,255,0.80)" size={13} />}
               items={packing.essentials}
               colors={colors}
+              tintColor={colors.primary}
             />
             <PackingCategory
               label="Clothing"
-              icon={<Shirt color={colors.secondary} size={13} />}
+              icon={<Shirt color="rgba(255,255,255,0.80)" size={13} />}
               items={packing.clothing}
               colors={colors}
+              tintColor={colors.secondary}
             />
             <PackingCategory
               label="Tech"
-              icon={<Smartphone color={colors.accent} size={13} />}
+              icon={<Smartphone color="rgba(255,255,255,0.80)" size={13} />}
               items={packing.tech}
               colors={colors}
+              tintColor={colors.accent}
             />
             <PackingCategory
               label="Region Specific"
-              icon={<Compass color={colors.danger} size={13} />}
+              icon={<Compass color="rgba(255,255,255,0.80)" size={13} />}
               items={packing.regionSpecific}
               colors={colors}
+              tintColor={colors.danger}
             />
           </View>
         </SectionCard>
@@ -758,8 +799,8 @@ function LogisticsContent({
 
       {/* Car Rental */}
       {carRental && (
-        <SectionCard title="Car Rental" icon={<Car color={colors.info} size={15} />} colors={colors}>
-          <Text style={[styles.carSummary, { color: colors.foreground }]}>
+        <SectionCard title="Car Rental" icon={<Car color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.info}>
+          <Text style={[styles.carSummary, { color: '#FFFFFF' }]}>
             {carRental.summary}
           </Text>
           <View style={{ gap: 8, marginTop: 10 }}>
@@ -772,13 +813,13 @@ function LogisticsContent({
           </View>
           {carRental.tips.length > 0 && (
             <View style={{ marginTop: 12, gap: 4 }}>
-              <Text style={[styles.packingCatLabel, { color: colors.foreground }]}>
+              <Text style={[styles.packingCatLabel, { color: '#FFFFFF' }]}>
                 Driving Tips
               </Text>
               {carRental.tips.map((tip, i) => (
                 <View key={i} style={styles.highlightRow}>
-                  <Text style={[styles.highlightBullet, { color: colors.info }]}>{'\u2022'}</Text>
-                  <Text style={[styles.packingItem, { color: colors.textSecondary }]}>{tip}</Text>
+                  <Text style={[styles.highlightBullet, { color: 'rgba(255,255,255,0.80)' }]}>{'\u2022'}</Text>
+                  <Text style={[styles.packingItem, { color: 'rgba(255,255,255,0.70)' }]}>{tip}</Text>
                 </View>
               ))}
             </View>
@@ -788,16 +829,16 @@ function LogisticsContent({
 
       {/* Accommodation */}
       {(accommodation.areas.length > 0 || accommodation.budgetOption) && (
-        <SectionCard title="Accommodation" icon={<Bed color={colors.primary} size={15} />} colors={colors}>
+        <SectionCard title="Accommodation" icon={<Bed color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.primary}>
           {accommodation.areas.length > 0 && (
             <View style={{ marginBottom: 10 }}>
-              <Text style={[styles.packingCatLabel, { color: colors.foreground }]}>
+              <Text style={[styles.packingCatLabel, { color: '#FFFFFF' }]}>
                 Best Areas to Stay
               </Text>
               {accommodation.areas.map((area, i) => (
                 <View key={i} style={styles.highlightRow}>
-                  <Text style={[styles.highlightBullet, { color: colors.primary }]}>{'\u2022'}</Text>
-                  <Text style={[styles.packingItem, { color: colors.textSecondary }]}>{area}</Text>
+                  <Text style={[styles.highlightBullet, { color: 'rgba(255,255,255,0.80)' }]}>{'\u2022'}</Text>
+                  <Text style={[styles.packingItem, { color: 'rgba(255,255,255,0.70)' }]}>{area}</Text>
                 </View>
               ))}
             </View>
@@ -818,7 +859,7 @@ function LogisticsContent({
 
       {/* Local Essentials */}
       {localEssentials && (
-        <SectionCard title="Emergency Info" icon={<Phone color={colors.danger} size={15} />} colors={colors}>
+        <SectionCard title="Emergency Info" icon={<Phone color="#FFFFFF" size={15} />} colors={colors} tintColor={colors.danger}>
           <View style={{ gap: 6 }}>
             <InfoRow label="Emergency" value={localEssentials.emergencyNumber} colors={colors} />
             <InfoRow label="Police" value={localEssentials.policeNumber} colors={colors} />
@@ -837,23 +878,27 @@ function PackingCategory({
   icon,
   items,
   colors,
+  tintColor,
 }: {
   label: string;
   icon: React.ReactNode;
   items: string[];
   colors: any;
+  tintColor?: string;
 }) {
   if (items.length === 0) return null;
+  const pillBg = 'rgba(255,255,255,0.20)';
+  const pillText = '#FFFFFF';
   return (
     <View>
       <View style={styles.packingCatHeader}>
         {icon}
-        <Text style={[styles.packingCatLabel, { color: colors.foreground }]}>{label}</Text>
+        <Text style={[styles.packingCatLabel, { color: '#FFFFFF' }]}>{label}</Text>
       </View>
       <View style={styles.packingItems}>
         {items.map((item, i) => (
-          <View key={i} style={[styles.packingPill, { backgroundColor: colors.shimmer }]}>
-            <Text style={[styles.packingItem, { color: colors.textSecondary }]}>{item}</Text>
+          <View key={i} style={[styles.packingPill, { backgroundColor: pillBg, borderWidth: 0, borderColor: 'transparent' }]}>
+            <Text style={[styles.packingItem, { color: pillText }]}>{item}</Text>
           </View>
         ))}
       </View>
@@ -865,8 +910,8 @@ function InfoRow({ label, value, colors }: { label: string; value: string; color
   if (!value) return null;
   return (
     <View style={styles.infoRow}>
-      <Text style={[styles.infoLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.infoValue, { color: colors.foreground }]} numberOfLines={3}>
+      <Text style={[styles.infoLabel, { color: 'rgba(255,255,255,0.60)' }]}>{label}</Text>
+      <Text style={[styles.infoValue, { color: '#FFFFFF' }]} numberOfLines={3}>
         {value}
       </Text>
     </View>
@@ -879,17 +924,22 @@ function SectionCard({
   icon,
   colors,
   children,
+  tintColor,
 }: {
   title: string;
   icon: React.ReactNode;
   colors: any;
   children: React.ReactNode;
+  tintColor?: string;
 }) {
+  const bgColor = tintColor
+    ? tintColor
+    : colors.shimmer;
   return (
-    <View style={[styles.sectionCard, Shadows.card, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+    <View style={[styles.sectionCard, Shadows.card, { backgroundColor: bgColor, borderColor: 'transparent' }]}>
       <View style={styles.sectionHeader}>
         {icon}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{title}</Text>
+        <Text style={[styles.sectionTitle, { color: '#FFFFFF' }]}>{title}</Text>
       </View>
       {children}
     </View>
@@ -932,16 +982,20 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     position: 'absolute',
-    top: 52,
+    top: 56,
     left: Spacing.lg,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: Radius.sm,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
+    ...Shadows.card,
   },
   heroContent: {
     padding: Spacing.lg,
+    paddingTop: 60,
     paddingBottom: Spacing.xl,
   },
   heroTitle: {
@@ -999,9 +1053,9 @@ const styles = StyleSheet.create({
   },
   // Section card
   sectionCard: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.md,
+    borderRadius: 20,
+    borderWidth: 0,
+    padding: Spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1095,8 +1149,8 @@ const styles = StyleSheet.create({
   },
   // Itinerary
   dayCard: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 0,
     overflow: 'hidden',
   },
   dayImage: {
@@ -1107,8 +1161,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    padding: Spacing.md,
-    paddingBottom: 6,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xs,
   },
   dayBadge: {
     paddingHorizontal: 10,
@@ -1128,9 +1183,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   timeSlots: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: 4,
-    gap: 10,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
+    gap: 12,
   },
   timeSlot: {
     gap: 3,
@@ -1156,9 +1211,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    margin: Spacing.md,
-    marginTop: 6,
-    padding: 10,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.xs,
+    padding: Spacing.sm,
     borderRadius: Radius.sm,
   },
   tipText: {
@@ -1183,7 +1239,7 @@ const styles = StyleSheet.create({
   },
   budgetDivider: {
     height: 1,
-    marginVertical: 4,
+    marginVertical: 8,
   },
   budgetTotalLabel: {
     fontFamily: FontFamily.serifSemibold,
@@ -1253,7 +1309,7 @@ const styles = StyleSheet.create({
   // Info row
   infoRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'flex-start',
     gap: 12,
   },
@@ -1268,7 +1324,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.serif,
     fontSize: FontSize.sm,
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   // Empty tab
   emptyTab: {

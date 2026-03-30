@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { Plane, Trash2, Check, Globe, Clock, Wallet } from 'lucide-react-native';
+import { Plane, Trash2, Check, Globe, Clock, Wallet, MoveRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import { getVisaCategoryColor } from '@/constants/theme';
@@ -27,14 +27,33 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
   { value: 'status', label: 'Status' },
 ];
 
+/* prettier-ignore */
+const A3_TO_A2: Record<string,string> = {
+  AFG:'AF',ALB:'AL',DZA:'DZ',AND:'AD',AGO:'AO',ATG:'AG',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',
+  AZE:'AZ',BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
+  BOL:'BO',BIH:'BA',BWA:'BW',BRA:'BR',BRN:'BN',BGR:'BG',BFA:'BF',BDI:'BI',KHM:'KH',CMR:'CM',
+  CAN:'CA',CPV:'CV',CAF:'CF',TCD:'TD',CHL:'CL',CHN:'CN',COL:'CO',COM:'KM',COG:'CG',COD:'CD',
+  CRI:'CR',CIV:'CI',HRV:'HR',CUB:'CU',CYP:'CY',CZE:'CZ',DNK:'DK',DJI:'DJ',DMA:'DM',DOM:'DO',
+  ECU:'EC',EGY:'EG',SLV:'SV',GNQ:'GQ',ERI:'ER',EST:'EE',SWZ:'SZ',ETH:'ET',FJI:'FJ',FIN:'FI',
+  FRA:'FR',GAB:'GA',GMB:'GM',GEO:'GE',DEU:'DE',GHA:'GH',GRC:'GR',GRD:'GD',GTM:'GT',GIN:'GN',
+  GNB:'GW',GUY:'GY',HTI:'HT',HND:'HN',HUN:'HU',ISL:'IS',IND:'IN',IDN:'ID',IRN:'IR',IRQ:'IQ',
+  IRL:'IE',ISR:'IL',ITA:'IT',JAM:'JM',JPN:'JP',JOR:'JO',KAZ:'KZ',KEN:'KE',KIR:'KI',PRK:'KP',
+  KOR:'KR',KWT:'KW',KGZ:'KG',LAO:'LA',LVA:'LV',LBN:'LB',LSO:'LS',LBR:'LR',LBY:'LY',LIE:'LI',
+  LTU:'LT',LUX:'LU',MDG:'MG',MWI:'MW',MYS:'MY',MDV:'MV',MLI:'ML',MLT:'MT',MHL:'MH',MRT:'MR',
+  MUS:'MU',MEX:'MX',FSM:'FM',MDA:'MD',MCO:'MC',MNG:'MN',MNE:'ME',MAR:'MA',MOZ:'MZ',MMR:'MM',
+  NAM:'NA',NRU:'NR',NPL:'NP',NLD:'NL',NZL:'NZ',NIC:'NI',NER:'NE',NGA:'NG',MKD:'MK',NOR:'NO',
+  OMN:'OM',PAK:'PK',PLW:'PW',PAN:'PA',PNG:'PG',PRY:'PY',PER:'PE',PHL:'PH',POL:'PL',PRT:'PT',
+  QAT:'QA',ROU:'RO',RUS:'RU',RWA:'RW',KNA:'KN',LCA:'LC',VCT:'VC',WSM:'WS',SMR:'SM',STP:'ST',
+  SAU:'SA',SEN:'SN',SRB:'RS',SYC:'SC',SLE:'SL',SGP:'SG',SVK:'SK',SVN:'SI',SLB:'SB',SOM:'SO',
+  ZAF:'ZA',ESP:'ES',LKA:'LK',SDN:'SD',SUR:'SR',SWE:'SE',CHE:'CH',SYR:'SY',TWN:'TW',TJK:'TJ',
+  TZA:'TZ',THA:'TH',TLS:'TL',TGO:'TG',TON:'TO',TTO:'TT',TUN:'TN',TUR:'TR',TKM:'TM',TUV:'TV',
+  UGA:'UG',UKR:'UA',ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VUT:'VU',VEN:'VE',VNM:'VN',
+  YEM:'YE',ZMB:'ZM',ZWE:'ZW',PSE:'PS',XKX:'XK',
+};
 function countryCodeToFlag(code: string): string {
   if (!code || code.length < 2) return '';
-  const chars = code
-    .toUpperCase()
-    .slice(0, 2)
-    .split('')
-    .map((c) => 0x1f1e6 + c.charCodeAt(0) - 65);
-  return String.fromCodePoint(...chars);
+  const a2 = A3_TO_A2[code.toUpperCase()] || code.slice(0, 2).toUpperCase();
+  return a2.split('').map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65)).join('');
 }
 
 function formatDate(timestamp: number): string {
@@ -52,7 +71,7 @@ function formatDate(timestamp: number): string {
 // ─── Skeleton card ──────────────────────────────────
 function SkeletonCard({ colors }: { colors: any }) {
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.borderSubtle, padding: Spacing.md }]}>
       <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: '60%', height: 20 }]} />
       <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: '40%', height: 14, marginTop: 8 }]} />
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
@@ -128,22 +147,34 @@ export default function TripsScreen() {
 
       return (
         <TouchableOpacity
-          activeOpacity={0.7}
+          activeOpacity={0.8}
           onPress={() => router.push(`/trip/${item._id}`)}
-          style={[styles.card, Shadows.card, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+          style={[styles.card, Shadows.card, { backgroundColor: catColor }]}
         >
-          {/* Left color accent bar */}
-          <View style={[styles.colorBar, { backgroundColor: catColor }]} />
-
           <View style={styles.cardBody}>
             {/* Top row — country name + flag */}
             <View style={styles.topRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.countryName, { color: colors.foreground }]}>
-                  {countryCodeToFlag(item.countryCode)}{' '}
-                  {item.isMultiCountry ? item.routeTitle : item.countryName}
-                </Text>
-                <Text style={[styles.regionText, { color: colors.textMuted }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                  {item.isMultiCountry && item.routeTitle ? (
+                    <>
+                      <Text style={[styles.countryName, { color: '#FFFFFF' }]}>
+                        {countryCodeToFlag(item.countryCode)}{' '}
+                        {item.routeTitle.split(/\s*→\s*/)[0]}
+                      </Text>
+                      <MoveRight color="#FFFFFF" size={18} style={{ opacity: 0.8 }} />
+                      <Text style={[styles.countryName, { color: '#FFFFFF' }]}>
+                        {item.routeTitle.split(/\s*→\s*/).slice(1).join(' → ')}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={[styles.countryName, { color: '#FFFFFF' }]}>
+                      {countryCodeToFlag(item.countryCode)}{' '}
+                      {item.countryName}
+                    </Text>
+                  )}
+                </View>
+                <Text style={[styles.regionText, { color: 'rgba(255,255,255,0.70)' }]}>
                   {item.isMultiCountry ? 'Multi-country route' : `${item.region} \u00B7 ${item.capital}`}
                 </Text>
               </View>
@@ -151,21 +182,21 @@ export default function TripsScreen() {
 
             {/* Badges */}
             <View style={styles.badgeRow}>
-              <View style={[styles.badge, { backgroundColor: colors.primaryBg }]}>
-                <Clock color={colors.primary} size={11} />
-                <Text style={[styles.badgeText, { color: colors.primary }]}>
+              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+                <Clock color="#FFFFFF" size={11} />
+                <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
                   {item.duration}d
                 </Text>
               </View>
-              <View style={[styles.badge, { backgroundColor: colors.secondaryBg }]}>
-                <Wallet color={colors.secondary} size={11} />
-                <Text style={[styles.badgeText, { color: colors.secondary }]}>
+              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+                <Wallet color="#FFFFFF" size={11} />
+                <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
                   {getCostSymbol(item.costLevel as 1 | 2 | 3)} {item.dailyBudget}
                 </Text>
               </View>
-              <View style={[styles.badge, { backgroundColor: colors.accentBg }]}>
-                <Plane color={colors.accent} size={11} />
-                <Text style={[styles.badgeText, { color: colors.accent }]}>
+              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+                <Plane color="#FFFFFF" size={11} />
+                <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
                   {item.flightHours}h
                 </Text>
               </View>
@@ -173,7 +204,7 @@ export default function TripsScreen() {
 
             {/* Footer — date + status + delete */}
             <View style={styles.footer}>
-              <Text style={[styles.dateText, { color: colors.textMuted }]}>
+              <Text style={[styles.dateText, { color: 'rgba(255,255,255,0.60)' }]}>
                 {formatDate(item._creationTime)}
               </Text>
 
@@ -183,17 +214,17 @@ export default function TripsScreen() {
                   style={[
                     styles.statusBtn,
                     {
-                      backgroundColor: isCompleted ? colors.primaryBg : colors.shimmer,
-                      borderColor: isCompleted ? colors.primary : colors.border,
+                      backgroundColor: 'rgba(255,255,255,0.20)',
+                      borderColor: 'rgba(255,255,255,0.30)',
                     },
                   ]}
                   hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                 >
-                  {isCompleted && <Check color={colors.primary} size={11} />}
+                  {isCompleted && <Check color="#FFFFFF" size={11} />}
                   <Text
                     style={[
                       styles.statusText,
-                      { color: isCompleted ? colors.primary : colors.textMuted },
+                      { color: '#FFFFFF' },
                     ]}
                   >
                     {isCompleted ? 'Done' : 'Planned'}
@@ -205,14 +236,14 @@ export default function TripsScreen() {
                   disabled={isDeleting}
                   style={[
                     styles.deleteBtn,
-                    { backgroundColor: colors.shimmer, borderColor: colors.border, opacity: isDeleting ? 0.4 : 1 },
+                    { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)', opacity: isDeleting ? 0.4 : 1 },
                   ]}
                   hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                 >
                   {isDeleting ? (
-                    <ActivityIndicator size="small" color={colors.textMuted} />
+                    <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Trash2 color={colors.textMuted} size={13} />
+                    <Trash2 color="rgba(255,255,255,0.80)" size={13} />
                   )}
                 </TouchableOpacity>
               </View>
@@ -229,7 +260,7 @@ export default function TripsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
         <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Loading your trips...</Text>
+        <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 100, height: 14, marginTop: 4, borderRadius: 6 }]} />
         <View style={{ marginTop: Spacing.lg, gap: 12 }}>
           {[1, 2, 3].map((i) => (
             <SkeletonCard key={i} colors={colors} />
@@ -244,18 +275,18 @@ export default function TripsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
         <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
-        <View style={[styles.emptyState, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-          <Plane color={colors.textMuted} size={52} strokeWidth={1} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No trips yet</Text>
-          <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>
+        <View style={[styles.emptyState, { backgroundColor: colors.primary }, Shadows.card]}>
+          <Plane color="rgba(255,255,255,0.5)" size={52} strokeWidth={1} />
+          <Text style={[styles.emptyTitle, { color: '#FFFFFF' }]}>No trips yet</Text>
+          <Text style={[styles.emptyBody, { color: 'rgba(255,255,255,0.80)' }]}>
             Head to the map, pick a destination, and plan your next adventure.
           </Text>
           <TouchableOpacity
             onPress={() => router.push('/(tabs)')}
-            style={[styles.exploreBtn, { backgroundColor: colors.primaryBg, borderColor: colors.primary }]}
+            style={[styles.exploreBtn, { backgroundColor: 'rgba(255,255,255,0.20)', borderColor: 'rgba(255,255,255,0.30)' }]}
           >
-            <Globe color={colors.primary} size={16} />
-            <Text style={[styles.exploreBtnText, { color: colors.primary }]}>Explore the Map</Text>
+            <Globe color="#FFFFFF" size={16} />
+            <Text style={[styles.exploreBtnText, { color: '#FFFFFF' }]}>Explore the Map</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -282,16 +313,15 @@ export default function TripsScreen() {
             onPress={() => setSortBy(opt.value)}
             style={[
               styles.sortPill,
-              {
-                backgroundColor: sortBy === opt.value ? colors.primaryBg : colors.shimmer,
-                borderColor: sortBy === opt.value ? colors.primary : colors.borderSubtle,
-              },
+              sortBy === opt.value
+                ? { backgroundColor: colors.accent, ...Shadows.glow(colors.accent, 0.2) }
+                : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
             ]}
           >
             <Text
               style={[
                 styles.sortPillText,
-                { color: sortBy === opt.value ? colors.primary : colors.textMuted },
+                { color: sortBy === opt.value ? '#FFFFFF' : colors.textMuted },
               ]}
             >
               {opt.label}
@@ -337,10 +367,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   sortPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: Radius.full,
-    borderWidth: 1,
   },
   sortPillText: {
     fontFamily: FontFamily.condensedMedium,
@@ -348,15 +377,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  // Trip card
+  // Trip card — vibrant solid color like HabitQuest
   card: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    borderRadius: 20,
     overflow: 'hidden',
-    flexDirection: 'row',
   },
   colorBar: {
-    width: 4,
+    width: 0,
+    display: 'none',
   },
   cardBody: {
     flex: 1,
@@ -437,8 +465,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing['3xl'],
     paddingHorizontal: Spacing.xl,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
+    borderRadius: 20,
     marginTop: Spacing.xl,
   },
   emptyTitle: {

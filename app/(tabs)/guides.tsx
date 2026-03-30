@@ -42,10 +42,10 @@ const STATUS_CONFIG: Record<
   string,
   { label: string; color: string; bg: string }
 > = {
-  preparing: { label: 'Preparing', color: '#e9c46a', bg: 'rgba(233, 196, 106, 0.15)' },
-  submitted: { label: 'Submitted', color: '#f4a261', bg: 'rgba(244, 162, 97, 0.15)' },
-  approved:  { label: 'Approved',  color: '#2a9d8f', bg: 'rgba(42, 157, 143, 0.15)' },
-  rejected:  { label: 'Rejected',  color: '#e76f51', bg: 'rgba(231, 111, 81, 0.15)' },
+  preparing: { label: 'Preparing', color: '#E5A832', bg: 'rgba(229, 168, 50, 0.15)' },
+  submitted: { label: 'Submitted', color: '#EB6D3A', bg: 'rgba(235, 109, 58, 0.15)' },
+  approved:  { label: 'Approved',  color: '#2EAA6E', bg: 'rgba(46, 170, 110, 0.15)' },
+  rejected:  { label: 'Rejected',  color: '#E05545', bg: 'rgba(224, 85, 69, 0.15)' },
 };
 
 // ---------------------------------------------------------------------------
@@ -61,9 +61,31 @@ function getChecklistProgress(json: string): { checked: number; total: number } 
   }
 }
 
+/* prettier-ignore */
+const A3_TO_A2: Record<string,string> = {
+  AFG:'AF',ALB:'AL',DZA:'DZ',AND:'AD',AGO:'AO',ATG:'AG',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',
+  AZE:'AZ',BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
+  BOL:'BO',BIH:'BA',BWA:'BW',BRA:'BR',BRN:'BN',BGR:'BG',BFA:'BF',BDI:'BI',KHM:'KH',CMR:'CM',
+  CAN:'CA',CPV:'CV',CAF:'CF',TCD:'TD',CHL:'CL',CHN:'CN',COL:'CO',COM:'KM',COG:'CG',COD:'CD',
+  CRI:'CR',CIV:'CI',HRV:'HR',CUB:'CU',CYP:'CY',CZE:'CZ',DNK:'DK',DJI:'DJ',DMA:'DM',DOM:'DO',
+  ECU:'EC',EGY:'EG',SLV:'SV',GNQ:'GQ',ERI:'ER',EST:'EE',SWZ:'SZ',ETH:'ET',FJI:'FJ',FIN:'FI',
+  FRA:'FR',GAB:'GA',GMB:'GM',GEO:'GE',DEU:'DE',GHA:'GH',GRC:'GR',GRD:'GD',GTM:'GT',GIN:'GN',
+  GNB:'GW',GUY:'GY',HTI:'HT',HND:'HN',HUN:'HU',ISL:'IS',IND:'IN',IDN:'ID',IRN:'IR',IRQ:'IQ',
+  IRL:'IE',ISR:'IL',ITA:'IT',JAM:'JM',JPN:'JP',JOR:'JO',KAZ:'KZ',KEN:'KE',KIR:'KI',PRK:'KP',
+  KOR:'KR',KWT:'KW',KGZ:'KG',LAO:'LA',LVA:'LV',LBN:'LB',LSO:'LS',LBR:'LR',LBY:'LY',LIE:'LI',
+  LTU:'LT',LUX:'LU',MDG:'MG',MWI:'MW',MYS:'MY',MDV:'MV',MLI:'ML',MLT:'MT',MHL:'MH',MRT:'MR',
+  MUS:'MU',MEX:'MX',FSM:'FM',MDA:'MD',MCO:'MC',MNG:'MN',MNE:'ME',MAR:'MA',MOZ:'MZ',MMR:'MM',
+  NAM:'NA',NRU:'NR',NPL:'NP',NLD:'NL',NZL:'NZ',NIC:'NI',NER:'NE',NGA:'NG',MKD:'MK',NOR:'NO',
+  OMN:'OM',PAK:'PK',PLW:'PW',PAN:'PA',PNG:'PG',PRY:'PY',PER:'PE',PHL:'PH',POL:'PL',PRT:'PT',
+  QAT:'QA',ROU:'RO',RUS:'RU',RWA:'RW',KNA:'KN',LCA:'LC',VCT:'VC',WSM:'WS',SMR:'SM',STP:'ST',
+  SAU:'SA',SEN:'SN',SRB:'RS',SYC:'SC',SLE:'SL',SGP:'SG',SVK:'SK',SVN:'SI',SLB:'SB',SOM:'SO',
+  ZAF:'ZA',ESP:'ES',LKA:'LK',SDN:'SD',SUR:'SR',SWE:'SE',CHE:'CH',SYR:'SY',TWN:'TW',TJK:'TJ',
+  TZA:'TZ',THA:'TH',TLS:'TL',TGO:'TG',TON:'TO',TTO:'TT',TUN:'TN',TUR:'TR',TKM:'TM',TUV:'TV',
+  UGA:'UG',UKR:'UA',ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VUT:'VU',VEN:'VE',VNM:'VN',
+  YEM:'YE',ZMB:'ZM',ZWE:'ZW',PSE:'PS',XKX:'XK',
+};
 function countryCodeToFlag(code: string): string {
-  // countryCode is alpha-3; take first 2 chars as rough alpha-2
-  const a2 = code.slice(0, 2).toUpperCase();
+  const a2 = A3_TO_A2[code.toUpperCase()] || code.slice(0, 2).toUpperCase();
   return a2
     .split('')
     .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
@@ -144,30 +166,30 @@ export default function GuidesScreen() {
           style={[
             styles.card,
             {
-              backgroundColor: colors.card,
-              borderColor: colors.borderSubtle,
+              backgroundColor: status.color,
+              borderWidth: 0,
               opacity: isDeleting ? 0.5 : 1,
             },
           ]}
         >
           {/* Status accent bar */}
-          <View style={[styles.accentBar, { backgroundColor: status.color }]} />
+          <View style={[styles.accentBar, { backgroundColor: 'rgba(255,255,255,0.25)' }]} />
 
           <View style={styles.cardBody}>
             {/* Top row */}
             <View style={styles.cardTopRow}>
               <View style={styles.cardTitleWrap}>
-                <Text style={[styles.cardCountry, { color: colors.foreground }]}>
+                <Text style={[styles.cardCountry, { color: '#FFFFFF' }]}>
                   {flag} {guide.countryName}
                 </Text>
-                <Text style={[styles.cardVisaType, { color: colors.textMuted }]}>
+                <Text style={[styles.cardVisaType, { color: 'rgba(255,255,255,0.70)' }]}>
                   {guide.visaType}
                 </Text>
               </View>
 
               {/* Status badge */}
-              <View style={[styles.badge, { backgroundColor: status.bg }]}>
-                <Text style={[styles.badgeText, { color: status.color }]}>
+              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+                <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
                   {status.label}
                 </Text>
               </View>
@@ -177,25 +199,25 @@ export default function GuidesScreen() {
             {progress.total > 0 && (
               <View style={styles.progressWrap}>
                 <View style={styles.progressLabelRow}>
-                  <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>
+                  <Text style={[styles.progressLabel, { color: 'rgba(255,255,255,0.70)' }]}>
                     {progress.checked}/{progress.total} documents
                   </Text>
                   <Text
                     style={[
                       styles.progressPct,
-                      { color: pct === 100 ? colors.success : colors.textMuted },
+                      { color: '#FFFFFF' },
                     ]}
                   >
                     {pct}%
                   </Text>
                 </View>
-                <View style={[styles.progressTrack, { backgroundColor: colors.shimmer }]}>
+                <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
                   <View
                     style={[
                       styles.progressFill,
                       {
                         width: `${pct}%`,
-                        backgroundColor: pct === 100 ? colors.success : colors.secondary,
+                        backgroundColor: '#FFFFFF',
                       },
                     ]}
                   />
@@ -209,15 +231,15 @@ export default function GuidesScreen() {
                 onPress={() => handleDelete(guide._id as Id<'visaGuides'>, guide.countryName)}
                 disabled={isDeleting}
                 hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                style={[styles.deleteBtn, { borderColor: colors.border }]}
+                style={[styles.deleteBtn, { borderColor: 'rgba(255,255,255,0.25)' }]}
               >
                 {isDeleting ? (
-                  <ActivityIndicator size={14} color={colors.danger} />
+                  <ActivityIndicator size={14} color={'#FFFFFF'} />
                 ) : (
-                  <Trash2 color={colors.textMuted} size={15} strokeWidth={1.5} />
+                  <Trash2 color="rgba(255,255,255,0.70)" size={15} strokeWidth={1.5} />
                 )}
               </TouchableOpacity>
-              <ChevronRight color={colors.textMuted} size={18} strokeWidth={1.5} />
+              <ChevronRight color="rgba(255,255,255,0.70)" size={18} strokeWidth={1.5} />
             </View>
           </View>
         </TouchableOpacity>
@@ -319,13 +341,13 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 0,
     overflow: 'hidden',
     ...Shadows.card,
   },
   accentBar: {
-    height: 4,
+    height: 5,
   },
   cardBody: {
     padding: Spacing.md,

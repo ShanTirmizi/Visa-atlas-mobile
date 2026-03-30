@@ -342,10 +342,10 @@ function ScoreBar({
     <View style={styles.scoreRow}>
       {/* A side */}
       <View style={styles.scoreBarSide}>
-        <Text style={[styles.scoreNum, { color: aWins ? colors.primary : colors.textMuted }]}>
+        <Text style={[styles.scoreNum, { color: '#FFFFFF' }]}>
           {scoreA}
         </Text>
-        <View style={[styles.barTrack, { backgroundColor: colors.shimmer, width: barWidth - 26 }]}>
+        <View style={[styles.barTrack, { backgroundColor: 'rgba(255,255,255,0.15)', width: barWidth - 26 }]}>
           <Animated.View
             style={[
               styles.barFillRight,
@@ -365,12 +365,12 @@ function ScoreBar({
       {/* Category label */}
       <View style={styles.scoreLabelBox}>
         <Text style={styles.scoreLabelEmoji}>{emoji}</Text>
-        <Text style={[styles.scoreLabelText, { color: colors.textSecondary }]}>{label}</Text>
+        <Text style={[styles.scoreLabelText, { color: 'rgba(255,255,255,0.70)' }]}>{label}</Text>
       </View>
 
       {/* B side */}
       <View style={styles.scoreBarSideB}>
-        <View style={[styles.barTrack, { backgroundColor: colors.shimmer, width: barWidth - 26 }]}>
+        <View style={[styles.barTrack, { backgroundColor: 'rgba(255,255,255,0.15)', width: barWidth - 26 }]}>
           <Animated.View
             style={[
               styles.barFillLeft,
@@ -385,7 +385,7 @@ function ScoreBar({
             ]}
           />
         </View>
-        <Text style={[styles.scoreNum, { color: bWins ? colors.accent : colors.textMuted }]}>
+        <Text style={[styles.scoreNum, { color: '#FFFFFF' }]}>
           {scoreB}
         </Text>
       </View>
@@ -689,14 +689,14 @@ export default function CompareScreen() {
         {bothSelected && aiData && (
           <View style={styles.resultsContainer}>
             {/* Score Bars */}
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.secondary, borderColor: 'transparent' }]}>
               {/* Score header */}
-              <View style={[styles.scoreHeader, { borderBottomColor: colors.borderSubtle }]}>
-                <Text style={[styles.scoreHeaderName, { color: colors.primary }]} numberOfLines={1}>
+              <View style={[styles.scoreHeader, { borderBottomColor: 'rgba(255,255,255,0.20)' }]}>
+                <Text style={[styles.scoreHeaderName, { color: '#FFFFFF' }]} numberOfLines={1}>
                   {selectedA!.name}
                 </Text>
-                <Text style={[styles.scoreHeaderLabel, { color: colors.textMuted }]}>SCORE</Text>
-                <Text style={[styles.scoreHeaderName, { color: colors.accent, textAlign: 'right' }]} numberOfLines={1}>
+                <Text style={[styles.scoreHeaderLabel, { color: 'rgba(255,255,255,0.70)' }]}>SCORE</Text>
+                <Text style={[styles.scoreHeaderName, { color: '#FFFFFF', textAlign: 'right' }]} numberOfLines={1}>
                   {selectedB!.name}
                 </Text>
               </View>
@@ -714,56 +714,56 @@ export default function CompareScreen() {
             </View>
 
             {/* Hero Cards - Country A */}
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.primary, borderColor: 'transparent' }]}>
               <View style={styles.heroHeader}>
                 <Text style={styles.heroFlag}>{isoToFlag(selectedA!.code)}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.heroName, { color: colors.foreground }]}>{selectedA!.name}</Text>
-                  <Text style={[styles.heroPitch, { color: colors.textSecondary }]}>{aiData.countryA.pitch}</Text>
+                  <Text style={[styles.heroName, { color: '#FFFFFF' }]}>{selectedA!.name}</Text>
+                  <Text style={[styles.heroPitch, { color: 'rgba(255,255,255,0.70)' }]}>{aiData.countryA.pitch}</Text>
                 </View>
               </View>
-              <View style={[styles.heroBestFor, { backgroundColor: colors.primaryBg, borderColor: colors.primaryGlow }]}>
-                <Text style={[styles.heroBestForText, { color: colors.primary }]}>{aiData.countryA.bestFor}</Text>
+              <View style={[styles.heroBestFor, { backgroundColor: 'rgba(255,255,255,0.20)', borderColor: 'rgba(255,255,255,0.15)' }]}>
+                <Text style={[styles.heroBestForText, { color: '#FFFFFF' }]}>Best for: {aiData.countryA.bestFor}</Text>
               </View>
               {aiData.countryA.highlights.map((h, i) => (
                 <View key={i} style={styles.highlightRow}>
-                  <View style={[styles.highlightDot, { backgroundColor: colors.primary }]} />
-                  <Text style={[styles.highlightText, { color: colors.textSecondary }]}>{h}</Text>
+                  <View style={[styles.highlightDot, { backgroundColor: 'rgba(255,255,255,0.80)' }]} />
+                  <Text style={[styles.highlightText, { color: 'rgba(255,255,255,0.80)' }]}>{h}</Text>
                 </View>
               ))}
             </View>
 
             {/* Hero Cards - Country B */}
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.accent, borderColor: 'transparent' }]}>
               <View style={styles.heroHeader}>
                 <Text style={styles.heroFlag}>{isoToFlag(selectedB!.code)}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.heroName, { color: colors.foreground }]}>{selectedB!.name}</Text>
-                  <Text style={[styles.heroPitch, { color: colors.textSecondary }]}>{aiData.countryB.pitch}</Text>
+                  <Text style={[styles.heroName, { color: '#FFFFFF' }]}>{selectedB!.name}</Text>
+                  <Text style={[styles.heroPitch, { color: 'rgba(255,255,255,0.70)' }]}>{aiData.countryB.pitch}</Text>
                 </View>
               </View>
-              <View style={[styles.heroBestFor, { backgroundColor: colors.accentBg, borderColor: colors.accentGlow }]}>
-                <Text style={[styles.heroBestForText, { color: colors.accent }]}>{aiData.countryB.bestFor}</Text>
+              <View style={[styles.heroBestFor, { backgroundColor: 'rgba(255,255,255,0.20)', borderColor: 'rgba(255,255,255,0.15)' }]}>
+                <Text style={[styles.heroBestForText, { color: '#FFFFFF' }]}>Best for: {aiData.countryB.bestFor}</Text>
               </View>
               {aiData.countryB.highlights.map((h, i) => (
                 <View key={i} style={styles.highlightRow}>
-                  <View style={[styles.highlightDot, { backgroundColor: colors.accent }]} />
-                  <Text style={[styles.highlightText, { color: colors.textSecondary }]}>{h}</Text>
+                  <View style={[styles.highlightDot, { backgroundColor: 'rgba(255,255,255,0.80)' }]} />
+                  <Text style={[styles.highlightText, { color: 'rgba(255,255,255,0.80)' }]}>{h}</Text>
                 </View>
               ))}
             </View>
 
             {/* The Verdict */}
-            <View style={[styles.verdictCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
-              <View style={[styles.verdictAccent, { backgroundColor: colors.primary }]} />
+            <View style={[styles.verdictCard, { backgroundColor: colors.primary, borderColor: 'transparent' }]}>
+              <View style={[styles.verdictAccent, { backgroundColor: 'rgba(255,255,255,0.30)' }]} />
               <View style={styles.verdictHeader}>
-                <Sparkles size={16} color={colors.primary} />
-                <Text style={[styles.verdictTitle, { color: colors.primary }]}>The Verdict</Text>
+                <Sparkles size={16} color={'#FFFFFF'} />
+                <Text style={[styles.verdictTitle, { color: '#FFFFFF' }]}>The Verdict</Text>
               </View>
-              <Text style={[styles.verdictBody, { color: colors.foreground }]}>{aiData.verdict}</Text>
+              <Text style={[styles.verdictBody, { color: '#FFFFFF' }]}>{aiData.verdict}</Text>
               {aiData.valueComparison ? (
-                <View style={[styles.verdictDivider, { borderTopColor: colors.borderSubtle }]}>
-                  <Text style={[styles.verdictValue, { color: colors.textSecondary }]}>
+                <View style={[styles.verdictDivider, { borderTopColor: 'rgba(255,255,255,0.20)' }]}>
+                  <Text style={[styles.verdictValue, { color: 'rgba(255,255,255,0.70)' }]}>
                     {aiData.valueComparison}
                   </Text>
                 </View>
@@ -772,18 +772,18 @@ export default function CompareScreen() {
 
             {/* Practical Details (collapsible) */}
             {metaA && metaB && travelA && travelB && (
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.card, { backgroundColor: colors.warning, borderColor: 'transparent' }]}>
                 <TouchableOpacity
                   style={styles.sectionToggle}
                   onPress={() => toggleSection('practical')}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.sectionToggleText, { color: colors.textSecondary }]}>
+                  <Text style={[styles.sectionToggleText, { color: 'rgba(255,255,255,0.70)' }]}>
                     Practical Details
                   </Text>
                   <ChevronDown
                     size={16}
-                    color={colors.textMuted}
+                    color={'rgba(255,255,255,0.70)'}
                     style={{
                       transform: [{ rotate: expandedSections.has('practical') ? '180deg' : '0deg' }],
                     }}
@@ -800,14 +800,14 @@ export default function CompareScreen() {
                       { label: 'Budget', a: travelA.dailyBudget, b: travelB.dailyBudget },
                       { label: 'Best Time', a: travelA.bestTimeNote, b: travelB.bestTimeNote },
                     ].map((row, i) => (
-                      <View key={i} style={[styles.detailRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.borderSubtle }]}>
-                        <Text style={[styles.detailVal, { color: colors.foreground, textAlign: 'right' }]} numberOfLines={2}>
+                      <View key={i} style={[styles.detailRow, i > 0 && { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.20)' }]}>
+                        <Text style={[styles.detailVal, { color: 'rgba(255,255,255,0.80)', textAlign: 'right' }]} numberOfLines={2}>
                           {row.a}
                         </Text>
                         <View style={styles.detailLabelBox}>
-                          <Text style={[styles.detailLabel, { color: colors.textMuted }]}>{row.label}</Text>
+                          <Text style={[styles.detailLabel, { color: 'rgba(255,255,255,0.70)' }]}>{row.label}</Text>
                         </View>
-                        <Text style={[styles.detailVal, { color: colors.foreground }]} numberOfLines={2}>
+                        <Text style={[styles.detailVal, { color: 'rgba(255,255,255,0.80)' }]} numberOfLines={2}>
                           {row.b}
                         </Text>
                       </View>
@@ -854,7 +854,7 @@ const styles = StyleSheet.create({
   },
   selectorBtn: {
     flex: 1,
-    borderRadius: Radius.sm,
+    borderRadius: 16,
     borderWidth: 1,
     padding: Spacing.md,
     minHeight: 72,
@@ -956,9 +956,9 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   card: {
-    borderRadius: Radius.md,
+    borderRadius: 20,
     borderWidth: 1,
-    padding: Spacing.md,
+    padding: Spacing.lg,
     ...Shadows.card,
   },
 
@@ -1066,16 +1066,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   heroBestFor: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: Spacing.xs + 1,
-    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
     borderWidth: 1,
     marginBottom: Spacing.sm,
   },
   heroBestForText: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.xs,
+    lineHeight: 16,
   },
   highlightRow: {
     flexDirection: 'row',
@@ -1098,9 +1098,9 @@ const styles = StyleSheet.create({
 
   // Verdict
   verdictCard: {
-    borderRadius: Radius.md,
+    borderRadius: 20,
     borderWidth: 1.5,
-    padding: Spacing.md,
+    padding: Spacing.lg,
     overflow: 'hidden',
     ...Shadows.card,
   },

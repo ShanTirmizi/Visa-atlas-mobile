@@ -11,9 +11,16 @@ import * as SplashScreen from 'expo-splash-screen';
 // Fonts
 import { BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
 import {
+  Sora_400Regular,
+  Sora_500Medium,
+  Sora_600SemiBold,
+  Sora_700Bold,
+} from '@expo-google-fonts/sora';
+import {
   Lora_400Regular,
   Lora_500Medium,
   Lora_600SemiBold,
+  Lora_700Bold,
   Lora_400Regular_Italic,
 } from '@expo-google-fonts/lora';
 import {
@@ -74,9 +81,14 @@ function ThemedApp() {
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     BebasNeue_400Regular,
+    Sora_400Regular,
+    Sora_500Medium,
+    Sora_600SemiBold,
+    Sora_700Bold,
     Lora_400Regular,
     Lora_500Medium,
     Lora_600SemiBold,
+    Lora_700Bold,
     Lora_400Regular_Italic,
     BarlowCondensed_400Regular,
     BarlowCondensed_500Medium,

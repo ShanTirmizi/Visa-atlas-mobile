@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Switch,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,11 +13,9 @@ import {
   Heart,
   MapPin,
   Settings,
-  Moon,
-  Sun,
+  ArrowLeft,
   ChevronRight,
   Check,
-  X,
   Shield,
   Info,
   Trash2,
@@ -32,7 +29,7 @@ import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 type Section = 'main' | 'visas' | 'favorites' | 'visited' | 'settings';
 
 export default function MoreScreen() {
-  const { colors, mode, isDark, toggleTheme } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { heldVisas, toggleHeldVisa, favorites, visited, setHeldVisas } = useVisa();
   const [activeSection, setActiveSection] = useState<Section>('main');
@@ -41,17 +38,11 @@ export default function MoreScreen() {
   const renderVisas = () => (
     <View style={styles.sectionContent}>
       <TouchableOpacity
-        style={styles.backRow}
+        style={styles.backBtn}
         onPress={() => setActiveSection('main')}
+        hitSlop={12}
       >
-        <ChevronRight
-          color={colors.textSecondary}
-          size={18}
-          style={{ transform: [{ rotate: '180deg' }] }}
-        />
-        <Text style={[styles.backLabel, { color: colors.textSecondary }]}>
-          Back
-        </Text>
+        <ArrowLeft color={colors.foreground} size={20} />
       </TouchableOpacity>
 
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
@@ -70,8 +61,9 @@ export default function MoreScreen() {
               style={[
                 styles.visaItem,
                 {
-                  backgroundColor: isHeld ? colors.primaryBg : colors.card,
-                  borderColor: isHeld ? colors.primary : colors.border,
+                  backgroundColor: isHeld ? colors.primary : colors.shimmer,
+                  borderColor: isHeld ? colors.primary : colors.borderSubtle,
+                  borderWidth: isHeld ? 0 : 1,
                 },
               ]}
               onPress={() => toggleHeldVisa(visa.id)}
@@ -81,20 +73,20 @@ export default function MoreScreen() {
                 <View
                   style={[
                     styles.visaDot,
-                    { backgroundColor: isHeld ? colors.primary : colors.textMuted },
+                    { backgroundColor: isHeld ? '#FFFFFF' : colors.textMuted },
                   ]}
                 />
                 <View>
-                  <Text style={[styles.visaName, { color: colors.foreground }]}>
+                  <Text style={[styles.visaName, { color: isHeld ? '#FFFFFF' : colors.foreground }]}>
                     {visa.label}
                   </Text>
-                  <Text style={[styles.visaCount, { color: colors.textSecondary }]}>
+                  <Text style={[styles.visaCount, { color: isHeld ? 'rgba(255,255,255,0.70)' : colors.textSecondary }]}>
                     {visa.description}
                   </Text>
                 </View>
               </View>
               {isHeld ? (
-                <Check color={colors.primary} size={20} />
+                <Check color="#FFFFFF" size={20} />
               ) : (
                 <View
                   style={[styles.uncheckedCircle, { borderColor: colors.textMuted }]}
@@ -111,17 +103,11 @@ export default function MoreScreen() {
   const renderFavorites = () => (
     <View style={styles.sectionContent}>
       <TouchableOpacity
-        style={styles.backRow}
+        style={styles.backBtn}
         onPress={() => setActiveSection('main')}
+        hitSlop={12}
       >
-        <ChevronRight
-          color={colors.textSecondary}
-          size={18}
-          style={{ transform: [{ rotate: '180deg' }] }}
-        />
-        <Text style={[styles.backLabel, { color: colors.textSecondary }]}>
-          Back
-        </Text>
+        <ArrowLeft color={colors.foreground} size={20} />
       </TouchableOpacity>
 
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
@@ -147,17 +133,11 @@ export default function MoreScreen() {
   const renderVisited = () => (
     <View style={styles.sectionContent}>
       <TouchableOpacity
-        style={styles.backRow}
+        style={styles.backBtn}
         onPress={() => setActiveSection('main')}
+        hitSlop={12}
       >
-        <ChevronRight
-          color={colors.textSecondary}
-          size={18}
-          style={{ transform: [{ rotate: '180deg' }] }}
-        />
-        <Text style={[styles.backLabel, { color: colors.textSecondary }]}>
-          Back
-        </Text>
+        <ArrowLeft color={colors.foreground} size={20} />
       </TouchableOpacity>
 
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
@@ -183,53 +163,22 @@ export default function MoreScreen() {
   const renderSettings = () => (
     <View style={styles.sectionContent}>
       <TouchableOpacity
-        style={styles.backRow}
+        style={styles.backBtn}
         onPress={() => setActiveSection('main')}
+        hitSlop={12}
       >
-        <ChevronRight
-          color={colors.textSecondary}
-          size={18}
-          style={{ transform: [{ rotate: '180deg' }] }}
-        />
-        <Text style={[styles.backLabel, { color: colors.textSecondary }]}>
-          Back
-        </Text>
+        <ArrowLeft color={colors.foreground} size={20} />
       </TouchableOpacity>
 
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
         Settings
       </Text>
 
-      {/* Theme toggle */}
-      <View
-        style={[
-          styles.settingRow,
-          { backgroundColor: colors.card, borderColor: colors.border },
-        ]}
-      >
-        <View style={styles.settingInfo}>
-          {isDark ? (
-            <Moon color={colors.primary} size={20} />
-          ) : (
-            <Sun color={colors.secondary} size={20} />
-          )}
-          <Text style={[styles.settingLabel, { color: colors.foreground }]}>
-            Dark Mode
-          </Text>
-        </View>
-        <Switch
-          value={isDark}
-          onValueChange={toggleTheme}
-          trackColor={{ false: colors.border, true: colors.primaryBg }}
-          thumbColor={isDark ? colors.primary : colors.textMuted}
-        />
-      </View>
-
       {/* Clear data */}
       <TouchableOpacity
         style={[
           styles.settingRow,
-          { backgroundColor: colors.card, borderColor: colors.border },
+          { backgroundColor: colors.danger, borderWidth: 0 },
         ]}
         onPress={() => {
           Alert.alert(
@@ -255,28 +204,28 @@ export default function MoreScreen() {
         }}
       >
         <View style={styles.settingInfo}>
-          <Trash2 color={colors.danger} size={20} />
-          <Text style={[styles.settingLabel, { color: colors.danger }]}>
+          <Trash2 color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
             Clear Local Data
           </Text>
         </View>
-        <ChevronRight color={colors.textMuted} size={18} />
+        <ChevronRight color="#FFFFFF" size={18} />
       </TouchableOpacity>
 
       {/* About */}
       <View
         style={[
           styles.settingRow,
-          { backgroundColor: colors.card, borderColor: colors.border },
+          { backgroundColor: colors.info, borderWidth: 0 },
         ]}
       >
         <View style={styles.settingInfo}>
-          <Info color={colors.primary} size={20} />
-          <Text style={[styles.settingLabel, { color: colors.foreground }]}>
+          <Info color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
             Version
           </Text>
         </View>
-        <Text style={[styles.settingValue, { color: colors.textSecondary }]}>
+        <Text style={[styles.settingValue, { color: 'rgba(255,255,255,0.70)' }]}>
           1.0.0
         </Text>
       </View>
@@ -291,33 +240,38 @@ export default function MoreScreen() {
       subtitle: string;
       icon: React.ReactNode;
       badge?: number;
+      tint: string;
     }> = [
       {
         key: 'visas',
         label: 'Held Visas',
         subtitle: `${heldVisas.length} visas configured`,
-        icon: <CreditCard color={colors.primary} size={22} />,
+        icon: <CreditCard color="#FFFFFF" size={22} />,
         badge: heldVisas.length,
+        tint: colors.primary,
       },
       {
         key: 'favorites',
         label: 'Favorites',
         subtitle: `${favorites.length} countries saved`,
-        icon: <Heart color={colors.accent} size={22} />,
+        icon: <Heart color="#FFFFFF" size={22} />,
         badge: favorites.length,
+        tint: colors.accent,
       },
       {
         key: 'visited',
         label: 'Visited',
         subtitle: `${visited.length} countries visited`,
-        icon: <MapPin color={colors.secondary} size={22} />,
+        icon: <MapPin color="#FFFFFF" size={22} />,
         badge: visited.length,
+        tint: colors.secondary,
       },
       {
         key: 'settings',
         label: 'Settings',
         subtitle: 'Theme, data, preferences',
-        icon: <Settings color={colors.textSecondary} size={22} />,
+        icon: <Settings color="#FFFFFF" size={22} />,
+        tint: colors.warning,
       },
     ];
 
@@ -334,33 +288,35 @@ export default function MoreScreen() {
               style={[
                 styles.menuItem,
                 {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
+                  backgroundColor: item.tint,
+                  borderWidth: 0,
                 },
               ]}
               onPress={() => setActiveSection(item.key)}
               activeOpacity={0.7}
             >
               <View style={styles.menuLeft}>
-                {item.icon}
+                <View style={[styles.iconWrap, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+                  {item.icon}
+                </View>
                 <View>
-                  <Text style={[styles.menuLabel, { color: colors.foreground }]}>
+                  <Text style={[styles.menuLabel, { color: '#FFFFFF' }]}>
                     {item.label}
                   </Text>
-                  <Text style={[styles.menuSub, { color: colors.textSecondary }]}>
+                  <Text style={[styles.menuSub, { color: 'rgba(255,255,255,0.70)' }]}>
                     {item.subtitle}
                   </Text>
                 </View>
               </View>
               <View style={styles.menuRight}>
                 {item.badge != null && item.badge > 0 && (
-                  <View style={[styles.badge, { backgroundColor: colors.primaryBg }]}>
-                    <Text style={[styles.badgeText, { color: colors.primary }]}>
+                  <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+                    <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
                       {item.badge}
                     </Text>
                   </View>
                 )}
-                <ChevronRight color={colors.textMuted} size={18} />
+                <ChevronRight color="#FFFFFF" size={18} />
               </View>
             </TouchableOpacity>
           ))}
@@ -370,15 +326,15 @@ export default function MoreScreen() {
         <View
           style={[
             styles.passportCard,
-            { backgroundColor: colors.primaryBg, borderColor: colors.primary },
+            { backgroundColor: colors.primary, borderColor: colors.primary },
           ]}
         >
-          <Shield color={colors.primary} size={24} />
+          <Shield color="rgba(255,255,255,0.8)" size={24} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.passportTitle, { color: colors.primary }]}>
+            <Text style={[styles.passportTitle, { color: '#FFFFFF' }]}>
               Passport Strength
             </Text>
-            <Text style={[styles.passportSub, { color: colors.foreground }]}>
+            <Text style={[styles.passportSub, { color: 'rgba(255,255,255,0.80)' }]}>
               With your held visas, you have easy access to more destinations
             </Text>
           </View>
@@ -424,8 +380,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 0,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   menuLeft: {
     flexDirection: 'row',
@@ -461,9 +424,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     marginTop: Spacing.xl,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    padding: Spacing.lg,
+    borderRadius: 20,
+    borderWidth: 0,
   },
   passportTitle: {
     fontFamily: FontFamily.condensedSemibold,
@@ -475,17 +438,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   // Section navigation
-  backRow: {
-    flexDirection: 'row',
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.sm,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
     marginBottom: Spacing.md,
-  },
-  backLabel: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: FontSize.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   sectionContent: {
     flex: 1,
@@ -543,8 +503,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 0,
     marginBottom: Spacing.sm,
   },
   settingInfo: {

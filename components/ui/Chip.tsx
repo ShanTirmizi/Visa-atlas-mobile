@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 
 interface ChipProps {
   label: string;
@@ -19,19 +19,16 @@ export default function Chip({ label, color, active, onPress }: ChipProps) {
       activeOpacity={0.7}
       style={[
         styles.chip,
-        {
-          backgroundColor: active ? color + '20' : colors.surface,
-          borderColor: active ? color : colors.border,
-        },
+        active
+          ? { backgroundColor: color, ...(Shadows.glow(color, 0.25)) }
+          : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
       ]}
     >
-      <View style={[styles.dot, { backgroundColor: color }]} />
+      {!active && <View style={[styles.dot, { backgroundColor: color }]} />}
       <Text
         style={[
           styles.label,
-          {
-            color: active ? color : colors.textSecondary,
-          },
+          { color: active ? '#FFFFFF' : colors.textSecondary },
         ]}
         numberOfLines={1}
       >
@@ -46,9 +43,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
+    paddingVertical: Spacing.sm,
     borderRadius: Radius.full,
-    borderWidth: 1,
     marginRight: Spacing.sm,
   },
   dot: {
@@ -58,7 +54,7 @@ const styles = StyleSheet.create({
     marginRight: Spacing.xs + 2,
   },
   label: {
-    fontFamily: FontFamily.condensedMedium,
+    fontFamily: FontFamily.semibold,
     fontSize: FontSize.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,

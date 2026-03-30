@@ -86,10 +86,10 @@ interface ChecklistItem {
 type StatusKey = 'preparing' | 'submitted' | 'approved' | 'rejected';
 
 const STATUS_CONFIG: Record<StatusKey, { label: string; color: string; bg: string }> = {
-  preparing: { label: 'Preparing', color: '#e9c46a', bg: 'rgba(233, 196, 106, 0.15)' },
-  submitted: { label: 'Submitted', color: '#f4a261', bg: 'rgba(244, 162, 97, 0.15)' },
-  approved:  { label: 'Approved',  color: '#2a9d8f', bg: 'rgba(42, 157, 143, 0.15)' },
-  rejected:  { label: 'Rejected',  color: '#e76f51', bg: 'rgba(231, 111, 81, 0.15)' },
+  preparing: { label: 'Preparing', color: '#E5A832', bg: 'rgba(229, 168, 50, 0.15)' },
+  submitted: { label: 'Submitted', color: '#EB6D3A', bg: 'rgba(235, 109, 58, 0.15)' },
+  approved:  { label: 'Approved',  color: '#2EAA6E', bg: 'rgba(46, 170, 110, 0.15)' },
+  rejected:  { label: 'Rejected',  color: '#E05545', bg: 'rgba(224, 85, 69, 0.15)' },
 };
 
 const STATUS_OPTIONS: StatusKey[] = ['preparing', 'submitted', 'approved', 'rejected'];
@@ -108,8 +108,31 @@ const CATEGORY_LABELS: Record<string, string> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/* prettier-ignore */
+const A3_TO_A2: Record<string,string> = {
+  AFG:'AF',ALB:'AL',DZA:'DZ',AND:'AD',AGO:'AO',ATG:'AG',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',
+  AZE:'AZ',BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
+  BOL:'BO',BIH:'BA',BWA:'BW',BRA:'BR',BRN:'BN',BGR:'BG',BFA:'BF',BDI:'BI',KHM:'KH',CMR:'CM',
+  CAN:'CA',CPV:'CV',CAF:'CF',TCD:'TD',CHL:'CL',CHN:'CN',COL:'CO',COM:'KM',COG:'CG',COD:'CD',
+  CRI:'CR',CIV:'CI',HRV:'HR',CUB:'CU',CYP:'CY',CZE:'CZ',DNK:'DK',DJI:'DJ',DMA:'DM',DOM:'DO',
+  ECU:'EC',EGY:'EG',SLV:'SV',GNQ:'GQ',ERI:'ER',EST:'EE',SWZ:'SZ',ETH:'ET',FJI:'FJ',FIN:'FI',
+  FRA:'FR',GAB:'GA',GMB:'GM',GEO:'GE',DEU:'DE',GHA:'GH',GRC:'GR',GRD:'GD',GTM:'GT',GIN:'GN',
+  GNB:'GW',GUY:'GY',HTI:'HT',HND:'HN',HUN:'HU',ISL:'IS',IND:'IN',IDN:'ID',IRN:'IR',IRQ:'IQ',
+  IRL:'IE',ISR:'IL',ITA:'IT',JAM:'JM',JPN:'JP',JOR:'JO',KAZ:'KZ',KEN:'KE',KIR:'KI',PRK:'KP',
+  KOR:'KR',KWT:'KW',KGZ:'KG',LAO:'LA',LVA:'LV',LBN:'LB',LSO:'LS',LBR:'LR',LBY:'LY',LIE:'LI',
+  LTU:'LT',LUX:'LU',MDG:'MG',MWI:'MW',MYS:'MY',MDV:'MV',MLI:'ML',MLT:'MT',MHL:'MH',MRT:'MR',
+  MUS:'MU',MEX:'MX',FSM:'FM',MDA:'MD',MCO:'MC',MNG:'MN',MNE:'ME',MAR:'MA',MOZ:'MZ',MMR:'MM',
+  NAM:'NA',NRU:'NR',NPL:'NP',NLD:'NL',NZL:'NZ',NIC:'NI',NER:'NE',NGA:'NG',MKD:'MK',NOR:'NO',
+  OMN:'OM',PAK:'PK',PLW:'PW',PAN:'PA',PNG:'PG',PRY:'PY',PER:'PE',PHL:'PH',POL:'PL',PRT:'PT',
+  QAT:'QA',ROU:'RO',RUS:'RU',RWA:'RW',KNA:'KN',LCA:'LC',VCT:'VC',WSM:'WS',SMR:'SM',STP:'ST',
+  SAU:'SA',SEN:'SN',SRB:'RS',SYC:'SC',SLE:'SL',SGP:'SG',SVK:'SK',SVN:'SI',SLB:'SB',SOM:'SO',
+  ZAF:'ZA',ESP:'ES',LKA:'LK',SDN:'SD',SUR:'SR',SWE:'SE',CHE:'CH',SYR:'SY',TWN:'TW',TJK:'TJ',
+  TZA:'TZ',THA:'TH',TLS:'TL',TGO:'TG',TON:'TO',TTO:'TT',TUN:'TN',TUR:'TR',TKM:'TM',TUV:'TV',
+  UGA:'UG',UKR:'UA',ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VUT:'VU',VEN:'VE',VNM:'VN',
+  YEM:'YE',ZMB:'ZM',ZWE:'ZW',PSE:'PS',XKX:'XK',
+};
 function countryCodeToFlag(code: string): string {
-  const a2 = code.slice(0, 2).toUpperCase();
+  const a2 = A3_TO_A2[code.toUpperCase()] || code.slice(0, 2).toUpperCase();
   return a2
     .split('')
     .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
@@ -163,12 +186,12 @@ function Section({
     <View
       style={[
         styles.section,
-        { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+        { backgroundColor: iconColor, borderColor: 'transparent' },
       ]}
     >
-      <View style={[styles.sectionHeader, { borderBottomColor: colors.borderSubtle }]}>
-        <Icon size={16} strokeWidth={1.5} color={iconColor} />
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{title}</Text>
+      <View style={[styles.sectionHeader, { borderBottomColor: 'rgba(255,255,255,0.20)' }]}>
+        <Icon size={16} strokeWidth={1.5} color={'#FFFFFF'} />
+        <Text style={[styles.sectionTitle, { color: '#FFFFFF' }]}>{title}</Text>
       </View>
       <View style={styles.sectionBody}>{children}</View>
     </View>
@@ -341,13 +364,13 @@ export default function GuideDetailScreen() {
           <View style={{ position: 'relative', zIndex: 20 }}>
             <TouchableOpacity
               onPress={() => setStatusOpen(!statusOpen)}
-              style={[styles.statusBadge, { backgroundColor: currentStatus.bg }]}
+              style={[styles.statusBadge, { backgroundColor: currentStatus.color }]}
               activeOpacity={0.7}
             >
-              <Text style={[styles.statusText, { color: currentStatus.color }]}>
+              <Text style={[styles.statusText, { color: '#FFFFFF' }]}>
                 {currentStatus.label}
               </Text>
-              <ChevronDown size={14} color={currentStatus.color} strokeWidth={2} />
+              <ChevronDown size={14} color="#FFFFFF" strokeWidth={2} />
             </TouchableOpacity>
 
             {statusOpen && (
@@ -399,29 +422,29 @@ export default function GuideDetailScreen() {
           <View
             style={[
               styles.progressCard,
-              { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+              { backgroundColor: colors.secondary, borderColor: 'transparent' },
             ]}
           >
             <View style={styles.progressLabelRow}>
-              <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>
+              <Text style={[styles.progressLabel, { color: 'rgba(255,255,255,0.70)' }]}>
                 {checkedItems} of {totalItems} documents ready
               </Text>
               <Text
                 style={[
                   styles.progressPct,
-                  { color: progressPct === 100 ? colors.success : colors.textMuted },
+                  { color: '#FFFFFF' },
                 ]}
               >
                 {progressPct}%
               </Text>
             </View>
-            <View style={[styles.progressTrack, { backgroundColor: colors.shimmer }]}>
+            <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
               <View
                 style={[
                   styles.progressFill,
                   {
                     width: `${progressPct}%`,
-                    backgroundColor: progressPct === 100 ? colors.success : colors.secondary,
+                    backgroundColor: '#FFFFFF',
                   },
                 ]}
               />
@@ -431,34 +454,34 @@ export default function GuideDetailScreen() {
 
         {/* ── Quick stats ───────────────────────────── */}
         {guideData && (
-          <View style={styles.statsRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsRow} contentContainerStyle={{ gap: Spacing.sm }}>
             {[
-              { icon: Clock, label: 'Processing', value: guideData.processingTime || 'N/A' },
-              { icon: DollarSign, label: 'Total Cost', value: guideData.cost?.total || 'N/A' },
-              { icon: MapPin, label: 'Where', value: guideData.whereToApply?.name || 'N/A' },
+              { icon: Clock, label: 'Processing', value: guideData.processingTime || 'N/A', tint: colors.primary },
+              { icon: DollarSign, label: 'Total Cost', value: guideData.cost?.total || 'N/A', tint: colors.secondary },
+              { icon: MapPin, label: 'Where', value: guideData.whereToApply?.name || 'N/A', tint: colors.accent },
             ].map((stat, idx) => (
               <View
                 key={idx}
                 style={[
                   styles.statCard,
-                  { backgroundColor: colors.card, borderColor: colors.borderSubtle },
+                  { backgroundColor: stat.tint, borderColor: 'transparent', minWidth: 150 },
                 ]}
               >
                 <View style={styles.statIconRow}>
-                  <stat.icon size={13} strokeWidth={1.5} color={colors.primary} />
-                  <Text style={[styles.statLabel, { color: colors.textMuted }]}>
+                  <stat.icon size={13} strokeWidth={1.5} color={'#FFFFFF'} />
+                  <Text style={[styles.statLabel, { color: 'rgba(255,255,255,0.70)' }]}>
                     {stat.label}
                   </Text>
                 </View>
                 <Text
-                  style={[styles.statValue, { color: colors.foreground }]}
-                  numberOfLines={2}
+                  style={[styles.statValue, { color: '#FFFFFF' }]}
+                  numberOfLines={3}
                 >
                   {stat.value}
                 </Text>
               </View>
             ))}
-          </View>
+          </ScrollView>
         )}
 
         {/* ── Document Checklist ────────────────────── */}
@@ -477,16 +500,16 @@ export default function GuideDetailScreen() {
                     style={styles.categoryHeader}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.categoryLabel, { color: colors.textMuted }]}>
+                    <Text style={[styles.categoryLabel, { color: 'rgba(255,255,255,0.70)' }]}>
                       {catLabel}
                     </Text>
-                    <Text style={[styles.categoryCount, { color: colors.textMuted }]}>
+                    <Text style={[styles.categoryCount, { color: 'rgba(255,255,255,0.60)' }]}>
                       {items.filter((i) => i.checked).length}/{items.length}
                     </Text>
                     {isExpanded ? (
-                      <ChevronUp size={14} color={colors.textMuted} />
+                      <ChevronUp size={14} color="rgba(255,255,255,0.60)" />
                     ) : (
-                      <ChevronDown size={14} color={colors.textMuted} />
+                      <ChevronDown size={14} color="rgba(255,255,255,0.60)" />
                     )}
                   </TouchableOpacity>
 
@@ -497,20 +520,20 @@ export default function GuideDetailScreen() {
                           onPress={() => handleToggle(item.id)}
                           style={[
                             styles.checkItem,
-                            item.checked && { backgroundColor: colors.primaryBg },
+                            item.checked && { backgroundColor: 'rgba(255,255,255,0.15)' },
                           ]}
                           activeOpacity={0.7}
                         >
                           {item.checked ? (
-                            <CheckCircle2 size={20} strokeWidth={2} color={colors.primary} />
+                            <CheckCircle2 size={20} strokeWidth={2} color="rgba(255,255,255,0.90)" />
                           ) : (
-                            <Circle size={20} strokeWidth={1.5} color={colors.textMuted} />
+                            <Circle size={20} strokeWidth={1.5} color="rgba(255,255,255,0.50)" />
                           )}
                           <Text
                             style={[
                               styles.checkLabel,
                               {
-                                color: item.checked ? colors.textMuted : colors.foreground,
+                                color: item.checked ? 'rgba(255,255,255,0.50)' : '#FFFFFF',
                                 textDecorationLine: item.checked ? 'line-through' : 'none',
                               },
                             ]}
@@ -527,9 +550,7 @@ export default function GuideDetailScreen() {
                               <Info
                                 size={16}
                                 strokeWidth={1.5}
-                                color={
-                                  expandedTip === item.id ? colors.secondary : colors.textMuted
-                                }
+                                color="rgba(255,255,255,0.70)"
                               />
                             </TouchableOpacity>
                           )}
@@ -540,12 +561,12 @@ export default function GuideDetailScreen() {
                             style={[
                               styles.tipBubble,
                               {
-                                backgroundColor: colors.secondaryBg,
-                                borderColor: 'rgba(233, 196, 106, 0.2)',
+                                backgroundColor: 'rgba(255,255,255,0.15)',
+                                borderColor: 'rgba(255,255,255,0.20)',
                               },
                             ]}
                           >
-                            <Text style={[styles.tipText, { color: colors.textSecondary }]}>
+                            <Text style={[styles.tipText, { color: 'rgba(255,255,255,0.80)' }]}>
                               {item.tip}
                             </Text>
                           </View>
@@ -568,21 +589,21 @@ export default function GuideDetailScreen() {
                   styles.costRow,
                   idx < guideData.cost.items.length - 1 && {
                     borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: colors.borderSubtle,
+                    borderBottomColor: 'rgba(255,255,255,0.20)',
                   },
                 ]}
               >
-                <Text style={[styles.costItem, { color: colors.textSecondary }]}>
+                <Text style={[styles.costItem, { color: 'rgba(255,255,255,0.70)' }]}>
                   {item.item}
                 </Text>
-                <Text style={[styles.costAmount, { color: colors.foreground }]}>
+                <Text style={[styles.costAmount, { color: '#FFFFFF' }]}>
                   {item.amount}
                 </Text>
               </View>
             ))}
-            <View style={[styles.costTotal, { borderTopColor: colors.border }]}>
-              <Text style={[styles.costTotalLabel, { color: colors.foreground }]}>Total</Text>
-              <Text style={[styles.costTotalValue, { color: colors.primary }]}>
+            <View style={[styles.costTotal, { borderTopColor: 'rgba(255,255,255,0.30)' }]}>
+              <Text style={[styles.costTotalLabel, { color: '#FFFFFF' }]}>Total</Text>
+              <Text style={[styles.costTotalValue, { color: '#FFFFFF' }]}>
                 {guideData.cost.total}
               </Text>
             </View>
@@ -598,14 +619,8 @@ export default function GuideDetailScreen() {
                   style={[
                     styles.timelineDot,
                     {
-                      backgroundColor:
-                        idx === 0 || idx === guideData.timeline.length - 1
-                          ? colors.primaryBg
-                          : colors.shimmer,
-                      borderColor:
-                        idx === 0 || idx === guideData.timeline.length - 1
-                          ? colors.primary
-                          : colors.border,
+                      backgroundColor: 'rgba(255,255,255,0.20)',
+                      borderColor: 'rgba(255,255,255,0.40)',
                     },
                   ]}
                 >
@@ -613,10 +628,7 @@ export default function GuideDetailScreen() {
                     style={[
                       styles.timelineDotText,
                       {
-                        color:
-                          idx === 0 || idx === guideData.timeline.length - 1
-                            ? colors.primary
-                            : colors.textMuted,
+                        color: '#FFFFFF',
                       },
                     ]}
                   >
@@ -624,9 +636,9 @@ export default function GuideDetailScreen() {
                   </Text>
                 </View>
                 {idx < guideData.timeline.length - 1 && (
-                  <View style={[styles.timelineLine, { backgroundColor: colors.borderSubtle }]} />
+                  <View style={[styles.timelineLine, { backgroundColor: 'rgba(255,255,255,0.20)' }]} />
                 )}
-                <Text style={[styles.timelineLabel, { color: colors.textSecondary }]}>
+                <Text style={[styles.timelineLabel, { color: 'rgba(255,255,255,0.80)' }]}>
                   {step}
                 </Text>
               </View>
@@ -641,26 +653,26 @@ export default function GuideDetailScreen() {
               <View
                 style={[
                   styles.bankCard,
-                  { backgroundColor: colors.shimmer, borderColor: colors.borderSubtle },
+                  { backgroundColor: colors.secondary, borderColor: 'transparent' },
                 ]}
               >
-                <Text style={[styles.bankLabel, { color: colors.textMuted }]}>
+                <Text style={[styles.bankLabel, { color: 'rgba(255,255,255,0.70)' }]}>
                   Minimum Balance
                 </Text>
-                <Text style={[styles.bankValue, { color: colors.secondary }]}>
+                <Text style={[styles.bankValue, { color: '#FFFFFF' }]}>
                   {guideData.bankRequirements.minimumBalance}
                 </Text>
               </View>
               <View
                 style={[
                   styles.bankCard,
-                  { backgroundColor: colors.shimmer, borderColor: colors.borderSubtle },
+                  { backgroundColor: colors.secondary, borderColor: 'transparent' },
                 ]}
               >
-                <Text style={[styles.bankLabel, { color: colors.textMuted }]}>
+                <Text style={[styles.bankLabel, { color: 'rgba(255,255,255,0.70)' }]}>
                   Months Required
                 </Text>
-                <Text style={[styles.bankValue, { color: colors.secondary }]}>
+                <Text style={[styles.bankValue, { color: '#FFFFFF' }]}>
                   {guideData.bankRequirements.monthsRequired} months
                 </Text>
               </View>
@@ -671,11 +683,11 @@ export default function GuideDetailScreen() {
                 key={idx}
                 style={[
                   styles.bankTip,
-                  { backgroundColor: colors.secondaryBg, borderColor: 'rgba(233, 196, 106, 0.15)' },
+                  { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)' },
                 ]}
               >
-                <Lightbulb size={14} strokeWidth={1.5} color={colors.secondary} />
-                <Text style={[styles.bankTipText, { color: colors.textSecondary }]}>{tip}</Text>
+                <Lightbulb size={14} strokeWidth={1.5} color="rgba(255,255,255,0.80)" />
+                <Text style={[styles.bankTipText, { color: 'rgba(255,255,255,0.80)' }]}>{tip}</Text>
               </View>
             ))}
           </Section>
@@ -689,11 +701,11 @@ export default function GuideDetailScreen() {
                 key={idx}
                 style={[
                   styles.pitfallCard,
-                  { backgroundColor: colors.dangerBg, borderColor: 'rgba(231, 111, 81, 0.2)' },
+                  { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)' },
                 ]}
               >
-                <AlertTriangle size={15} strokeWidth={1.5} color={colors.danger} />
-                <Text style={[styles.pitfallText, { color: colors.textSecondary }]}>
+                <AlertTriangle size={15} strokeWidth={1.5} color="rgba(255,255,255,0.80)" />
+                <Text style={[styles.pitfallText, { color: 'rgba(255,255,255,0.80)' }]}>
                   {reason}
                 </Text>
               </View>
@@ -709,11 +721,11 @@ export default function GuideDetailScreen() {
                 key={idx}
                 style={[
                   styles.proTipCard,
-                  { backgroundColor: colors.primaryBg, borderColor: 'rgba(42, 157, 143, 0.15)' },
+                  { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)' },
                 ]}
               >
-                <Text style={[styles.proTipNum, { color: colors.primary }]}>{idx + 1}</Text>
-                <Text style={[styles.proTipText, { color: colors.textSecondary }]}>{tip}</Text>
+                <Text style={[styles.proTipNum, { color: 'rgba(255,255,255,0.80)' }]}>{idx + 1}</Text>
+                <Text style={[styles.proTipText, { color: 'rgba(255,255,255,0.80)' }]}>{tip}</Text>
               </View>
             ))}
           </Section>
@@ -745,9 +757,13 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   backBtn: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
+    borderRadius: Radius.sm,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.subtle,
   },
   titleRow: {
     flexDirection: 'row',
@@ -803,9 +819,9 @@ const styles = StyleSheet.create({
 
   // Progress card
   progressCard: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.md,
+    borderRadius: 20,
+    borderWidth: 0,
+    padding: Spacing.lg,
     marginBottom: Spacing.md,
     ...Shadows.subtle,
   },
@@ -835,14 +851,11 @@ const styles = StyleSheet.create({
 
   // Quick stats
   statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
     marginBottom: Spacing.lg,
   },
   statCard: {
-    flex: 1,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 0,
     padding: Spacing.sm,
     ...Shadows.subtle,
   },
@@ -866,8 +879,8 @@ const styles = StyleSheet.create({
 
   // Section
   section: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 0,
     overflow: 'hidden',
     marginBottom: Spacing.md,
     ...Shadows.card,
@@ -1015,7 +1028,7 @@ const styles = StyleSheet.create({
   bankCard: {
     flex: 1,
     borderRadius: Radius.sm,
-    borderWidth: 1,
+    borderWidth: 0,
     padding: Spacing.sm,
   },
   bankLabel: {

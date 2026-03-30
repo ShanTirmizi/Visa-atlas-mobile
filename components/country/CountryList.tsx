@@ -81,7 +81,7 @@ export default function CountryList({
 
 const styles = StyleSheet.create({
   listContent: {
-    paddingBottom: Spacing.xl,
+    paddingBottom: 120, // Account for floating tab bar (68px) + bottom inset + spacing
   },
   header: {
     paddingHorizontal: Spacing.lg,
