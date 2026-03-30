@@ -73,4 +73,57 @@ export default defineSchema({
       v.literal("rejected")
     ),
   }).index("by_country", ["countryCode"]),
+
+  // Travel bookings (flights, hotels, experiences, etc.)
+  bookings: defineTable({
+    type: v.union(
+      v.literal("flight"),
+      v.literal("hotel"),
+      v.literal("experience"),
+      v.literal("car_rental"),
+      v.literal("insurance"),
+      v.literal("restaurant")
+    ),
+    source: v.union(
+      v.literal("manual"),
+      v.literal("calendar"),
+      v.literal("api")
+    ),
+    provider: v.string(),
+    status: v.union(
+      v.literal("upcoming"),
+      v.literal("active"),
+      v.literal("completed"),
+      v.literal("cancelled")
+    ),
+    // Core fields
+    title: v.string(),
+    startDate: v.string(),
+    endDate: v.optional(v.string()),
+    location: v.optional(v.string()),
+    countryCode: v.optional(v.string()),
+    confirmationNumber: v.optional(v.string()),
+    cost: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    // Type-specific details (JSON strings)
+    flightDetails: v.optional(v.string()),
+    hotelDetails: v.optional(v.string()),
+    experienceDetails: v.optional(v.string()),
+    carDetails: v.optional(v.string()),
+    insuranceDetails: v.optional(v.string()),
+    restaurantDetails: v.optional(v.string()),
+    // Trip linking
+    tripId: v.optional(v.id("trips")),
+    autoMatched: v.optional(v.boolean()),
+    // Calendar sync
+    calendarEventId: v.optional(v.string()),
+    calendarSource: v.optional(
+      v.union(v.literal("google"), v.literal("apple"))
+    ),
+  })
+    .index("by_trip", ["tripId"])
+    .index("by_status", ["status"])
+    .index("by_type", ["type"])
+    .index("by_date", ["startDate"]),
 });
