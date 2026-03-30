@@ -88,8 +88,11 @@ export function findMatchingTrip(
     if (hasCountryMatch) {
       // Exact country match + date overlap
       score = 3;
-    } else if (trip.isMultiCountry) {
-      // Date overlap on a multi-country trip (country not matched but trip is multi-country)
+    } else if (!trip.isMultiCountry) {
+      // Date overlap on a single-country trip without country match
+      score = 2;
+    } else {
+      // Date overlap on a multi-country trip without country match
       score = 1;
     }
 
