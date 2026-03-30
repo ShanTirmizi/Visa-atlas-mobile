@@ -34,6 +34,7 @@ import {
 import { ConvexProvider } from '@/contexts/ConvexProvider';
 import { ThemeProvider, useTheme } from '@/contexts/theme-context';
 import { VisaProvider } from '@/contexts/visa-context';
+import { CalendarProvider } from '@/contexts/calendar-context';
 import { ToastProvider } from '@/contexts/toast-context';
 import type { ThemeColors } from '@/constants/theme';
 
@@ -111,13 +112,15 @@ export default function RootLayout() {
       <ConvexProvider>
         <ThemeProvider>
           <VisaProvider>
-            <SafeAreaProvider>
-              <ToastProvider>
-                <BottomSheetModalProvider>
-                  <ThemedApp />
-                </BottomSheetModalProvider>
-              </ToastProvider>
-            </SafeAreaProvider>
+            <CalendarProvider>
+              <SafeAreaProvider>
+                <ToastProvider>
+                  <BottomSheetModalProvider>
+                    <ThemedApp />
+                  </BottomSheetModalProvider>
+                </ToastProvider>
+              </SafeAreaProvider>
+            </CalendarProvider>
           </VisaProvider>
         </ThemeProvider>
       </ConvexProvider>
