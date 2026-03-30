@@ -64,7 +64,7 @@ export const createBooking = mutation({
   args: {
     type: bookingTypeValidator,
     source: bookingSourceValidator,
-    provider: v.optional(v.string()),
+    provider: v.string(),
     status: bookingStatusValidator,
     title: v.string(),
     startDate: v.string(),
@@ -75,42 +75,19 @@ export const createBooking = mutation({
     cost: v.optional(v.number()),
     currency: v.optional(v.string()),
     notes: v.optional(v.string()),
-    // Flight-specific
-    airline: v.optional(v.string()),
-    flightNumber: v.optional(v.string()),
-    departureAirport: v.optional(v.string()),
-    arrivalAirport: v.optional(v.string()),
-    departureTime: v.optional(v.string()),
-    arrivalTime: v.optional(v.string()),
-    // Hotel-specific
-    hotelName: v.optional(v.string()),
-    checkIn: v.optional(v.string()),
-    checkOut: v.optional(v.string()),
-    roomType: v.optional(v.string()),
-    // Experience-specific
-    activityName: v.optional(v.string()),
-    meetingPoint: v.optional(v.string()),
-    duration: v.optional(v.number()),
-    // Car rental-specific
-    rentalCompany: v.optional(v.string()),
-    pickupLocation: v.optional(v.string()),
-    dropoffLocation: v.optional(v.string()),
-    carType: v.optional(v.string()),
-    // Insurance-specific
-    policyNumber: v.optional(v.string()),
-    coverageType: v.optional(v.string()),
-    insuranceProvider: v.optional(v.string()),
-    // Restaurant-specific
-    restaurantName: v.optional(v.string()),
-    cuisine: v.optional(v.string()),
-    reservationTime: v.optional(v.string()),
-    partySize: v.optional(v.number()),
+    // Type-specific details (JSON strings)
+    flightDetails: v.optional(v.string()),
+    hotelDetails: v.optional(v.string()),
+    experienceDetails: v.optional(v.string()),
+    carDetails: v.optional(v.string()),
+    insuranceDetails: v.optional(v.string()),
+    restaurantDetails: v.optional(v.string()),
     // Trip association
     tripId: v.optional(v.id("trips")),
     autoMatched: v.optional(v.boolean()),
     // Calendar integration
     calendarEventId: v.optional(v.string()),
-    calendarSource: v.optional(v.string()),
+    calendarSource: v.optional(v.union(v.literal("google"), v.literal("apple"))),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("bookings", args);
@@ -130,36 +107,13 @@ export const updateBooking = mutation({
     currency: v.optional(v.string()),
     notes: v.optional(v.string()),
     status: v.optional(bookingStatusValidator),
-    // Flight-specific
-    airline: v.optional(v.string()),
-    flightNumber: v.optional(v.string()),
-    departureAirport: v.optional(v.string()),
-    arrivalAirport: v.optional(v.string()),
-    departureTime: v.optional(v.string()),
-    arrivalTime: v.optional(v.string()),
-    // Hotel-specific
-    hotelName: v.optional(v.string()),
-    checkIn: v.optional(v.string()),
-    checkOut: v.optional(v.string()),
-    roomType: v.optional(v.string()),
-    // Experience-specific
-    activityName: v.optional(v.string()),
-    meetingPoint: v.optional(v.string()),
-    duration: v.optional(v.number()),
-    // Car rental-specific
-    rentalCompany: v.optional(v.string()),
-    pickupLocation: v.optional(v.string()),
-    dropoffLocation: v.optional(v.string()),
-    carType: v.optional(v.string()),
-    // Insurance-specific
-    policyNumber: v.optional(v.string()),
-    coverageType: v.optional(v.string()),
-    insuranceProvider: v.optional(v.string()),
-    // Restaurant-specific
-    restaurantName: v.optional(v.string()),
-    cuisine: v.optional(v.string()),
-    reservationTime: v.optional(v.string()),
-    partySize: v.optional(v.number()),
+    // Type-specific details (JSON strings)
+    flightDetails: v.optional(v.string()),
+    hotelDetails: v.optional(v.string()),
+    experienceDetails: v.optional(v.string()),
+    carDetails: v.optional(v.string()),
+    insuranceDetails: v.optional(v.string()),
+    restaurantDetails: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -175,17 +129,16 @@ export const updateBooking = mutation({
 export const linkBookingToTrip = mutation({
   args: {
     id: v.id("bookings"),
-    tripId: v.optional(v.id("trips")),
+    tripId: v.id("trips"),
     autoMatched: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
-    const filtered = Object.fromEntries(
-      Object.entries(updates).filter(([, v]) => v !== undefined)
-    );
-    if (Object.keys(filtered).length > 0) {
-      await ctx.db.patch(id, filtered);
+    const { id, tripId, autoMatched } = args;
+    const updates: Record<string, unknown> = { tripId };
+    if (autoMatched !== undefined) {
+      updates.autoMatched = autoMatched;
     }
+    await ctx.db.patch(id, updates);
   },
 });
 
