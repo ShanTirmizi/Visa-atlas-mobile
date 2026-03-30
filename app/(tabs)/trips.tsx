@@ -17,6 +17,7 @@ import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import { getVisaCategoryColor } from '@/constants/theme';
 import { getCostSymbol } from '@/data/travelData';
+import BookingsListView from '@/components/booking/BookingsListView';
 
 type SortBy = 'newest' | 'oldest' | 'name' | 'status';
 
@@ -93,6 +94,7 @@ export default function TripsScreen() {
   const updateStatus = useMutation(api.trips.updateTripStatus);
 
   const [sortBy, setSortBy] = useState<SortBy>('newest');
+  const [activeTab, setActiveTab] = useState<'trips' | 'bookings'>('trips');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const sorted = useMemo(() => {
@@ -260,12 +262,55 @@ export default function TripsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
         <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
-        <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 100, height: 14, marginTop: 4, borderRadius: 6 }]} />
-        <View style={{ marginTop: Spacing.lg, gap: 12 }}>
-          {[1, 2, 3].map((i) => (
-            <SkeletonCard key={i} colors={colors} />
-          ))}
+
+        {/* Segmented control */}
+        <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <TouchableOpacity
+            onPress={() => setActiveTab('trips')}
+            style={[
+              styles.segment,
+              activeTab === 'trips' && { backgroundColor: colors.accent },
+            ]}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                { color: activeTab === 'trips' ? '#FFFFFF' : colors.textMuted },
+              ]}
+            >
+              My Trips
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveTab('bookings')}
+            style={[
+              styles.segment,
+              activeTab === 'bookings' && { backgroundColor: colors.accent },
+            ]}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                { color: activeTab === 'bookings' ? '#FFFFFF' : colors.textMuted },
+              ]}
+            >
+              Bookings
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {activeTab === 'trips' ? (
+          <>
+            <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 100, height: 14, marginTop: 4, borderRadius: 6 }]} />
+            <View style={{ marginTop: Spacing.lg, gap: 12 }}>
+              {[1, 2, 3].map((i) => (
+                <SkeletonCard key={i} colors={colors} />
+              ))}
+            </View>
+          </>
+        ) : (
+          <BookingsListView bottomInset={insets.bottom} />
+        )}
       </View>
     );
   }
@@ -275,20 +320,61 @@ export default function TripsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
         <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
-        <View style={[styles.emptyState, { backgroundColor: colors.primary }, Shadows.card]}>
-          <Plane color="rgba(255,255,255,0.5)" size={52} strokeWidth={1} />
-          <Text style={[styles.emptyTitle, { color: '#FFFFFF' }]}>No trips yet</Text>
-          <Text style={[styles.emptyBody, { color: 'rgba(255,255,255,0.80)' }]}>
-            Head to the map, pick a destination, and plan your next adventure.
-          </Text>
+
+        {/* Segmented control */}
+        <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TouchableOpacity
-            onPress={() => router.push('/(tabs)')}
-            style={[styles.exploreBtn, { backgroundColor: 'rgba(255,255,255,0.20)', borderColor: 'rgba(255,255,255,0.30)' }]}
+            onPress={() => setActiveTab('trips')}
+            style={[
+              styles.segment,
+              activeTab === 'trips' && { backgroundColor: colors.accent },
+            ]}
           >
-            <Globe color="#FFFFFF" size={16} />
-            <Text style={[styles.exploreBtnText, { color: '#FFFFFF' }]}>Explore the Map</Text>
+            <Text
+              style={[
+                styles.segmentText,
+                { color: activeTab === 'trips' ? '#FFFFFF' : colors.textMuted },
+              ]}
+            >
+              My Trips
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveTab('bookings')}
+            style={[
+              styles.segment,
+              activeTab === 'bookings' && { backgroundColor: colors.accent },
+            ]}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                { color: activeTab === 'bookings' ? '#FFFFFF' : colors.textMuted },
+              ]}
+            >
+              Bookings
+            </Text>
           </TouchableOpacity>
         </View>
+
+        {activeTab === 'trips' ? (
+          <View style={[styles.emptyState, { backgroundColor: colors.primary }, Shadows.card]}>
+            <Plane color="rgba(255,255,255,0.5)" size={52} strokeWidth={1} />
+            <Text style={[styles.emptyTitle, { color: '#FFFFFF' }]}>No trips yet</Text>
+            <Text style={[styles.emptyBody, { color: 'rgba(255,255,255,0.80)' }]}>
+              Head to the map, pick a destination, and plan your next adventure.
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)')}
+              style={[styles.exploreBtn, { backgroundColor: 'rgba(255,255,255,0.20)', borderColor: 'rgba(255,255,255,0.30)' }]}
+            >
+              <Globe color="#FFFFFF" size={16} />
+              <Text style={[styles.exploreBtnText, { color: '#FFFFFF' }]}>Explore the Map</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <BookingsListView bottomInset={insets.bottom} />
+        )}
       </View>
     );
   }
@@ -305,38 +391,80 @@ export default function TripsScreen() {
         </View>
       </View>
 
-      {/* Sort pills */}
-      <View style={styles.sortRow}>
-        {SORT_OPTIONS.map((opt) => (
-          <TouchableOpacity
-            key={opt.value}
-            onPress={() => setSortBy(opt.value)}
+      {/* Segmented control */}
+      <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('trips')}
+          style={[
+            styles.segment,
+            activeTab === 'trips' && { backgroundColor: colors.accent },
+          ]}
+        >
+          <Text
             style={[
-              styles.sortPill,
-              sortBy === opt.value
-                ? { backgroundColor: colors.accent, ...Shadows.glow(colors.accent, 0.2) }
-                : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+              styles.segmentText,
+              { color: activeTab === 'trips' ? '#FFFFFF' : colors.textMuted },
             ]}
           >
-            <Text
-              style={[
-                styles.sortPillText,
-                { color: sortBy === opt.value ? '#FFFFFF' : colors.textMuted },
-              ]}
-            >
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+            My Trips
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab('bookings')}
+          style={[
+            styles.segment,
+            activeTab === 'bookings' && { backgroundColor: colors.accent },
+          ]}
+        >
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'bookings' ? '#FFFFFF' : colors.textMuted },
+            ]}
+          >
+            Bookings
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={sorted}
-        renderItem={renderItem}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100, gap: 12 }}
-        showsVerticalScrollIndicator={false}
-      />
+      {activeTab === 'trips' ? (
+        <>
+          {/* Sort pills */}
+          <View style={styles.sortRow}>
+            {SORT_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                onPress={() => setSortBy(opt.value)}
+                style={[
+                  styles.sortPill,
+                  sortBy === opt.value
+                    ? { backgroundColor: colors.accent, ...Shadows.glow(colors.accent, 0.2) }
+                    : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sortPillText,
+                    { color: sortBy === opt.value ? '#FFFFFF' : colors.textMuted },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <FlatList
+            data={sorted}
+            renderItem={renderItem}
+            keyExtractor={(item) => item._id}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 100, gap: 12 }}
+            showsVerticalScrollIndicator={false}
+          />
+        </>
+      ) : (
+        <BookingsListView bottomInset={insets.bottom} />
+      )}
     </View>
   );
 }
@@ -493,6 +621,26 @@ const styles = StyleSheet.create({
   exploreBtnText: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.sm,
+  },
+  // Segmented control
+  segmentedControl: {
+    flexDirection: 'row',
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    padding: 3,
+    marginBottom: Spacing.md,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: Radius.xs,
+  },
+  segmentText: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: FontSize.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   // Skeleton
   skeletonBar: {
