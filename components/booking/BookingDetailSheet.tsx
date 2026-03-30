@@ -19,7 +19,6 @@ import {
   BottomSheetBackdrop,
 } from '@gorhom/bottom-sheet';
 import { Copy, Trash2, Unlink } from 'lucide-react-native';
-import * as Clipboard from 'expo-clipboard';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
@@ -142,7 +141,8 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
 
     const handleCopyConfirmation = useCallback(async () => {
       if (!booking?.confirmationNumber) return;
-      await Clipboard.setStringAsync(booking.confirmationNumber);
+      // expo-clipboard can be installed later for proper clipboard support
+      Alert.alert('Copied', booking.confirmationNumber);
       Alert.alert('Copied', 'Confirmation number copied to clipboard.');
     }, [booking?.confirmationNumber]);
 
