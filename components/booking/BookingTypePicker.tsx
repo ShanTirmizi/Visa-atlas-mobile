@@ -1,0 +1,99 @@
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTheme } from '@/contexts/theme-context';
+import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
+import {
+  BOOKING_TYPE_LIST,
+  BOOKING_TYPES,
+  type BookingType,
+} from '@/constants/bookings';
+
+interface BookingTypePickerProps {
+  onSelect: (type: BookingType) => void;
+}
+
+export default function BookingTypePicker({ onSelect }: BookingTypePickerProps) {
+  const { colors, isDark } = useTheme();
+
+  return (
+    <View style={styles.container}>
+      <Text style={[styles.title, { color: colors.foreground }]}>
+        What are you booking?
+      </Text>
+
+      <View style={styles.grid}>
+        {BOOKING_TYPE_LIST.map((type) => {
+          const config = BOOKING_TYPES[type];
+          const typeColor = isDark ? config.darkColor : config.color;
+          const Icon = config.icon;
+
+          return (
+            <TouchableOpacity
+              key={type}
+              activeOpacity={0.7}
+              onPress={() => onSelect(type)}
+              style={[
+                styles.tile,
+                Shadows.subtle,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.iconCircle,
+                  { backgroundColor: typeColor + '18' },
+                ]}
+              >
+                <Icon size={24} color={typeColor} />
+              </View>
+              <Text style={[styles.label, { color: colors.textMuted }]}>
+                {config.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: Spacing.lg,
+  },
+  title: {
+    fontFamily: FontFamily.display,
+    fontSize: FontSize['2xl'],
+    marginBottom: Spacing.lg,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  tile: {
+    width: '30%' as unknown as number,
+    flexGrow: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.lg,
+  },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  label: {
+    fontFamily: FontFamily.condensedMedium,
+    fontSize: FontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+});
