@@ -51,6 +51,7 @@ import {
   Shadows,
   getVisaCategoryColor,
 } from '@/constants/theme';
+import TripBookingsTimeline from '@/components/booking/TripBookingsTimeline';
 
 // ─── Types ──────────────────────────────────────────
 interface ItineraryDay {
@@ -405,6 +406,7 @@ export default function TripDetailScreen() {
               seasonalGuide={seasonalGuide}
               colors={colors}
               catColor={catColor}
+              tripId={trip._id}
             />
           )}
           {activeTab === 'itinerary' && (
@@ -441,12 +443,14 @@ function OverviewContent({
   seasonalGuide,
   colors,
   catColor,
+  tripId,
 }: {
   trip: any;
   highlights: string[];
   seasonalGuide: SeasonalGuide | null;
   colors: any;
   catColor: string;
+  tripId: string;
 }) {
   return (
     <View style={{ gap: Spacing.lg }}>
@@ -461,6 +465,12 @@ function OverviewContent({
           ))}
         </SectionCard>
       )}
+
+      {/* Bookings Timeline */}
+      <TripBookingsTimeline
+        tripId={tripId}
+        onBookingPress={(booking) => {}}
+      />
 
       {/* Seasonal Guide */}
       {seasonalGuide && (
