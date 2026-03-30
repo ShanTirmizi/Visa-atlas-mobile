@@ -1,0 +1,5 @@
+{
+  "_comment": "Placeholder for simplified world GeoJSON boundaries. Not used in current implementation — the app uses MapView markers (one per country capital) instead of polygon overlays, which is much more performant on mobile. If polygon overlays are needed in the future, download simplified Natural Earth data from: https://github.com/nvkelso/natural-earth-vector (use 110m resolution for mobile). Convert to GeoJSON with ogr2ogr or mapshaper.org and keep only ISO_A3 + NAME properties to minimize file size.",
+  "type": "FeatureCollection",
+  "features": []
+}
