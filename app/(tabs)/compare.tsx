@@ -222,7 +222,6 @@ function CountryPickerModal({
   const renderItem = useCallback(({ item }: { item: CountryVisa }) => {
     const resolved = resolveCountry(item, heldVisasSet);
     const catColor = getCategoryColor(resolved.category, colors);
-    const catBg = getCategoryBgColor(resolved.category, colors);
     return (
       <TouchableOpacity
         style={[styles.pickerItem, { borderBottomColor: colors.borderSubtle }]}
@@ -233,8 +232,8 @@ function CountryPickerModal({
         <Text style={[styles.pickerName, { color: colors.foreground }]} numberOfLines={1}>
           {item.name}
         </Text>
-        <View style={[styles.pickerBadge, { backgroundColor: catBg }]}>
-          <Text style={[styles.pickerBadgeText, { color: catColor }]}>
+        <View style={[styles.pickerBadge, { backgroundColor: catColor }]}>
+          <Text style={[styles.pickerBadgeText, { color: '#FFFFFF' }]}>
             {getCategoryLabel(resolved.category)}
           </Text>
         </View>
@@ -412,18 +411,18 @@ function LoadingState({ colors }: { colors: ThemeColors }) {
   }, []);
 
   return (
-    <View style={[styles.loadingCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <ActivityIndicator size="small" color={colors.primary} style={{ marginBottom: Spacing.md }} />
-      <Animated.Text style={[styles.loadingText, { color: colors.textSecondary, opacity: fadeAnim }]}>
+    <View style={[styles.loadingCard, { backgroundColor: colors.secondary, borderColor: 'transparent' }]}>
+      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginBottom: Spacing.md }} />
+      <Animated.Text style={[styles.loadingText, { color: 'rgba(255,255,255,0.85)', opacity: fadeAnim }]}>
         {LOADING_MESSAGES[msgIndex]}
       </Animated.Text>
 
       {/* Skeleton bars */}
       {[0, 1, 2, 3, 4].map((i) => (
         <View key={i} style={[styles.skeletonRow, { marginTop: i === 0 ? Spacing.lg : Spacing.sm }]}>
-          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, flex: 1 }]} />
-          <View style={[styles.skeletonDot, { backgroundColor: colors.shimmer }]} />
-          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, flex: 1 }]} />
+          <View style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.20)', flex: 1 }]} />
+          <View style={[styles.skeletonDot, { backgroundColor: 'rgba(255,255,255,0.20)' }]} />
+          <View style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.20)', flex: 1 }]} />
         </View>
       ))}
     </View>
@@ -593,19 +592,19 @@ export default function CompareScreen() {
             style={[
               styles.selectorBtn,
               {
-                backgroundColor: colors.card,
+                backgroundColor: selectedA ? colors.primary : colors.card,
                 borderColor: selectedA ? colors.primary : colors.border,
-                borderWidth: selectedA ? 1.5 : 1,
+                borderWidth: 1,
               },
             ]}
             onPress={() => setPickerTarget('a')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.selectorLabel, { color: colors.textMuted }]}>COUNTRY A</Text>
+            <Text style={[styles.selectorLabel, { color: selectedA ? 'rgba(255,255,255,0.70)' : colors.textMuted }]}>COUNTRY A</Text>
             {selectedA ? (
               <View style={styles.selectorSelected}>
                 <Text style={styles.selectorFlag}>{isoToFlag(selectedA.code)}</Text>
-                <Text style={[styles.selectorName, { color: colors.foreground }]} numberOfLines={1}>
+                <Text style={[styles.selectorName, { color: '#FFFFFF' }]} numberOfLines={1}>
                   {selectedA.name}
                 </Text>
               </View>
@@ -621,11 +620,11 @@ export default function CompareScreen() {
 
           {/* Swap button */}
           <TouchableOpacity
-            style={[styles.swapBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            style={[styles.swapBtn, { backgroundColor: colors.warning, borderColor: colors.warning }]}
             onPress={swap}
             activeOpacity={0.7}
           >
-            <ArrowLeftRight size={16} color={colors.textMuted} />
+            <ArrowLeftRight size={16} color="#FFFFFF" />
           </TouchableOpacity>
 
           {/* Country B picker */}
@@ -633,19 +632,19 @@ export default function CompareScreen() {
             style={[
               styles.selectorBtn,
               {
-                backgroundColor: colors.card,
+                backgroundColor: selectedB ? colors.accent : colors.card,
                 borderColor: selectedB ? colors.accent : colors.border,
-                borderWidth: selectedB ? 1.5 : 1,
+                borderWidth: 1,
               },
             ]}
             onPress={() => setPickerTarget('b')}
             activeOpacity={0.7}
           >
-            <Text style={[styles.selectorLabel, { color: colors.textMuted }]}>COUNTRY B</Text>
+            <Text style={[styles.selectorLabel, { color: selectedB ? 'rgba(255,255,255,0.70)' : colors.textMuted }]}>COUNTRY B</Text>
             {selectedB ? (
               <View style={styles.selectorSelected}>
                 <Text style={styles.selectorFlag}>{isoToFlag(selectedB.code)}</Text>
-                <Text style={[styles.selectorName, { color: colors.foreground }]} numberOfLines={1}>
+                <Text style={[styles.selectorName, { color: '#FFFFFF' }]} numberOfLines={1}>
                   {selectedB.name}
                 </Text>
               </View>
@@ -662,9 +661,9 @@ export default function CompareScreen() {
 
         {/* Empty state */}
         {!bothSelected && (
-          <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <ArrowLeftRight size={36} color={colors.textMuted} style={{ opacity: 0.3, marginBottom: Spacing.md }} />
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+          <View style={[styles.emptyCard, { backgroundColor: colors.info, borderColor: 'transparent' }]}>
+            <ArrowLeftRight size={36} color="rgba(255,255,255,0.40)" style={{ marginBottom: Spacing.md }} />
+            <Text style={[styles.emptyText, { color: 'rgba(255,255,255,0.80)' }]}>
               Select two countries above to get an AI-powered comparison
             </Text>
           </View>
