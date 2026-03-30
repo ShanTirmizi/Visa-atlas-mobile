@@ -23,7 +23,9 @@ import {
   RefreshCw,
   Unlink,
   Mail,
+  LogOut,
 } from 'lucide-react-native';
+import { useAuthActions } from '@convex-dev/auth/react';
 import { useTheme } from '@/contexts/theme-context';
 import { useCalendar } from '@/contexts/calendar-context';
 import { useEmail } from '@/contexts/email-context';
@@ -51,6 +53,7 @@ export default function MoreScreen() {
   const { heldVisas, toggleHeldVisa, favorites, visited, setHeldVisas } = useVisa();
   const { isConnected, lastSyncTime, isSyncing, sync, connect, disconnect } = useCalendar();
   const { gmailAccount, isSyncing: isEmailSyncing, syncGmail, connectGmail, disconnectGmail } = useEmail();
+  const { signOut } = useAuthActions();
   const [activeSection, setActiveSection] = useState<Section>('main');
 
   // ── Held Visas Section ──
@@ -248,6 +251,33 @@ export default function MoreScreen() {
           1.0.0
         </Text>
       </View>
+
+      {/* Sign Out */}
+      <TouchableOpacity
+        style={[styles.settingRow, { backgroundColor: colors.danger, borderWidth: 0, marginTop: Spacing.lg }]}
+        onPress={() => {
+          Alert.alert(
+            'Sign Out',
+            'Are you sure you want to sign out?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Sign Out',
+                style: 'destructive',
+                onPress: () => signOut(),
+              },
+            ],
+          );
+        }}
+      >
+        <View style={styles.settingInfo}>
+          <LogOut color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+            Sign Out
+          </Text>
+        </View>
+        <ChevronRight color="#FFFFFF" size={18} />
+      </TouchableOpacity>
     </View>
   );
 

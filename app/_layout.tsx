@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
+import { useConvexAuth } from 'convex/react';
+import { useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -37,6 +39,7 @@ import { VisaProvider } from '@/contexts/visa-context';
 import { CalendarProvider } from '@/contexts/calendar-context';
 import { EmailProvider } from '@/contexts/email-context';
 import { ToastProvider } from '@/contexts/toast-context';
+import { FontFamily, FontSize } from '@/constants/theme';
 import type { ThemeColors } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -44,6 +47,33 @@ SplashScreen.preventAutoHideAsync();
 function ThemedApp() {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  // Auth gate: redirect based on auth state
+  useEffect(() => {
+    if (isLoading) return;
+    const inAuthGroup = segments[0] === 'sign-in' || segments[0] === 'sign-in-email';
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/sign-in');
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, isLoading, segments]);
+
+  // Show loading screen while checking auth
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Text style={{ fontFamily: 'BebasNeue_400Regular', fontSize: 36, color: colors.foreground }}>
+          VISA ATLAS
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -75,6 +105,9 @@ function ThemedApp() {
           name="chat/[tripId]"
           options={{ animation: 'slide_from_right' }}
         />
+        <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+        <Stack.Screen name="sign-in-email" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="email-connected" options={{ animation: 'none' }} />
       </Stack>
     </View>
   );
