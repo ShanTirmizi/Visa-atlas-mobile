@@ -10,4 +10,6 @@ export const endpoints = {
   visaChat: `${API_BASE}/api/visa-chat`,
   visaGuide: `${API_BASE}/api/visa-guide`,
   unsplash: `${API_BASE}/api/unsplash`,
+  gmailAuth: `${API_BASE}/api/auth/gmail`,
+  gmailCallback: `${API_BASE}/api/auth/gmail/callback`,
 };
