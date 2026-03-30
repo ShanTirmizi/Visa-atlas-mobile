@@ -5,6 +5,7 @@ import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { useCalendar } from '@/contexts/calendar-context';
+import { useEmail } from '@/contexts/email-context';
 import CalendarReviewSheet, { type CalendarReviewSheetRef } from './CalendarReviewSheet';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import BookingCard from './BookingCard';
@@ -36,6 +37,7 @@ function detailsKeyForType(type: string): string {
 export default function BookingsListView({ bottomInset }: BookingsListViewProps) {
   const { colors } = useTheme();
   const { isConnected, isSyncing, sync, reviewItems, clearReviewItems } = useCalendar();
+  const { gmailAccount, isSyncing: isEmailSyncing, syncGmail } = useEmail();
 
   // ── Data ──────────────────────────────────────
   const bookings = useQuery(api.bookings.listBookings);
@@ -175,10 +177,13 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
         }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          isConnected ? (
+          (isConnected || gmailAccount?.isConnected) ? (
             <RefreshControl
-              refreshing={isSyncing}
-              onRefresh={() => sync()}
+              refreshing={isSyncing || isEmailSyncing}
+              onRefresh={() => {
+                if (isConnected) sync();
+                if (gmailAccount?.isConnected) syncGmail();
+              }}
               tintColor={colors.primary}
             />
           ) : undefined

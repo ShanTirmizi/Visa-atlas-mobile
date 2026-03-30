@@ -22,15 +22,17 @@ import {
   Calendar as CalendarIcon,
   RefreshCw,
   Unlink,
+  Mail,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useCalendar } from '@/contexts/calendar-context';
+import { useEmail } from '@/contexts/email-context';
 import { useVisa } from '@/contexts/visa-context';
 import { availableVisas } from '@/data/visaData';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 
-type Section = 'main' | 'visas' | 'favorites' | 'visited' | 'settings' | 'calendar';
+type Section = 'main' | 'visas' | 'favorites' | 'visited' | 'settings' | 'calendar' | 'email';
 
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
@@ -48,6 +50,7 @@ export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const { heldVisas, toggleHeldVisa, favorites, visited, setHeldVisas } = useVisa();
   const { isConnected, lastSyncTime, isSyncing, sync, connect, disconnect } = useCalendar();
+  const { gmailAccount, isSyncing: isEmailSyncing, syncGmail, connectGmail, disconnectGmail } = useEmail();
   const [activeSection, setActiveSection] = useState<Section>('main');
 
   // ── Held Visas Section ──
@@ -355,6 +358,117 @@ export default function MoreScreen() {
     </View>
   );
 
+  // ── Email Section ──
+  const renderEmail = () => (
+    <View style={styles.sectionContent}>
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={() => setActiveSection('main')}
+        hitSlop={12}
+      >
+        <ArrowLeft color={colors.foreground} size={20} />
+      </TouchableOpacity>
+
+      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+        Email Sync
+      </Text>
+      <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+        Import booking confirmations from your Gmail inbox.
+      </Text>
+
+      {!gmailAccount?.isConnected ? (
+        <TouchableOpacity
+          style={[
+            styles.settingRow,
+            { backgroundColor: colors.primary, borderWidth: 0 },
+          ]}
+          onPress={() => connectGmail()}
+        >
+          <View style={styles.settingInfo}>
+            <Mail color="#FFFFFF" size={20} />
+            <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+              Connect Gmail
+            </Text>
+          </View>
+          <ChevronRight color="#FFFFFF" size={18} />
+        </TouchableOpacity>
+      ) : (
+        <>
+          <View
+            style={[
+              styles.settingRow,
+              { backgroundColor: colors.surface, borderWidth: 0 },
+            ]}
+          >
+            <View style={styles.settingInfo}>
+              <Mail color={colors.foreground} size={20} />
+              <Text style={[styles.settingLabel, { color: colors.foreground }]}>
+                {gmailAccount.email}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.settingRow,
+              {
+                backgroundColor: colors.primary,
+                borderWidth: 0,
+                opacity: isEmailSyncing ? 0.6 : 1,
+              },
+            ]}
+            onPress={() => syncGmail()}
+            disabled={isEmailSyncing}
+          >
+            <View style={styles.settingInfo}>
+              <RefreshCw color="#FFFFFF" size={20} />
+              <View>
+                <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+                  Scan Now
+                </Text>
+                {gmailAccount.lastScanTime && (
+                  <Text style={[styles.settingValue, { color: 'rgba(255,255,255,0.70)' }]}>
+                    Last scan: {formatRelativeTime(gmailAccount.lastScanTime)}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <ChevronRight color="#FFFFFF" size={18} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingRow,
+              { backgroundColor: colors.danger, borderWidth: 0 },
+            ]}
+            onPress={() => {
+              Alert.alert(
+                'Disconnect Gmail',
+                'This will stop scanning your Gmail for booking confirmations. Existing bookings will not be removed.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Disconnect',
+                    style: 'destructive',
+                    onPress: () => disconnectGmail(),
+                  },
+                ],
+              );
+            }}
+          >
+            <View style={styles.settingInfo}>
+              <Unlink color="#FFFFFF" size={20} />
+              <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+                Disconnect Gmail
+              </Text>
+            </View>
+            <ChevronRight color="#FFFFFF" size={18} />
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  );
+
   // ── Main Menu ──
   const renderMain = () => {
     const menuItems: Array<{
@@ -397,6 +511,15 @@ export default function MoreScreen() {
           : 'Connect your calendar',
         icon: <CalendarIcon color="#FFFFFF" size={22} />,
         tint: colors.info,
+      },
+      {
+        key: 'email' as Section,
+        label: 'Email Sync',
+        subtitle: gmailAccount?.isConnected
+          ? `${gmailAccount.email} \u00B7 ${gmailAccount.lastScanTime ? formatRelativeTime(gmailAccount.lastScanTime) : 'Never synced'}`
+          : 'Connect Gmail',
+        icon: <Mail color="#FFFFFF" size={22} />,
+        tint: colors.secondary,
       },
       {
         key: 'settings',
@@ -490,6 +613,7 @@ export default function MoreScreen() {
       {activeSection === 'visited' && renderVisited()}
       {activeSection === 'settings' && renderSettings()}
       {activeSection === 'calendar' && renderCalendar()}
+      {activeSection === 'email' && renderEmail()}
     </ScrollView>
   );
 }

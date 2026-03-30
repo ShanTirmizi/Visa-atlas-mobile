@@ -69,7 +69,7 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
 
     setIsSyncing(true);
     try {
-      const result = await scanGmail();
+      const result = await scanGmail({ accountId: gmailAccount!._id });
       setLastSyncResult(result);
     } catch (err: any) {
       setLastSyncResult({ imported: 0, error: err.message ?? 'Sync failed' });
