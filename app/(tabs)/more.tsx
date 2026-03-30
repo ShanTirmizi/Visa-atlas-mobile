@@ -19,19 +19,35 @@ import {
   Shield,
   Info,
   Trash2,
+  Calendar as CalendarIcon,
+  RefreshCw,
+  Unlink,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
+import { useCalendar } from '@/contexts/calendar-context';
 import { useVisa } from '@/contexts/visa-context';
 import { availableVisas } from '@/data/visaData';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 
-type Section = 'main' | 'visas' | 'favorites' | 'visited' | 'settings';
+type Section = 'main' | 'visas' | 'favorites' | 'visited' | 'settings' | 'calendar';
+
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export default function MoreScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { heldVisas, toggleHeldVisa, favorites, visited, setHeldVisas } = useVisa();
+  const { isConnected, lastSyncTime, isSyncing, sync, connect, disconnect } = useCalendar();
   const [activeSection, setActiveSection] = useState<Section>('main');
 
   // ── Held Visas Section ──
@@ -232,6 +248,113 @@ export default function MoreScreen() {
     </View>
   );
 
+  // ── Calendar Section ──
+  const renderCalendar = () => (
+    <View style={styles.sectionContent}>
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={() => setActiveSection('main')}
+        hitSlop={12}
+      >
+        <ArrowLeft color={colors.foreground} size={20} />
+      </TouchableOpacity>
+
+      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+        Calendar Sync
+      </Text>
+      <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+        {isConnected
+          ? 'Your calendar is connected. Visa expiry dates will be synced automatically.'
+          : 'Connect your device calendar to sync visa expiry reminders.'}
+      </Text>
+
+      {!isConnected ? (
+        <TouchableOpacity
+          style={[
+            styles.settingRow,
+            { backgroundColor: colors.primary, borderWidth: 0 },
+          ]}
+          onPress={async () => {
+            const granted = await connect();
+            if (!granted) {
+              Alert.alert(
+                'Permission Denied',
+                'Calendar access is required to sync visa expiry dates. Please enable it in your device settings.',
+              );
+            }
+          }}
+        >
+          <View style={styles.settingInfo}>
+            <CalendarIcon color="#FFFFFF" size={20} />
+            <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+              Connect Calendar
+            </Text>
+          </View>
+          <ChevronRight color="#FFFFFF" size={18} />
+        </TouchableOpacity>
+      ) : (
+        <>
+          <TouchableOpacity
+            style={[
+              styles.settingRow,
+              {
+                backgroundColor: colors.primary,
+                borderWidth: 0,
+                opacity: isSyncing ? 0.6 : 1,
+              },
+            ]}
+            onPress={() => sync()}
+            disabled={isSyncing}
+          >
+            <View style={styles.settingInfo}>
+              <RefreshCw color="#FFFFFF" size={20} />
+              <View>
+                <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+                  Sync Now
+                </Text>
+                {lastSyncTime && (
+                  <Text style={[styles.settingValue, { color: 'rgba(255,255,255,0.70)' }]}>
+                    Last sync: {formatRelativeTime(lastSyncTime)}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <ChevronRight color="#FFFFFF" size={18} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingRow,
+              { backgroundColor: colors.danger, borderWidth: 0 },
+            ]}
+            onPress={() => {
+              Alert.alert(
+                'Disconnect Calendar',
+                'This will stop syncing visa expiry dates to your calendar. Existing events will not be removed.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Disconnect',
+                    style: 'destructive',
+                    onPress: () => disconnect(),
+                  },
+                ],
+              );
+            }}
+          >
+            <View style={styles.settingInfo}>
+              <Unlink color="#FFFFFF" size={20} />
+              <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+                Disconnect Calendar
+              </Text>
+            </View>
+            <ChevronRight color="#FFFFFF" size={18} />
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  );
+
   // ── Main Menu ──
   const renderMain = () => {
     const menuItems: Array<{
@@ -265,6 +388,15 @@ export default function MoreScreen() {
         icon: <MapPin color="#FFFFFF" size={22} />,
         badge: visited.length,
         tint: colors.secondary,
+      },
+      {
+        key: 'calendar' as Section,
+        label: 'Calendar Sync',
+        subtitle: isConnected
+          ? `Last sync: ${lastSyncTime ? formatRelativeTime(lastSyncTime) : 'Never'}`
+          : 'Connect your calendar',
+        icon: <CalendarIcon color="#FFFFFF" size={22} />,
+        tint: colors.info,
       },
       {
         key: 'settings',
@@ -357,6 +489,7 @@ export default function MoreScreen() {
       {activeSection === 'favorites' && renderFavorites()}
       {activeSection === 'visited' && renderVisited()}
       {activeSection === 'settings' && renderSettings()}
+      {activeSection === 'calendar' && renderCalendar()}
     </ScrollView>
   );
 }

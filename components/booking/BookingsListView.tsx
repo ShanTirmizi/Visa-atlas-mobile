@@ -1,9 +1,11 @@
 import React, { useRef, useMemo, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
+import { useCalendar } from '@/contexts/calendar-context';
+import CalendarReviewSheet, { type CalendarReviewSheetRef } from './CalendarReviewSheet';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import BookingCard from './BookingCard';
 import AddBookingSheet, { type AddBookingSheetRef } from './AddBookingSheet';
@@ -33,6 +35,7 @@ function detailsKeyForType(type: string): string {
 
 export default function BookingsListView({ bottomInset }: BookingsListViewProps) {
   const { colors } = useTheme();
+  const { isConnected, isSyncing, sync, reviewItems, clearReviewItems } = useCalendar();
 
   // ── Data ──────────────────────────────────────
   const bookings = useQuery(api.bookings.listBookings);
@@ -41,6 +44,7 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
   // ── Refs ──────────────────────────────────────
   const addSheetRef = useRef<AddBookingSheetRef>(null);
   const detailSheetRef = useRef<BookingDetailSheetRef>(null);
+  const reviewSheetRef = useRef<CalendarReviewSheetRef>(null);
 
   // ── Split bookings into unassigned & upcoming ─
   const { unassigned, upcoming } = useMemo(() => {
@@ -170,20 +174,41 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
           gap: 10,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          isConnected ? (
+            <RefreshControl
+              refreshing={isSyncing}
+              onRefresh={() => sync()}
+              tintColor={colors.primary}
+            />
+          ) : undefined
+        }
         ListHeaderComponent={
-          unassigned.length > 0 ? (
-            <View
-              style={[
-                styles.unassignedBanner,
-                { backgroundColor: colors.warningBg },
-              ]}
-            >
-              <Text style={[styles.unassignedText, { color: colors.warning }]}>
-                {unassigned.length} unassigned booking
-                {unassigned.length !== 1 ? 's' : ''}
-              </Text>
-            </View>
-          ) : null
+          <>
+            {unassigned.length > 0 && (
+              <View
+                style={[
+                  styles.unassignedBanner,
+                  { backgroundColor: colors.warningBg },
+                ]}
+              >
+                <Text style={[styles.unassignedText, { color: colors.warning }]}>
+                  {unassigned.length} unassigned booking
+                  {unassigned.length !== 1 ? 's' : ''}
+                </Text>
+              </View>
+            )}
+            {reviewItems.length > 0 && (
+              <TouchableOpacity
+                onPress={() => reviewSheetRef.current?.open(reviewItems)}
+                style={[styles.reviewBanner, { backgroundColor: colors.info + '15' }]}
+              >
+                <Text style={[styles.reviewBannerText, { color: colors.info }]}>
+                  {reviewItems.length} calendar event{reviewItems.length !== 1 ? 's' : ''} to review
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
         }
         renderItem={({ item }) => (
           <BookingCard
@@ -217,6 +242,7 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
 
       <AddBookingSheet ref={addSheetRef} />
       <BookingDetailSheet ref={detailSheetRef} />
+      <CalendarReviewSheet ref={reviewSheetRef} onComplete={clearReviewItems} />
     </View>
   );
 }
@@ -286,6 +312,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+
+  // ── Review banner ─────────────────────────────
+  reviewBanner: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
+    marginBottom: Spacing.sm,
+  },
+  reviewBannerText: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: FontSize.sm,
   },
 
   // ── FAB ───────────────────────────────────────

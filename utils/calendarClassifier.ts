@@ -53,18 +53,12 @@ export function classifyEvent(event: CalendarEvent): ClassifiedEvent | null {
   // ── Step 1: Check known organizers ──
   let organizerMatched = false;
 
-  for (const entry of KNOWN_ORGANIZERS) {
-    const domainMatch = entry.domains.some(
-      (domain) =>
-        (event.organizer ?? '').toLowerCase().includes(domain) ||
-        combined.includes(domain)
-    );
-
-    if (domainMatch) {
+  for (const [domain, info] of Object.entries(KNOWN_ORGANIZERS)) {
+    if (combined.includes(domain)) {
       confidence += SCORE_WEIGHTS.KNOWN_ORGANIZER;
-      detectedType = entry.type;
-      provider = entry.provider;
-      signals.push(`Known provider: ${entry.provider}`);
+      detectedType = info.type;
+      provider = info.provider;
+      signals.push(`Known provider: ${info.provider}`);
       organizerMatched = true;
       break;
     }
@@ -75,10 +69,10 @@ export function classifyEvent(event: CalendarEvent): ClassifiedEvent | null {
     let bestKeywordScore = 0;
     let bestKeywordType: BookingType | null = null;
 
-    for (const entry of TYPE_KEYWORDS) {
+    for (const [type, keywords] of Object.entries(TYPE_KEYWORDS) as [BookingType, string[]][]) {
       let matchCount = 0;
-      for (const keyword of entry.keywords) {
-        if (combined.includes(keyword)) {
+      for (const keyword of keywords) {
+        if (combined.includes(keyword.toLowerCase())) {
           matchCount++;
           signals.push(`Keyword match: "${keyword}"`);
         }
@@ -87,7 +81,7 @@ export function classifyEvent(event: CalendarEvent): ClassifiedEvent | null {
       const keywordScore = matchCount * SCORE_WEIGHTS.TYPE_KEYWORD;
       if (keywordScore > bestKeywordScore) {
         bestKeywordScore = keywordScore;
-        bestKeywordType = entry.type;
+        bestKeywordType = type;
       }
     }
 

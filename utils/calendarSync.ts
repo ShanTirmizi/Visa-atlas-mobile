@@ -103,61 +103,50 @@ export async function runCalendarSync(
     }
 
     // Classify the new events
-    const classified = classifyEvents(newEvents);
+    const { autoImport, review } = classifyEvents(newEvents);
 
-    const forReview: ClassifiedEvent[] = [];
     let imported = 0;
-
     const calendarSource = Platform.OS === 'ios' ? 'apple' : 'google';
 
-    for (const classifiedEvent of classified) {
-      if (classifiedEvent.confidence === 'high') {
-        // Auto-import high confidence events
-        const bookingData: Record<string, any> = {
-          type: classifiedEvent.type,
-          source: 'calendar',
-          provider: classifiedEvent.provider,
-          status: 'upcoming',
-          title: classifiedEvent.event.title,
-          startDate: classifiedEvent.event.startDate,
-          calendarEventId: classifiedEvent.event.id,
-          calendarSource,
-        };
+    // Auto-import high confidence events
+    for (const classified of autoImport) {
+      const { event, bookingType, provider: providerName } = classified;
 
-        if (classifiedEvent.event.endDate !== classifiedEvent.event.startDate) {
-          bookingData.endDate = classifiedEvent.event.endDate;
-        }
+      const bookingId = await createBookingFn({
+        type: bookingType,
+        source: 'calendar' as const,
+        provider: providerName,
+        status: 'upcoming' as const,
+        title: event.title,
+        startDate: event.startDate,
+        endDate: event.endDate !== event.startDate ? event.endDate : undefined,
+        location: event.location || undefined,
+        calendarEventId: event.id,
+        calendarSource: calendarSource as 'apple' | 'google',
+      });
 
-        if (classifiedEvent.event.location) {
-          bookingData.location = classifiedEvent.event.location;
-        }
-
-        const booking = await createBookingFn(bookingData);
-
-        // Try trip matching (countryCode undefined for calendar events, match on dates)
+      // Try trip matching (countryCode undefined for calendar events, match on dates)
+      if (trips.length > 0) {
         const match = findMatchingTrip(
           undefined,
-          classifiedEvent.event.startDate,
-          classifiedEvent.event.endDate,
+          event.startDate,
+          event.endDate,
           trips
         );
 
-        if (match && match.confidence === 'high' && booking?._id) {
+        if (match && match.confidence === 'high') {
           try {
-            await linkBookingFn(booking._id, match.tripId);
+            await linkBookingFn(bookingId, match.tripId);
           } catch {
-            // Linking failure is non-fatal; the booking was still created
+            // Linking failure is non-fatal
           }
         }
-
-        imported++;
-      } else {
-        // Events that aren't high confidence go to review
-        forReview.push(classifiedEvent);
       }
+
+      imported++;
     }
 
-    return { imported, forReview, skipped };
+    return { imported, forReview: review, skipped };
   } catch (error: any) {
     return {
       imported: 0,
