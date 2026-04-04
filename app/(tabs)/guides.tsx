@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery, useMutation } from 'convex/react';
+import { useMutation } from 'convex/react';
+import { useOfflineQuery } from '@/hooks/use-offline-query';
+import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { BookOpen, Trash2, FileText, ChevronRight } from 'lucide-react-native';
@@ -123,12 +125,14 @@ export default function GuidesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const guides = useQuery(api.visaGuides.listGuides);
+  const guides = useOfflineQuery(api.visaGuides.listGuides, {});
+  const { isOffline } = useOffline();
   const deleteGuide = useMutation(api.visaGuides.deleteGuide);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDelete = useCallback(
     (id: Id<'visaGuides'>, name: string) => {
+      if (isOffline) return;
       Alert.alert(
         'Delete visa guide',
         `Are you sure you want to delete the ${name} visa guide? Your checklist progress will be lost.`,
