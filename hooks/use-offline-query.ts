@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'convex/react';
+import { getFunctionName } from 'convex/server';
 import type { FunctionReference, FunctionArgs, FunctionReturnType } from 'convex/server';
 import { useOffline } from '@/contexts/offline-context';
 import {
@@ -98,9 +99,9 @@ const CACHE_CONFIGS: Record<string, CacheConfig> = {
 };
 
 function findCacheConfig(queryRef: FunctionReference<'query'>): CacheConfig | null {
-  const refStr = String(queryRef);
+  const refName = getFunctionName(queryRef); // e.g. "trips:listTrips"
   for (const [key, config] of Object.entries(CACHE_CONFIGS)) {
-    if (refStr.includes(key)) {
+    if (refName.includes(key)) {
       return config;
     }
   }

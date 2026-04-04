@@ -4,6 +4,7 @@
 
 import { useCallback } from 'react';
 import { useMutation } from 'convex/react';
+import { getFunctionName } from 'convex/server';
 import type { FunctionReference, FunctionArgs } from 'convex/server';
 import { useOffline } from '@/contexts/offline-context';
 import {
@@ -154,7 +155,7 @@ export function useOfflineMutation<Mutation extends FunctionReference<'mutation'
         return;
       }
 
-      const refStr = String(mutationRef);
+      const refStr = getFunctionName(mutationRef);
       const argsRecord = args as Record<string, unknown>;
 
       const intent = resolveIntent(refStr, argsRecord);
