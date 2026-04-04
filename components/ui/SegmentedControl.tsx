@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     padding: 3,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
     position: 'relative',
   },
   indicator: {

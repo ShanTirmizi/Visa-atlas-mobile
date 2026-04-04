@@ -1032,7 +1032,7 @@ const styles = StyleSheet.create({
   heroContent: {
     padding: Spacing.lg,
     paddingTop: 60,
-    paddingBottom: Spacing.xl,
+    paddingBottom: Spacing.md,
   },
   heroTitle: {
     fontFamily: FontFamily.display,
