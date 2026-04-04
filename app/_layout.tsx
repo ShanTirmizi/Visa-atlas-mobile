@@ -119,6 +119,8 @@ function ThemedApp() {
         <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
         <Stack.Screen name="sign-in-email" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="email-connected" options={{ animation: 'none' }} />
+        <Stack.Screen name="invite/[code]" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <Stack.Screen name="trip/invite" options={{ animation: 'slide_from_right' }} />
       </Stack>
     </View>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery, useMutation } from 'convex/react';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
+import { CollaboratorAvatars } from '@/components/CollaboratorAvatars';
 import { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import {
@@ -42,6 +44,7 @@ import {
   Check,
   AlertCircle,
   Info,
+  UserPlus,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import {
@@ -157,7 +160,25 @@ export default function TripDetailScreen() {
   const scrollRef = useRef<ScrollView>(null);
 
   const trip = useOfflineQuery(api.trips.getTrip, { id: id as Id<'trips'> });
+  const collaborators = useQuery(api.trips.getCollaborators, id ? { tripId: id as Id<'trips'> } : 'skip');
+  const presenceUsers = useQuery(api.tripPresence.getPresence, id ? { tripId: id as Id<'trips'> } : 'skip');
+  const heartbeatMutation = useMutation(api.tripPresence.heartbeat);
+  const leaveMutation = useMutation(api.tripPresence.leave);
+
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+
+  useEffect(() => {
+    if (!id) return;
+    const tripId = id as Id<'trips'>;
+    heartbeatMutation({ tripId }).catch(() => {});
+    const interval = setInterval(() => {
+      heartbeatMutation({ tripId }).catch(() => {});
+    }, 30_000);
+    return () => {
+      clearInterval(interval);
+      leaveMutation({ tripId }).catch(() => {});
+    };
+  }, [id]);
 
   // Parsed data
   const itinerary = useMemo(
@@ -368,6 +389,18 @@ export default function TripDetailScreen() {
                 </View>
               )}
             </View>
+
+            {collaborators && collaborators.length > 1 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                <CollaboratorAvatars
+                  collaborators={collaborators}
+                  presenceUsers={presenceUsers ?? []}
+                />
+                <TouchableOpacity onPress={() => router.push(`/trip/invite?tripId=${id}`)}>
+                  <UserPlus size={20} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
 

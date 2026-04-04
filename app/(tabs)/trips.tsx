@@ -116,8 +116,10 @@ export default function TripsScreen() {
   }, [trips, sortBy]);
 
   const handleDelete = useCallback(
-    (id: any, name: string) => {
+    (id: string, name: string) => {
       if (isOffline) return;
+      const tripData = trips?.find((t: { _id: string }) => t._id === id);
+      if ((tripData as { _role?: string })?._role !== 'owner') return;
       Alert.alert(
         'Delete trip',
         `Are you sure you want to delete your ${name} trip? This cannot be undone.`,
@@ -135,7 +137,7 @@ export default function TripsScreen() {
         ],
       );
     },
-    [deleteTrip],
+    [deleteTrip, isOffline, trips],
   );
 
   const handleToggleStatus = useCallback(
@@ -186,6 +188,11 @@ export default function TripsScreen() {
                 <Text style={[styles.regionText, { color: 'rgba(255,255,255,0.70)' }]}>
                   {item.isMultiCountry ? 'Multi-country route' : `${item.region} \u00B7 ${item.capital}`}
                 </Text>
+                {item._role !== 'owner' && (
+                  <Text style={{ fontFamily: FontFamily.condensed, fontSize: 11, color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Shared · {item._role}
+                  </Text>
+                )}
               </View>
             </View>
 
