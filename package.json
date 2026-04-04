@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@auth/core": "^0.37.0",
-    "@convex-dev/auth": "^0.0.91",
+    "@convex-dev/auth": "^0.0.90",
     "@expo-google-fonts/barlow-condensed": "^0.4.1",
     "@expo-google-fonts/bebas-neue": "^0.4.1",
     "@expo-google-fonts/lora": "^0.4.2",
