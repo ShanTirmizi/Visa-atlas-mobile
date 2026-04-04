@@ -408,7 +408,7 @@ export default function TripDetailScreen() {
         </View>
 
         {/* ─── TAB BAR ─── */}
-        <View style={{ paddingHorizontal: Spacing.lg }}>
+        <View style={{ paddingHorizontal: Spacing.lg, marginTop: Spacing.sm, marginBottom: Spacing.xs }}>
           <SegmentedControl
             tabs={tabs.map((t) => t.label.toUpperCase())}
             activeIndex={tabs.findIndex((t) => t.key === activeTab)}
