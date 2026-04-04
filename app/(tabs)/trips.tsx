@@ -114,21 +114,20 @@ function parseHeroImage(raw: string | null | undefined): HeroImageData | null {
   }
 }
 
-// ---- Skeleton card (magazine style) ----
+// ---- Skeleton card ----
 function SkeletonCard({ colors }: { colors: Record<string, string> }) {
   return (
-    <View style={[styles.card, Shadows.card, { backgroundColor: colors.shimmer }]}>
-      <View style={[styles.skeletonStatusPill, { backgroundColor: 'rgba(255,255,255,0.15)' }]} />
-      <View style={styles.cardOverlay} />
-      <View style={[styles.cardContent, { gap: 6 }]}>
-        <View style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.2)', width: 160, height: 22, borderRadius: 4 }]} />
-        <View style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.15)', width: 110, height: 14, borderRadius: 4 }]} />
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          {[60, 50, 55].map((w, i) => (
-            <View key={i} style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.15)', width: w, height: 26, borderRadius: 999 }]} />
-          ))}
+    <View style={[styles.card, Shadows.card, { backgroundColor: colors.card }]}>
+      <View style={[styles.heroArea, { backgroundColor: colors.shimmer }]} />
+      <View style={styles.cardBottom}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 60, height: 24, borderRadius: 12 }]} />
+          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 50, height: 24, borderRadius: 12 }]} />
+          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 55, height: 24, borderRadius: 12 }]} />
+          <View style={{ flex: 1 }} />
+          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 64, height: 24, borderRadius: 12 }]} />
         </View>
-        <View style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.12)', width: 100, height: 12, borderRadius: 4 }]} />
+        <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 130, height: 14, borderRadius: 6, marginTop: 4 }]} />
       </View>
     </View>
   );
@@ -241,113 +240,124 @@ export default function TripsScreen() {
           onPress={() => router.push(`/trip/${item._id as string}`)}
           onLongPress={() => handleDelete(item._id as string, item.countryName as string)}
           delayLongPress={500}
-          style={[styles.card, Shadows.card]}
+          style={[styles.card, Shadows.card, { backgroundColor: colors.card }]}
         >
-          {/* Background: hero image or category color */}
-          {hasImage ? (
-            <Image
-              source={{ uri: heroImage.url }}
-              style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: catColor }]}>
-              {/* Decorative fallback: large semi-transparent globe */}
+          {/* Hero image area */}
+          <View style={[styles.heroArea, { backgroundColor: catColor }]}>
+            {hasImage ? (
+              <Image
+                source={{ uri: heroImage.url }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+              />
+            ) : (
               <Globe
                 color="rgba(255,255,255,0.12)"
-                size={200}
+                size={160}
                 strokeWidth={1}
-                style={{ position: 'absolute', right: -40, top: -20 }}
+                style={{ position: 'absolute', right: -20, top: -10 }}
               />
-            </View>
-          )}
+            )}
+            {/* Dark overlay for text readability */}
+            <View style={styles.heroOverlay} />
 
-          {/* Dark gradient overlay at the bottom */}
-          <View style={styles.cardOverlay} />
-
-          {/* Status pill — top right */}
-          <TouchableOpacity
-            onPress={() => handleToggleStatus(item._id as Id<'trips'>, item.status as string)}
-            style={styles.statusPillAbsolute}
-            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-          >
-            {isCompleted && <Check color="#FFFFFF" size={10} />}
-            <Text style={styles.statusPillAbsoluteText}>
-              {isCompleted ? 'Done' : 'Planned'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Main content pinned to bottom */}
-          <View style={styles.cardContent}>
-            {/* Country name + flag */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-              {(item.isMultiCountry as boolean) && (item.routeTitle as string) ? (
-                <>
-                  <Text style={styles.cardCountryName}>
+            {/* Country info overlaid on image */}
+            <View style={styles.heroContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                {(item.isMultiCountry as boolean) && (item.routeTitle as string) ? (
+                  <>
+                    <Text style={styles.heroCountryName}>
+                      {countryCodeToFlag(item.countryCode as string)}{' '}
+                      {(item.routeTitle as string).split(/\s*\u2192\s*/)[0]}
+                    </Text>
+                    <MoveRight color="#FFFFFF" size={16} style={{ opacity: 0.8 }} />
+                    <Text style={styles.heroCountryName}>
+                      {(item.routeTitle as string).split(/\s*\u2192\s*/).slice(1).join(' \u2192 ')}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.heroCountryName}>
                     {countryCodeToFlag(item.countryCode as string)}{' '}
-                    {(item.routeTitle as string).split(/\s*\u2192\s*/)[0]}
+                    {item.countryName as string}
                   </Text>
-                  <MoveRight color="#FFFFFF" size={16} style={{ opacity: 0.8 }} />
-                  <Text style={styles.cardCountryName}>
-                    {(item.routeTitle as string).split(/\s*\u2192\s*/).slice(1).join(' \u2192 ')}
+                )}
+              </View>
+
+              <Text style={styles.heroSubtitle}>
+                {(item.isMultiCountry as boolean)
+                  ? 'Multi-country route'
+                  : `${item.region as string} \u00B7 ${item.capital as string}`}
+              </Text>
+
+              {(item._role as string) !== 'owner' && (
+                <View style={styles.sharedBadge}>
+                  <Text style={styles.sharedBadgeText}>
+                    Shared \u00B7 {item._role as string}
                   </Text>
-                </>
-              ) : (
-                <Text style={styles.cardCountryName}>
-                  {countryCodeToFlag(item.countryCode as string)}{' '}
-                  {item.countryName as string}
-                </Text>
+                </View>
               )}
             </View>
+          </View>
 
-            {/* Region / capital or multi-country label */}
-            <Text style={styles.cardSubtitle}>
-              {(item.isMultiCountry as boolean)
-                ? 'Multi-country route'
-                : `${item.region as string} \u00B7 ${item.capital as string}`}
-            </Text>
-
-            {/* Frosted stat pills */}
-            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-              <View style={styles.frostedChip}>
-                <Clock color="rgba(255,255,255,0.85)" size={11} />
-                <Text style={styles.frostedChipText}>{item.duration as number}d</Text>
+          {/* Bottom section — stats + status */}
+          <View style={styles.cardBottom}>
+            <View style={styles.statsRow}>
+              <View style={[styles.statChip, { backgroundColor: colors.shimmer }]}>
+                <Clock color={colors.textSecondary} size={11} />
+                <Text style={[styles.statChipText, { color: colors.textSecondary }]}>
+                  {item.duration as number}d
+                </Text>
               </View>
-              <View style={styles.frostedChip}>
-                <Wallet color="rgba(255,255,255,0.85)" size={11} />
-                <Text style={styles.frostedChipText}>
+              <View style={[styles.statChip, { backgroundColor: colors.shimmer }]}>
+                <Wallet color={colors.textSecondary} size={11} />
+                <Text style={[styles.statChipText, { color: colors.textSecondary }]}>
                   {getCostSymbol((item.costLevel as 1 | 2 | 3) || 1)}
                 </Text>
               </View>
-              <View style={styles.frostedChip}>
-                <Plane color="rgba(255,255,255,0.85)" size={11} />
-                <Text style={styles.frostedChipText}>{item.flightHours as number}h</Text>
+              <View style={[styles.statChip, { backgroundColor: colors.shimmer }]}>
+                <Plane color={colors.textSecondary} size={11} />
+                <Text style={[styles.statChipText, { color: colors.textSecondary }]}>
+                  {item.flightHours as number}h
+                </Text>
               </View>
+
+              <View style={{ flex: 1 }} />
+
+              <TouchableOpacity
+                onPress={() => handleToggleStatus(item._id as Id<'trips'>, item.status as string)}
+                style={[
+                  styles.statusPill,
+                  isCompleted
+                    ? { backgroundColor: colors.visaFreeBg }
+                    : { backgroundColor: colors.primaryBg },
+                ]}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                {isCompleted && <Check color={colors.visaFree} size={11} />}
+                <Text style={[
+                  styles.statusPillText,
+                  { color: isCompleted ? colors.visaFree : colors.primary },
+                ]}>
+                  {isCompleted ? 'Done' : 'Planned'}
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Dates row */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               {(item.startDate as string | undefined) ? (
-                <Text style={styles.cardDate}>
+                <Text style={[styles.dateText, { color: colors.textMuted }]}>
                   {formatTravelDate(item.startDate as string)}
                   {(item.endDate as string | undefined)
                     ? ` \u2013 ${formatTravelDate(item.endDate as string)}`
                     : ''}
                 </Text>
               ) : (
-                <Text style={styles.cardDate}>
+                <Text style={[styles.dateText, { color: colors.textMuted }]}>
                   Added {formatDate(item._creationTime as number)}
                 </Text>
               )}
-              {isDeleting && <ActivityIndicator size="small" color="rgba(255,255,255,0.7)" />}
+              {isDeleting && <ActivityIndicator size="small" color={colors.danger} />}
             </View>
-
-            {/* Shared badge */}
-            {(item._role as string) !== 'owner' && (
-              <Text style={styles.sharedBadge}>
-                Shared \u00B7 {item._role as string}
-              </Text>
-            )}
           </View>
         </TouchableOpacity>
       );
@@ -495,61 +505,62 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  // ---- Magazine Cover card ----
+  // ---- Variation B card ----
   card: {
     borderRadius: 20,
     overflow: 'hidden',
-    height: 280,
+    marginBottom: Spacing.md,
   },
-  cardOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '60%',
-    backgroundColor: 'rgba(0,0,0,0.45)',
+  heroArea: {
+    height: 180,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
   },
-  cardContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  heroContent: {
     padding: Spacing.lg,
-    gap: 6,
+    zIndex: 1,
+    gap: 2,
   },
-  statusPillAbsolute: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    zIndex: 2,
-  },
-  statusPillAbsoluteText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 11,
-    color: '#FFFFFF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  cardCountryName: {
+  heroCountryName: {
     fontFamily: FontFamily.display,
     fontSize: FontSize['2xl'],
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
-  cardSubtitle: {
+  heroSubtitle: {
     fontFamily: FontFamily.serif,
     fontSize: FontSize.sm,
     color: 'rgba(255,255,255,0.80)',
   },
-  frostedChip: {
+  sharedBadge: {
     backgroundColor: 'rgba(255,255,255,0.15)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+    marginTop: 4,
+  },
+  sharedBadgeText: {
+    fontFamily: FontFamily.condensedMedium,
+    fontSize: 11,
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cardBottom: {
+    padding: Spacing.md,
+    gap: 6,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -557,28 +568,27 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  frostedChipText: {
+  statChipText: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: 12,
-    color: '#FFFFFF',
   },
-  cardDate: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: FontSize.xs,
-    color: 'rgba(255,255,255,0.65)',
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
   },
-  sharedBadge: {
-    fontFamily: FontFamily.condensedMedium,
+  statusPillText: {
+    fontFamily: FontFamily.condensedSemibold,
     fontSize: 11,
-    color: 'rgba(255,255,255,0.90)',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radius.full,
-    overflow: 'hidden',
+  },
+  dateText: {
+    fontFamily: FontFamily.condensedMedium,
+    fontSize: FontSize.xs,
   },
   // ---- Empty state ----
   emptyContainer: {
@@ -603,14 +613,5 @@ const styles = StyleSheet.create({
   skeletonBar: {
     borderRadius: Radius.xs,
     opacity: 0.6,
-  },
-  skeletonStatusPill: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 70,
-    height: 26,
-    borderRadius: 999,
-    zIndex: 2,
   },
 });
