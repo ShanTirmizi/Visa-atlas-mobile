@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
+import { useQuery, useMutation } from 'convex/react';
 import { Id } from '@/convex/_generated/dataModel';
 import { ArrowLeft, Send, Bot, User } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
@@ -31,6 +32,8 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  userName?: string;
+  userId?: string;
 }
 
 export default function ChatScreen() {
@@ -46,29 +49,45 @@ export default function ChatScreen() {
   });
   const { isOffline } = useOffline();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const convexMessages = useQuery(api.trips.getMessages, {
+    tripId: tripId as Id<'trips'>,
+  });
+  const addMessage = useMutation(api.trips.addMessage);
+  const currentUser = useQuery(api.trips.getCurrentUser);
+
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
 
   const countryName = trip?.countryName ?? 'your trip';
+
+  const displayMessages: ChatMessage[] = (convexMessages ?? []).map((m) => ({
+    id: m._id,
+    role: m.role,
+    content: m.content,
+    timestamp: m.timestamp,
+    userName: m.userName ?? undefined,
+    userId: m.userId ?? undefined,
+  }));
 
   const sendMessage = useCallback(async () => {
     if (isOffline) return;
     const text = inputText.trim();
     if (!text || isSending) return;
 
-    const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
     setInputText('');
     setIsSending(true);
 
     try {
+      // Persist user message to Convex
+      await addMessage({
+        tripId: tripId as Id<'trips'>,
+        role: 'user',
+        content: text,
+        userId: currentUser?._id,
+        userName: currentUser?.name ?? 'You',
+      });
+
+      // Call AI endpoint
       const res = await fetch(endpoints.tripChat, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -77,35 +96,31 @@ export default function ChatScreen() {
           message: text,
           countryName: trip?.countryName,
           itinerary: trip?.itinerary,
-          context: messages.slice(-6).map((m) => ({
+          context: (convexMessages ?? []).slice(-6).map((m) => ({
             role: m.role,
             content: m.content,
           })),
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { reply?: string; message?: string };
 
-      const assistantMsg: ChatMessage = {
-        id: `assistant-${Date.now()}`,
+      // Persist AI response to Convex
+      await addMessage({
+        tripId: tripId as Id<'trips'>,
         role: 'assistant',
-        content: data.reply || data.message || 'Sorry, I could not generate a response.',
-        timestamp: Date.now(),
-      };
-
-      setMessages((prev) => [...prev, assistantMsg]);
+        content: data.reply ?? data.message ?? 'Sorry, I could not generate a response.',
+      });
     } catch {
-      const errorMsg: ChatMessage = {
-        id: `error-${Date.now()}`,
+      await addMessage({
+        tripId: tripId as Id<'trips'>,
         role: 'assistant',
         content: 'Something went wrong. Please try again.',
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      });
     } finally {
       setIsSending(false);
     }
-  }, [inputText, isSending, tripId, trip, messages]);
+  }, [inputText, isSending, isOffline, tripId, currentUser, convexMessages, trip, addMessage]);
 
   const suggestions = [
     `What's the best restaurant near Day 1?`,
@@ -116,35 +131,66 @@ export default function ChatScreen() {
 
   const renderMessage = useCallback(
     ({ item }: { item: ChatMessage }) => {
-      const isUser = item.role === 'user';
+      const isAssistant = item.role === 'assistant';
+      const isOwnMessage = item.userId === currentUser?._id;
+      // A user message from another collaborator (not the current user)
+      const isOtherUser = !isAssistant && !isOwnMessage;
+
       return (
         <View
           style={[
             styles.messageBubble,
-            isUser
-              ? [styles.userBubble, { backgroundColor: colors.primary }]
-              : [styles.assistantBubble, { backgroundColor: colors.card, borderColor: colors.border }],
+            isAssistant
+              ? [styles.assistantBubble, { backgroundColor: colors.card, borderColor: colors.border }]
+              : isOwnMessage
+              ? [styles.ownBubble, { backgroundColor: colors.primary }]
+              : [styles.otherBubble, { backgroundColor: colors.card, borderColor: colors.border }],
           ]}
         >
+          {/* Sender name — shown above other users' messages */}
+          {isOtherUser && item.userName && (
+            <Text
+              style={[
+                styles.senderName,
+                { color: colors.textSecondary },
+              ]}
+            >
+              {item.userName}
+            </Text>
+          )}
+
           <View style={styles.messageHeader}>
-            {isUser ? (
+            {isAssistant ? (
+              <Bot color={colors.primary} size={14} />
+            ) : isOwnMessage ? (
               <User color={colors.primaryButtonText} size={14} />
             ) : (
-              <Bot color={colors.primary} size={14} />
+              <User color={colors.textSecondary} size={14} />
             )}
             <Text
               style={[
                 styles.messageRole,
-                { color: isUser ? colors.primaryButtonText : colors.textSecondary },
+                {
+                  color: isAssistant
+                    ? colors.textSecondary
+                    : isOwnMessage
+                    ? colors.primaryButtonText
+                    : colors.textSecondary,
+                },
               ]}
             >
-              {isUser ? 'You' : 'Visa Atlas AI'}
+              {isAssistant ? 'Visa Atlas AI' : isOwnMessage ? 'You' : (item.userName ?? 'Collaborator')}
             </Text>
           </View>
+
           <Text
             style={[
               styles.messageText,
-              { color: isUser ? colors.primaryButtonText : colors.foreground },
+              {
+                color: isOwnMessage && !isAssistant
+                  ? colors.primaryButtonText
+                  : colors.foreground,
+              },
             ]}
           >
             {item.content}
@@ -152,7 +198,7 @@ export default function ChatScreen() {
         </View>
       );
     },
-    [colors],
+    [colors, currentUser],
   );
 
   return (
@@ -192,7 +238,7 @@ export default function ChatScreen() {
       </View>
 
       {/* Messages */}
-      {messages.length === 0 ? (
+      {displayMessages.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Bot color={colors.textMuted} size={48} />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
@@ -222,7 +268,7 @@ export default function ChatScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={displayMessages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesList}
@@ -375,14 +421,24 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     marginBottom: Spacing.sm,
   },
-  userBubble: {
+  ownBubble: {
     alignSelf: 'flex-end',
     borderBottomRightRadius: 4,
+  },
+  otherBubble: {
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
     borderBottomLeftRadius: 4,
     borderWidth: 1,
+  },
+  senderName: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 11,
+    marginBottom: 2,
   },
   messageHeader: {
     flexDirection: 'row',

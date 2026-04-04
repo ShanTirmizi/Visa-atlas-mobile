@@ -238,6 +238,23 @@ export const deleteTrip = mutation({
   },
 });
 
+// ===== Current User =====
+
+export const getCurrentUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
+    const user = await ctx.db.get(userId);
+    if (!user) return null;
+    return {
+      _id: user._id,
+      name: user.name ?? null,
+      image: user.image ?? null,
+      email: user.email ?? null,
+    };
+  },
+});
+
 // ===== Chat Messages =====
 
 export const getMessages = query({
