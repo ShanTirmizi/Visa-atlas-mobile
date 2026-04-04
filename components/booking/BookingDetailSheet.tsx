@@ -146,6 +146,7 @@ interface FlightBoardingPassProps {
   colors: ThemeColors;
   isDark: boolean;
   typeColor: string;
+  sheetBg: string;
   statusCfg: { label: string; bg: string; fg: string };
   dateDisplay: string;
   formattedCost: string | null;
@@ -159,6 +160,7 @@ function FlightBoardingPass({
   colors,
   isDark,
   typeColor,
+  sheetBg,
   statusCfg,
   dateDisplay,
   formattedCost,
@@ -198,8 +200,8 @@ function FlightBoardingPass({
 
   return (
     <View style={bpStyles.wrapper}>
-      {/* ── Top half — flight color ──── */}
-      <View style={[bpStyles.topHalf, { backgroundColor: typeColor }]}>
+      {/* ── Top half — slightly lighter than sheet bg for card contrast ──── */}
+      <View style={[bpStyles.topHalf, { backgroundColor: typeColor, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderBottomWidth: 0 }]}>
         {/* Header row: airline + flight number */}
         <View style={bpStyles.headerRow}>
           <View style={bpStyles.airlineRow}>
@@ -264,7 +266,7 @@ function FlightBoardingPass({
           ]}
         />
         {/* Dashed line */}
-        <View style={[bpStyles.tearDash, { borderColor: colors.borderStrong }]} />
+        <View style={[bpStyles.tearDash, { borderColor: colors.borderSubtle }]} />
         {/* Right semicircle cutout */}
         <View
           style={[
@@ -276,7 +278,7 @@ function FlightBoardingPass({
       </View>
 
       {/* ── Bottom half — card background ──── */}
-      <View style={[bpStyles.bottomHalf, { backgroundColor: cardBg }]}>
+      <View style={[bpStyles.bottomHalf, { backgroundColor: cardBg, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderTopWidth: 0 }]}>
         {/* Detail grid — 2 columns */}
         <View style={bpStyles.detailGrid}>
           <View style={bpStyles.detailBox}>
@@ -390,7 +392,8 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
     const deleteBooking = useMutation(api.bookings.deleteBooking);
     const unlinkBookingFromTrip = useMutation(api.bookings.unlinkBookingFromTrip);
 
-    const snapPoints = useMemo(() => ['65%'], []);
+    // No fixed snap points — let the sheet size to its content
+    const snapPoints = useMemo(() => [], []);
 
     useImperativeHandle(ref, () => ({
       open: (data: BookingDetailData) => {
@@ -471,8 +474,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
       return (
         <BottomSheetModal
           ref={bottomSheetRef}
-          snapPoints={snapPoints}
-          enableDynamicSizing={false}
+          enableDynamicSizing={true}
           backdropComponent={renderBackdrop}
           handleIndicatorStyle={{ backgroundColor: 'rgba(255,255,255,0.5)', width: 40 }}
           backgroundStyle={{ backgroundColor: colors.card, borderRadius: 24 }}
@@ -511,20 +513,20 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
     }
 
     const isFlight = booking.type === 'flight';
-    const sheetBg = typeColor; // Always use the booking type color as sheet background
+    const sheetBg = typeColor; // Always use the booking type color
     const handleColor = 'rgba(255,255,255,0.5)';
 
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
         snapPoints={snapPoints}
-        enableDynamicSizing={false}
+        enableDynamicSizing={true}
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: handleColor, width: 40 }}
         backgroundStyle={{ backgroundColor: sheetBg, borderRadius: 24 }}
       >
         <BottomSheetScrollView
-          contentContainerStyle={{ paddingBottom: 16 }}
+          contentContainerStyle={{ paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}
         >
           {isFlight ? (
@@ -533,6 +535,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
               colors={colors}
               isDark={isDark}
               typeColor={typeColor}
+              sheetBg={sheetBg}
               statusCfg={statusCfg}
               dateDisplay={dateDisplay}
               formattedCost={formattedCost}
