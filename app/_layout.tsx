@@ -81,6 +81,8 @@ function ThemedApp() {
       <Stack
         screenOptions={{
           headerShown: false,
+          headerBackTitleVisible: false,
+          title: '',
           contentStyle: { backgroundColor: colors.background },
           animation: 'fade',
         }}
