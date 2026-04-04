@@ -7,16 +7,21 @@ import {
   BOOKING_TYPES,
   type BookingType,
 } from '@/constants/bookings';
+import ScanBooking from './ScanBooking';
+import type { BookingFormData } from './BookingForm';
 
 interface BookingTypePickerProps {
   onSelect: (type: BookingType) => void;
+  onScanComplete: (type: BookingType, data: Partial<BookingFormData>) => void;
 }
 
-export default function BookingTypePicker({ onSelect }: BookingTypePickerProps) {
+export default function BookingTypePicker({ onSelect, onScanComplete }: BookingTypePickerProps) {
   const { colors, isDark } = useTheme();
 
   return (
     <View style={styles.container}>
+      <ScanBooking onScanComplete={onScanComplete} />
+
       <Text style={[styles.title, { color: colors.foreground }]}>
         What are you booking?
       </Text>
@@ -44,12 +49,12 @@ export default function BookingTypePicker({ onSelect }: BookingTypePickerProps) 
               <View
                 style={[
                   styles.iconCircle,
-                  { backgroundColor: typeColor + '18' },
+                  { backgroundColor: typeColor + '22' },
                 ]}
               >
                 <Icon size={24} color={typeColor} />
               </View>
-              <Text style={[styles.label, { color: colors.textMuted }]}>
+              <Text style={[styles.label, { color: colors.foreground }]}>
                 {config.label}
               </Text>
             </TouchableOpacity>

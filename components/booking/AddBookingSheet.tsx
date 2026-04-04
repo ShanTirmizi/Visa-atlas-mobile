@@ -44,6 +44,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     const [step, setStep] = useState<'type' | 'form'>('type');
     const [selectedType, setSelectedType] = useState<BookingType | null>(null);
     const [prelinkedTripId, setPrelinkedTripId] = useState<string | undefined>();
+    const [prefillData, setPrefillData] = useState<Partial<BookingFormData> | undefined>();
 
     // ── Convex hooks ─────────────────────────────────────────────────
     const createBooking = useMutation(api.bookings.createBooking);
@@ -60,6 +61,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     const resetState = useCallback(() => {
       setStep('type');
       setSelectedType(null);
+      setPrefillData(undefined);
     }, []);
 
     // ── Imperative handle for parent ─────────────────────────────────
@@ -74,9 +76,17 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       },
     }));
 
+    // ── Scan complete handler ────────────────────────────────────────
+    const handleScanComplete = useCallback((type: BookingType, data: Partial<BookingFormData>) => {
+      setSelectedType(type);
+      setPrefillData(data);
+      setStep('form');
+    }, []);
+
     // ── Step 1 handler: type selected ────────────────────────────────
     const handleTypeSelect = useCallback((type: BookingType) => {
       setSelectedType(type);
+      setPrefillData(undefined);
       setStep('form');
     }, []);
 
@@ -157,7 +167,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         ref={bottomSheetRef}
         snapPoints={snapPoints}
         enableDynamicSizing={false}
-        backgroundStyle={{ backgroundColor: colors.background }}
+        backgroundStyle={{ backgroundColor: colors.surface }}
         handleIndicatorStyle={{ backgroundColor: colors.textMuted }}
         onDismiss={resetState}
       >
@@ -167,7 +177,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
           showsVerticalScrollIndicator={false}
         >
           {step === 'type' && (
-            <BookingTypePicker onSelect={handleTypeSelect} />
+            <BookingTypePicker onSelect={handleTypeSelect} onScanComplete={handleScanComplete} />
           )}
 
           {step === 'form' && selectedType && (
@@ -178,6 +188,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
               defaultCountryCode={prelinkedTrip?.countryCode}
               defaultStartDate={prelinkedTrip?.startDate}
               defaultEndDate={prelinkedTrip?.endDate}
+              prefillData={prefillData}
             />
           )}
         </BottomSheetScrollView>
