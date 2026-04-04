@@ -221,9 +221,10 @@ export default function TripsScreen() {
             onPress={() => setSortBy(opt.key)}
             style={[
               styles.sortPill,
-              isActive
-                ? { backgroundColor: colors.accent }
-                : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderSubtle },
+              {
+                backgroundColor: isActive ? colors.accent : colors.surface,
+                borderColor: isActive ? colors.accent : colors.borderSubtle,
+              },
             ]}
           >
             <IconComp size={13} color={isActive ? '#FFFFFF' : colors.textSecondary} />
@@ -515,6 +516,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
+    borderWidth: 1,
     marginRight: 8,
   },
   sortPillText: {
