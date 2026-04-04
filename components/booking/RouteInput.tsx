@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { Plane } from 'lucide-react-native';
-import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, Spacing, Radius } from '@/constants/theme';
 
 interface RouteInputProps {
@@ -19,36 +18,34 @@ export default function RouteInput({
   onArrivalChange,
   accentColor,
 }: RouteInputProps) {
-  const { colors } = useTheme();
-
   return (
     <View
       style={[
         styles.card,
         {
-          backgroundColor: colors.surfaceLight,
-          borderColor: colors.border,
+          backgroundColor: 'rgba(255,255,255,0.9)',
+          borderColor: 'rgba(255,255,255,0.3)',
         },
       ]}
     >
-      <Text style={[styles.routeLabel, { color: colors.textMuted }]}>
+      <Text style={[styles.routeLabel, { color: accentColor }]}>
         ROUTE
       </Text>
 
       <View style={styles.row}>
         {/* Departure */}
         <View style={styles.airportBox}>
-          <Text style={[styles.airportLabel, { color: colors.textMuted }]}>
+          <Text style={[styles.airportLabel, { color: 'rgba(0,0,0,0.45)' }]}>
             FROM
           </Text>
           <TextInput
-            style={[styles.airportInput, { color: colors.foreground }]}
+            style={[styles.airportInput, { color: '#111111' }]}
             value={departure}
             onChangeText={onDepartureChange}
             autoCapitalize="characters"
             maxLength={4}
             placeholder="IATA"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor="rgba(0,0,0,0.3)"
           />
         </View>
 
@@ -63,17 +60,17 @@ export default function RouteInput({
 
         {/* Arrival */}
         <View style={styles.airportBox}>
-          <Text style={[styles.airportLabel, { color: colors.textMuted }]}>
+          <Text style={[styles.airportLabel, { color: 'rgba(0,0,0,0.45)' }]}>
             TO
           </Text>
           <TextInput
-            style={[styles.airportInput, { color: colors.foreground }]}
+            style={[styles.airportInput, { color: '#111111' }]}
             value={arrival}
             onChangeText={onArrivalChange}
             autoCapitalize="characters"
             maxLength={4}
             placeholder="IATA"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor="rgba(0,0,0,0.3)"
           />
         </View>
       </View>

@@ -75,7 +75,7 @@ export default function DateInput({
 
   return (
     <View style={{ flex: 1 }}>
-      <Text style={[styles.label, { color: colors.textSecondary }]}>
+      <Text style={[styles.label, { color: '#FFFFFF' }]}>
         {label}
       </Text>
 
@@ -85,8 +85,8 @@ export default function DateInput({
         style={[
           styles.button,
           {
-            backgroundColor: colors.surfaceLight,
-            borderColor: colors.border,
+            backgroundColor: 'rgba(255,255,255,0.9)',
+            borderColor: 'rgba(255,255,255,0.3)',
           },
         ]}
       >
@@ -94,7 +94,7 @@ export default function DateInput({
         <Text
           style={[
             styles.buttonText,
-            { color: value ? colors.foreground : colors.textMuted },
+            { color: value ? '#222222' : 'rgba(0,0,0,0.4)' },
           ]}
         >
           {value ? formatDateDisplay(value) : 'Select date'}

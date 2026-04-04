@@ -444,8 +444,19 @@ export default function BookingForm({
       >
         {/* ── Header ─────────────────────────── */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} hitSlop={12}>
-            <ArrowLeft size={22} color="#FFFFFF" />
+          <TouchableOpacity
+            onPress={onBack}
+            hitSlop={12}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <ArrowLeft size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>

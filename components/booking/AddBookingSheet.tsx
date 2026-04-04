@@ -165,7 +165,8 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
-        enableDynamicSizing={true}
+        snapPoints={['90%']}
+        enableDynamicSizing={false}
         backgroundStyle={{ backgroundColor: sheetBg }}
         handleIndicatorStyle={{ backgroundColor: handleColor }}
         onDismiss={resetState}

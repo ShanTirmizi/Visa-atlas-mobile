@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Radius } from '@/constants/theme';
 
 interface PillSelectorProps {
@@ -16,8 +15,6 @@ export default function PillSelector({
   onSelect,
   accentColor,
 }: PillSelectorProps) {
-  const { colors } = useTheme();
-
   return (
     <View style={styles.container}>
       {options.map((option) => {
@@ -30,15 +27,15 @@ export default function PillSelector({
             style={[
               styles.pill,
               {
-                backgroundColor: isActive ? accentColor : colors.surfaceLight,
-                borderColor: isActive ? accentColor : colors.border,
+                backgroundColor: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.2)',
+                borderColor: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.35)',
               },
             ]}
           >
             <Text
               style={[
                 styles.pillText,
-                { color: isActive ? '#FFFFFF' : colors.textMuted },
+                { color: isActive ? accentColor : '#FFFFFF' },
               ]}
             >
               {option}
