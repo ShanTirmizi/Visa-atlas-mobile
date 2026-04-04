@@ -1,7 +1,6 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Calendar, Plus, ChevronDown } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
@@ -17,14 +16,15 @@ const MAX_VISIBLE = 4;
 interface TripBookingsTimelineProps {
   tripId: string;
   onBookingPress: (booking: unknown) => void;
+  onAddBooking: () => void;
 }
 
 // ════════════════════════════════════════════════════════════════════════
 // TripBookingsTimeline
 // ════════════════════════════════════════════════════════════════════════
-export default function TripBookingsTimeline({ tripId, onBookingPress }: TripBookingsTimelineProps) {
+export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBooking }: TripBookingsTimelineProps) {
   const { colors, isDark } = useTheme();
-  const router = useRouter();
+  const [showAll, setShowAll] = useState(false);
 
   const bookings = useQuery(api.bookings.listBookingsByTrip, { tripId: tripId as Id<'trips'> });
 
@@ -35,22 +35,8 @@ export default function TripBookingsTimeline({ tripId, onBookingPress }: TripBoo
     (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
   );
 
-  const visible = sorted.slice(0, MAX_VISIBLE);
-  const overflow = sorted.length - MAX_VISIBLE;
-
-  function handleAddBooking() {
-    Alert.alert(
-      'Add Booking',
-      'Go to the Trips tab to manage bookings for this trip.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Open Trips',
-          onPress: () => router.push('/(tabs)/trips'),
-        },
-      ],
-    );
-  }
+  const visible = showAll ? sorted : sorted.slice(0, MAX_VISIBLE);
+  const overflow = showAll ? 0 : sorted.length - MAX_VISIBLE;
 
   return (
     <View style={[styles.sectionCard, Shadows.card]}>
@@ -72,7 +58,7 @@ export default function TripBookingsTimeline({ tripId, onBookingPress }: TripBoo
           <Text style={styles.emptySubtitle}>Add flights, hotels, and more</Text>
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={handleAddBooking}
+            onPress={onAddBooking}
             style={styles.emptyButton}
           >
             <Plus color={SECTION_COLOR} size={14} />
@@ -122,7 +108,7 @@ export default function TripBookingsTimeline({ tripId, onBookingPress }: TripBoo
           {overflow > 0 && (
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/trips')}
+              onPress={() => setShowAll(true)}
               style={styles.showMoreRow}
             >
               <ChevronDown color="rgba(255,255,255,0.7)" size={13} />
@@ -135,7 +121,7 @@ export default function TripBookingsTimeline({ tripId, onBookingPress }: TripBoo
           {/* Add Booking button when there are existing bookings */}
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={handleAddBooking}
+            onPress={onAddBooking}
             style={styles.addButtonRow}
           >
             <Plus color={SECTION_COLOR} size={13} />

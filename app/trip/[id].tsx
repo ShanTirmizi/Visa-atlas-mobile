@@ -56,6 +56,7 @@ import {
   getVisaCategoryColor,
 } from '@/constants/theme';
 import TripBookingsTimeline from '@/components/booking/TripBookingsTimeline';
+import AddBookingSheet, { type AddBookingSheetRef } from '@/components/booking/AddBookingSheet';
 
 // ─── Types ──────────────────────────────────────────
 interface ItineraryDay {
@@ -158,6 +159,7 @@ export default function TripDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
+  const addBookingRef = useRef<AddBookingSheetRef>(null);
 
   const trip = useOfflineQuery(api.trips.getTrip, { id: id as Id<'trips'> });
   const collaborators = useQuery(api.trips.getCollaborators, id ? { tripId: id as Id<'trips'> } : 'skip');
@@ -441,6 +443,7 @@ export default function TripDetailScreen() {
               colors={colors}
               catColor={catColor}
               tripId={trip._id}
+              onAddBooking={() => addBookingRef.current?.open(trip._id)}
             />
           )}
           {activeTab === 'itinerary' && (
@@ -464,6 +467,9 @@ export default function TripDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Add Booking bottom sheet */}
+      <AddBookingSheet ref={addBookingRef} />
     </View>
   );
 }
@@ -478,13 +484,15 @@ function OverviewContent({
   colors,
   catColor,
   tripId,
+  onAddBooking,
 }: {
-  trip: any;
+  trip: { visaCategory: string; currency: string; language: string; timezone: string; capital: string; dailyBudget: string; _id: string; [key: string]: unknown };
   highlights: string[];
   seasonalGuide: SeasonalGuide | null;
-  colors: any;
+  colors: Record<string, string>;
   catColor: string;
   tripId: string;
+  onAddBooking: () => void;
 }) {
   return (
     <View style={{ gap: Spacing.lg }}>
@@ -504,6 +512,7 @@ function OverviewContent({
       <TripBookingsTimeline
         tripId={tripId}
         onBookingPress={(booking) => {}}
+        onAddBooking={onAddBooking}
       />
 
       {/* Seasonal Guide */}

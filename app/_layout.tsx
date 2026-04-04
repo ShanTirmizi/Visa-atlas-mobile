@@ -94,8 +94,7 @@ function ThemedApp() {
         <Stack.Screen
           name="trip/[id]"
           options={{
-            presentation: 'modal',
-            animation: 'slide_from_bottom',
+            animation: 'slide_from_right',
           }}
         />
         <Stack.Screen
