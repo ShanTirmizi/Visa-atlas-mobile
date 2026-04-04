@@ -1,17 +1,22 @@
-import React, { useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Plus, Calendar } from 'lucide-react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { Calendar, Plus, ChevronDown } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import { BOOKING_TYPES, type BookingType, getBookingColor, formatBookingDates } from '@/constants/bookings';
-import AddBookingSheet, { type AddBookingSheetRef } from './AddBookingSheet';
+
+// ── Constants ──────────────────────────────────────────────────────────
+const SECTION_COLOR = '#2A6B7C';
+const MAX_VISIBLE = 4;
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface TripBookingsTimelineProps {
   tripId: string;
-  onBookingPress: (booking: any) => void;
+  onBookingPress: (booking: unknown) => void;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -19,9 +24,9 @@ interface TripBookingsTimelineProps {
 // ════════════════════════════════════════════════════════════════════════
 export default function TripBookingsTimeline({ tripId, onBookingPress }: TripBookingsTimelineProps) {
   const { colors, isDark } = useTheme();
-  const addBookingRef = useRef<AddBookingSheetRef>(null);
+  const router = useRouter();
 
-  const bookings = useQuery(api.bookings.listBookingsByTrip, { tripId: tripId as any });
+  const bookings = useQuery(api.bookings.listBookingsByTrip, { tripId: tripId as Id<'trips'> });
 
   if (bookings === undefined) return null;
 
@@ -30,110 +35,143 @@ export default function TripBookingsTimeline({ tripId, onBookingPress }: TripBoo
     (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
   );
 
+  const visible = sorted.slice(0, MAX_VISIBLE);
+  const overflow = sorted.length - MAX_VISIBLE;
+
+  function handleAddBooking() {
+    Alert.alert(
+      'Add Booking',
+      'Go to the Trips tab to manage bookings for this trip.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Trips',
+          onPress: () => router.push('/(tabs)/trips'),
+        },
+      ],
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.sectionCard, Shadows.card]}>
       {/* ── Section header ─── */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Calendar color={colors.textSecondary} size={16} />
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Bookings</Text>
-          <View style={[styles.countBadge, { backgroundColor: colors.primaryBg }]}>
-            <Text style={[styles.countText, { color: colors.textMuted }]}>{sorted.length}</Text>
+      <View style={styles.headerRow}>
+        <Calendar color="#FFF" size={15} />
+        <Text style={styles.headerTitle}>BOOKINGS</Text>
+        {sorted.length > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{sorted.length}</Text>
           </View>
-        </View>
+        )}
       </View>
 
       {/* ── Empty state ─── */}
       {sorted.length === 0 && (
-        <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-            No bookings yet — add your flights, hotels, and more.
-          </Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>No bookings yet</Text>
+          <Text style={styles.emptySubtitle}>Add flights, hotels, and more</Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleAddBooking}
+            style={styles.emptyButton}
+          >
+            <Plus color={SECTION_COLOR} size={14} />
+            <Text style={styles.emptyButtonText}>Add Booking</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* ── Timeline ─── */}
+      {/* ── Booking cards ─── */}
       {sorted.length > 0 && (
-        <View style={styles.timeline}>
-          {sorted.map((booking, idx) => {
+        <View style={styles.cardList}>
+          {visible.map((booking) => {
             const type = booking.type as BookingType;
             const config = BOOKING_TYPES[type];
             const typeColor = getBookingColor(type, isDark);
             const Icon = config.icon;
-            const isLast = idx === sorted.length - 1;
 
             return (
-              <View key={booking._id} style={styles.timelineRow}>
-                {/* Left column — dot + line */}
-                <View style={styles.timelineLeft}>
-                  <View style={[styles.dot, { backgroundColor: typeColor }]} />
-                  {!isLast && <View style={[styles.line, { backgroundColor: colors.border }]} />}
-                </View>
-
-                {/* Card */}
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => onBookingPress(booking)}
-                  style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                >
-                  <View style={styles.cardRow}>
-                    <Icon color={typeColor} size={16} />
+              <TouchableOpacity
+                key={booking._id}
+                activeOpacity={0.75}
+                onPress={() => onBookingPress(booking)}
+                style={[styles.bookingCard, { borderLeftColor: typeColor }]}
+              >
+                <View style={styles.bookingCardInner}>
+                  <View style={styles.bookingIconTitle}>
+                    <Icon color={typeColor} size={14} />
                     <Text
-                      style={[styles.cardTitle, { color: colors.foreground }]}
+                      style={[styles.bookingTitle, { color: colors.foreground }]}
                       numberOfLines={1}
                     >
                       {booking.title}
                     </Text>
                   </View>
-                  <Text style={[styles.cardDate, { color: colors.textSecondary }]}>
+                  <Text style={[styles.bookingDate, { color: colors.textSecondary }]}>
                     {formatBookingDates(
                       new Date(booking.startDate),
                       booking.endDate ? new Date(booking.endDate) : undefined,
                     )}
                   </Text>
-                </TouchableOpacity>
-              </View>
+                </View>
+              </TouchableOpacity>
             );
           })}
+
+          {/* Show all overflow link */}
+          {overflow > 0 && (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/(tabs)/trips')}
+              style={styles.showMoreRow}
+            >
+              <ChevronDown color="rgba(255,255,255,0.7)" size={13} />
+              <Text style={styles.showMoreText}>
+                Show {overflow} more booking{overflow !== 1 ? 's' : ''}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Add Booking button when there are existing bookings */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleAddBooking}
+            style={styles.addButtonRow}
+          >
+            <Plus color={SECTION_COLOR} size={13} />
+            <Text style={styles.addButtonText}>Add Booking</Text>
+          </TouchableOpacity>
         </View>
       )}
-
-      {/* ── Add Booking button ─── */}
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => addBookingRef.current?.open(tripId)}
-        style={[styles.addButton, { borderColor: colors.border }]}
-      >
-        <Plus color={colors.textMuted} size={14} />
-        <Text style={[styles.addButtonText, { color: colors.textMuted }]}>Add Booking</Text>
-      </TouchableOpacity>
-
-      {/* ── Bottom sheet ─── */}
-      <AddBookingSheet ref={addBookingRef} />
     </View>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    gap: Spacing.sm,
+  sectionCard: {
+    backgroundColor: SECTION_COLOR,
+    borderRadius: 20,
+    padding: Spacing.lg,
   },
-  header: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
+    gap: 7,
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.2)',
+    paddingBottom: 10,
   },
   headerTitle: {
     fontFamily: FontFamily.display,
     fontSize: FontSize.lg,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    flex: 1,
   },
   countBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: Radius.full,
@@ -141,75 +179,97 @@ const styles = StyleSheet.create({
   countText: {
     fontFamily: FontFamily.condensedMedium,
     fontSize: FontSize.xs,
+    color: '#FFFFFF',
   },
-  emptyCard: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    padding: Spacing.lg,
+  // Empty state
+  emptyState: {
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
+    gap: Spacing.xs,
   },
-  emptyText: {
+  emptyTitle: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.base,
+    color: '#FFFFFF',
+  },
+  emptySubtitle: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.sm,
-    textAlign: 'center',
-  },
-  timeline: {
-    gap: 0,
-  },
-  timelineRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  timelineLeft: {
-    width: 20,
-    alignItems: 'center',
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginTop: 6,
-  },
-  line: {
-    width: 2,
-    flex: 1,
-  },
-  card: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: Radius.sm,
-    padding: Spacing.sm,
+    color: 'rgba(255,255,255,0.70)',
     marginBottom: Spacing.sm,
   },
-  cardRow: {
+  emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
+    marginTop: Spacing.xs,
+  },
+  emptyButtonText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.sm,
+    color: SECTION_COLOR,
+  },
+  // Card list
+  cardList: {
+    gap: Spacing.xs,
+  },
+  bookingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.sm,
+    borderLeftWidth: 3,
+    overflow: 'hidden',
+  },
+  bookingCardInner: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 9,
+    gap: 3,
+  },
+  bookingIconTitle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  cardTitle: {
+  bookingTitle: {
     fontFamily: FontFamily.semibold,
     fontSize: FontSize.sm,
     flex: 1,
   },
-  cardDate: {
+  bookingDate: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.xs,
-    marginLeft: 22,
-    marginTop: 2,
+    marginLeft: 20,
   },
-  addButton: {
+  // Show more
+  showMoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: Radius.sm,
-    paddingVertical: Spacing.sm,
+    gap: 4,
+    paddingVertical: Spacing.xs,
   },
-  addButtonText: {
+  showMoreText: {
     fontFamily: FontFamily.condensedMedium,
     fontSize: FontSize.sm,
+    color: 'rgba(255,255,255,0.75)',
+  },
+  // Add button (with bookings present)
+  addButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.sm,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  addButtonText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.sm,
+    color: SECTION_COLOR,
   },
 });
