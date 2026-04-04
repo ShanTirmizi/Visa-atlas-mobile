@@ -6,10 +6,7 @@ export default function TabLayout() {
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}
-      screenOptions={{
-        headerShown: false,
-        tabBarShowLabel: false,
-      }}
+      screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen name="trips" />
       <Tabs.Screen name="compare" />
