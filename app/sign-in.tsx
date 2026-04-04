@@ -2,13 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mail } from 'lucide-react-native';
+import { Globe, Mail, Plane, MapPin } from 'lucide-react-native';
 import { useAuthActions } from '@convex-dev/auth/react';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 
 export default function SignInScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signIn } = useAuthActions();
@@ -36,30 +36,82 @@ export default function SignInScreen() {
         {
           backgroundColor: colors.background,
           paddingTop: insets.top,
-          paddingBottom: insets.bottom + Spacing.xl,
+          paddingBottom: insets.bottom + Spacing.lg,
         },
       ]}
     >
-      {/* Top section — branding */}
-      <View style={styles.topSection}>
+      {/* Hero section */}
+      <View style={styles.heroSection}>
+        {/* Decorative icons */}
+        <View style={styles.iconRow}>
+          <View style={[styles.decorIcon, { backgroundColor: colors.primaryBg }]}>
+            <Globe color={colors.primary} size={20} />
+          </View>
+          <View style={[styles.decorIcon, { backgroundColor: colors.accentBg }]}>
+            <Plane color={colors.accent} size={20} />
+          </View>
+          <View style={[styles.decorIcon, { backgroundColor: colors.secondaryBg }]}>
+            <MapPin color={colors.secondary} size={20} />
+          </View>
+        </View>
+
+        {/* Title */}
         <Text style={[styles.title, { color: colors.foreground }]}>
           VISA ATLAS
         </Text>
         <Text style={[styles.tagline, { color: colors.textSecondary }]}>
           Plan smarter. Travel further.
         </Text>
+
+        {/* Feature pills */}
+        <View style={styles.featurePills}>
+          {['195+ Countries', 'Visa Tracking', 'Trip Planning'].map((text) => (
+            <View
+              key={text}
+              style={[styles.pill, { backgroundColor: colors.primary + '15' }]}
+            >
+              <Text style={[styles.pillText, { color: colors.primary }]}>
+                {text}
+              </Text>
+            </View>
+          ))}
+        </View>
       </View>
 
-      {/* Bottom section — auth buttons */}
-      <View style={styles.bottomSection}>
+      {/* Auth section */}
+      <View
+        style={[
+          styles.authSection,
+          {
+            backgroundColor: isDark ? colors.surface : '#FFFFFF',
+            borderColor: colors.border,
+          },
+          Shadows.card,
+        ]}
+      >
+        <Text style={[styles.authTitle, { color: colors.foreground }]}>
+          Get Started
+        </Text>
+
         {/* Google button */}
         <TouchableOpacity
           onPress={handleGoogleSignIn}
           activeOpacity={0.8}
-          style={[styles.socialButton, styles.googleButton]}
+          style={[
+            styles.socialButton,
+            {
+              backgroundColor: isDark ? colors.surface : '#FFFFFF',
+              borderColor: colors.border,
+              borderWidth: 1,
+            },
+          ]}
         >
-          <Text style={styles.googleIcon}>G</Text>
-          <Text style={styles.googleText}>Continue with Google</Text>
+          <View style={styles.googleLogoWrap}>
+            <Text style={styles.googleG}>G</Text>
+          </View>
+          <Text style={[styles.socialText, { color: colors.foreground }]}>
+            Continue with Google
+          </Text>
         </TouchableOpacity>
 
         {/* Apple button */}
@@ -69,30 +121,35 @@ export default function SignInScreen() {
           style={[styles.socialButton, styles.appleButton]}
         >
           <Text style={styles.appleIcon}>{'\uF8FF'}</Text>
-          <Text style={styles.appleText}>Continue with Apple</Text>
+          <Text style={[styles.socialText, { color: '#FFFFFF' }]}>
+            Continue with Apple
+          </Text>
         </TouchableOpacity>
 
         {/* Divider */}
         <View style={styles.dividerRow}>
           <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-          <Text style={[styles.dividerText, { color: colors.textMuted }]}>
-            or
-          </Text>
+          <Text style={[styles.dividerText, { color: colors.textMuted }]}>or</Text>
           <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
         </View>
 
-        {/* Email link */}
+        {/* Email button — styled as a full button, not just a link */}
         <TouchableOpacity
           onPress={() => router.push('/sign-in-email')}
-          activeOpacity={0.7}
-          style={styles.emailLink}
+          activeOpacity={0.8}
+          style={[styles.emailButton, { backgroundColor: colors.primary }]}
         >
-          <Mail color={colors.primary} size={18} />
-          <Text style={[styles.emailLinkText, { color: colors.primary }]}>
-            Sign in with Email
+          <Mail color="#FFFFFF" size={18} />
+          <Text style={styles.emailButtonText}>
+            Continue with Email
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Footer */}
+      <Text style={[styles.footer, { color: colors.textMuted }]}>
+        By continuing, you agree to our Terms of Service
+      </Text>
     </View>
   );
 }
@@ -100,87 +157,140 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'space-between',
     paddingHorizontal: Spacing.xl,
+    justifyContent: 'center',
   },
-  // Top section
-  topSection: {
+
+  // Hero
+  heroSection: {
     alignItems: 'center',
-    marginTop: Spacing['5xl'],
+    marginBottom: Spacing['2xl'],
+  },
+  iconRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: Spacing.xl,
+  },
+  decorIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   title: {
     fontFamily: FontFamily.display,
-    fontSize: FontSize['5xl'],
-    letterSpacing: 2,
+    fontSize: 52,
+    letterSpacing: 3,
   },
   tagline: {
     fontFamily: FontFamily.serif,
     fontSize: FontSize.lg,
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
   },
-  // Bottom section
-  bottomSection: {
-    gap: 14,
+  featurePills: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: Spacing.lg,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
+  },
+  pillText: {
+    fontFamily: FontFamily.condensedMedium,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Auth card
+  authSection: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: Spacing.xl,
+    gap: 12,
+  },
+  authTitle: {
+    fontFamily: FontFamily.display,
+    fontSize: FontSize.xl,
+    textAlign: 'center',
+    marginBottom: Spacing.xs,
+  },
+
   // Social buttons
   socialButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: Radius.sm,
-    gap: 12,
+    paddingVertical: 15,
+    borderRadius: Radius.md,
+    gap: 10,
   },
-  googleButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+  googleLogoWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4285F4',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  googleIcon: {
+  googleG: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.xl,
-    color: '#4285F4',
-  },
-  googleText: {
-    fontFamily: FontFamily.semibold,
-    fontSize: FontSize.base,
-    color: '#1F1F1F',
+    fontSize: 14,
+    color: '#FFFFFF',
   },
   appleButton: {
     backgroundColor: '#000000',
   },
   appleIcon: {
-    fontSize: FontSize.xl,
+    fontSize: 20,
     color: '#FFFFFF',
   },
-  appleText: {
+  socialText: {
     fontFamily: FontFamily.semibold,
     fontSize: FontSize.base,
-    color: '#FFFFFF',
   },
+
   // Divider
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingVertical: 2,
   },
   dividerLine: {
     flex: 1,
-    height: 1,
+    height: StyleSheet.hairlineWidth,
   },
   dividerText: {
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
+    fontSize: FontSize.xs,
   },
-  // Email link
-  emailLink: {
+
+  // Email button
+  emailButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    paddingVertical: 15,
+    borderRadius: Radius.md,
+    gap: 10,
   },
-  emailLinkText: {
-    fontFamily: FontFamily.condensedSemibold,
+  emailButtonText: {
+    fontFamily: FontFamily.semibold,
     fontSize: FontSize.base,
+    color: '#FFFFFF',
+  },
+
+  // Footer
+  footer: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: Spacing.lg,
   },
 });
