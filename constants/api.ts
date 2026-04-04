@@ -12,4 +12,5 @@ export const endpoints = {
   unsplash: `${API_BASE}/api/unsplash`,
   gmailAuth: `${API_BASE}/api/auth/gmail`,
   gmailCallback: `${API_BASE}/api/auth/gmail/callback`,
+  scanBooking: `${API_BASE}/api/scan-booking`,
 };
