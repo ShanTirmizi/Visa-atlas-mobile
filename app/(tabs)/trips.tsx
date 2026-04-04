@@ -7,14 +7,8 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from 'convex/react';
@@ -102,11 +96,6 @@ export default function TripsScreen() {
 
   const [sortBy, setSortBy] = useState<SortBy>('newest');
   const [activeTab, setActiveTab] = useState<'trips' | 'bookings'>('trips');
-
-  const switchTab = useCallback((tab: 'trips' | 'bookings') => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setActiveTab(tab);
-  }, []);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const sorted = useMemo(() => {
@@ -278,7 +267,7 @@ export default function TripsScreen() {
         {/* Segmented control */}
         <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TouchableOpacity
-            onPress={() => switchTab('trips')}
+            onPress={() => setActiveTab('trips')}
             style={[
               styles.segment,
               activeTab === 'trips' && { backgroundColor: colors.accent },
@@ -294,7 +283,7 @@ export default function TripsScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => switchTab('bookings')}
+            onPress={() => setActiveTab('bookings')}
             style={[
               styles.segment,
               activeTab === 'bookings' && { backgroundColor: colors.accent },
@@ -336,7 +325,7 @@ export default function TripsScreen() {
         {/* Segmented control */}
         <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TouchableOpacity
-            onPress={() => switchTab('trips')}
+            onPress={() => setActiveTab('trips')}
             style={[
               styles.segment,
               activeTab === 'trips' && { backgroundColor: colors.accent },
@@ -352,7 +341,7 @@ export default function TripsScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => switchTab('bookings')}
+            onPress={() => setActiveTab('bookings')}
             style={[
               styles.segment,
               activeTab === 'bookings' && { backgroundColor: colors.accent },
@@ -406,7 +395,7 @@ export default function TripsScreen() {
       {/* Segmented control */}
       <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TouchableOpacity
-          onPress={() => switchTab('trips')}
+          onPress={() => setActiveTab('trips')}
           style={[
             styles.segment,
             activeTab === 'trips' && { backgroundColor: colors.accent },
@@ -422,7 +411,7 @@ export default function TripsScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => switchTab('bookings')}
+          onPress={() => setActiveTab('bookings')}
           style={[
             styles.segment,
             activeTab === 'bookings' && { backgroundColor: colors.accent },
@@ -439,44 +428,50 @@ export default function TripsScreen() {
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'trips' ? (
-        <>
-          {/* Sort pills */}
-          <View style={styles.sortRow}>
-            {SORT_OPTIONS.map((opt) => (
-              <TouchableOpacity
-                key={opt.value}
-                onPress={() => setSortBy(opt.value)}
-                style={[
-                  styles.sortPill,
-                  sortBy === opt.value
-                    ? { backgroundColor: colors.accent, ...Shadows.glow(colors.accent, 0.2) }
-                    : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-                ]}
-              >
-                <Text
+      <Animated.View
+        key={activeTab}
+        entering={FadeIn.duration(200)}
+        style={{ flex: 1 }}
+      >
+        {activeTab === 'trips' ? (
+          <>
+            {/* Sort pills */}
+            <View style={styles.sortRow}>
+              {SORT_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  onPress={() => setSortBy(opt.value)}
                   style={[
-                    styles.sortPillText,
-                    { color: sortBy === opt.value ? '#FFFFFF' : colors.textMuted },
+                    styles.sortPill,
+                    sortBy === opt.value
+                      ? { backgroundColor: colors.accent, ...Shadows.glow(colors.accent, 0.2) }
+                      : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
                   ]}
                 >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                  <Text
+                    style={[
+                      styles.sortPillText,
+                      { color: sortBy === opt.value ? '#FFFFFF' : colors.textMuted },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-          <FlatList
-            data={sorted}
-            renderItem={renderItem}
-            keyExtractor={(item) => item._id}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 100, gap: 12 }}
-            showsVerticalScrollIndicator={false}
-          />
-        </>
-      ) : (
-        <BookingsListView bottomInset={insets.bottom} />
-      )}
+            <FlatList
+              data={sorted}
+              renderItem={renderItem}
+              keyExtractor={(item) => item._id}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 100, gap: 12 }}
+              showsVerticalScrollIndicator={false}
+            />
+          </>
+        ) : (
+          <BookingsListView bottomInset={insets.bottom} />
+        )}
+      </Animated.View>
     </View>
   );
 }
