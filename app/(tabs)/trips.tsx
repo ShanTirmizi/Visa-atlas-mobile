@@ -11,7 +11,10 @@ import {
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery, useMutation } from 'convex/react';
+import { useMutation } from 'convex/react';
+import { useOfflineQuery } from '@/hooks/use-offline-query';
+import { useOfflineMutation } from '@/hooks/use-offline-mutation';
+import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
 import { Plane, Trash2, Check, Globe, Clock, Wallet, MoveRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
@@ -91,9 +94,10 @@ export default function TripsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const trips = useQuery(api.trips.listTrips);
-  const deleteTrip = useMutation(api.trips.deleteTrip);
-  const updateStatus = useMutation(api.trips.updateTripStatus);
+  const trips = useOfflineQuery(api.trips.listTrips, {});
+  const deleteTrip = useMutation(api.trips.deleteTrip); // Keep online-only (cascading delete)
+  const updateStatus = useOfflineMutation(api.trips.updateTripStatus);
+  const { isOffline } = useOffline();
 
   const [sortBy, setSortBy] = useState<SortBy>('newest');
   const [activeTab, setActiveTab] = useState<'trips' | 'bookings'>('trips');
@@ -113,6 +117,7 @@ export default function TripsScreen() {
 
   const handleDelete = useCallback(
     (id: any, name: string) => {
+      if (isOffline) return;
       Alert.alert(
         'Delete trip',
         `Are you sure you want to delete your ${name} trip? This cannot be undone.`,
