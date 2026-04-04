@@ -74,7 +74,7 @@ export const createTrip = mutation({
     status: v.union(v.literal("planned"), v.literal("completed")),
     duration: v.number(),
     region: v.string(),
-    costLevel: v.string(),
+    costLevel: v.number(),
     dailyBudget: v.number(),
     flightHours: v.number(),
     iataCode: v.optional(v.string()),

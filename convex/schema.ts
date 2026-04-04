@@ -18,7 +18,7 @@ export default defineSchema({
     iataCode: v.optional(v.string()),
     status: v.union(v.literal("planned"), v.literal("completed")),
     duration: v.number(),
-    costLevel: v.string(),
+    costLevel: v.number(),
     dailyBudget: v.number(),
     flightHours: v.number(),
     visaCategory: v.string(),
