@@ -120,18 +120,19 @@ export default function BookingForm({
   };
 
   // ── Reusable style objects ─────────────────
+  // White labels + white inputs for visibility on colored sheet background
   const labelStyle = {
-    fontFamily: FontFamily.condensedMedium,
+    fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.xs,
-    color: colors.textSecondary,
+    color: '#FFFFFF',
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
     marginBottom: 6,
   };
 
   const inputStyle = {
-    backgroundColor: colors.surfaceLight,
-    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderColor: 'rgba(255,255,255,0.3)',
     borderWidth: 1,
     borderRadius: Radius.md,
     paddingHorizontal: 14,
@@ -142,9 +143,9 @@ export default function BookingForm({
   };
 
   const groupedCardStyle = {
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(255,255,255,0.2)',
     borderRadius: Radius.lg,
     padding: Spacing.md,
     marginBottom: Spacing.md,
@@ -441,8 +442,8 @@ export default function BookingForm({
         contentContainerStyle={{ padding: Spacing.lg, paddingBottom: Spacing['3xl'] }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Colored Header Banner ─────────── */}
-        <View style={[styles.headerBanner, { backgroundColor: typeColor }]}>
+        {/* ── Header ─────────────────────────── */}
+        <View style={styles.header}>
           <TouchableOpacity onPress={onBack} hitSlop={12}>
             <ArrowLeft size={22} color="#FFFFFF" />
           </TouchableOpacity>
@@ -451,7 +452,7 @@ export default function BookingForm({
             <IconComponent size={18} color="#FFFFFF" />
           </View>
 
-          <Text style={styles.headerBannerTitle}>
+          <Text style={styles.headerTitle}>
             Add {config.label}
           </Text>
         </View>
@@ -469,13 +470,13 @@ export default function BookingForm({
           style={styles.extrasToggle}
           activeOpacity={0.7}
         >
-          <Text style={[styles.extrasToggleText, { color: typeColor }]}>
+          <Text style={[styles.extrasToggleText, { color: '#FFFFFF' }]}>
             {showExtras ? 'Hide extras' : 'More details'}
           </Text>
           {showExtras ? (
-            <ChevronUp size={18} color={typeColor} />
+            <ChevronUp size={18} color="#FFFFFF" />
           ) : (
-            <ChevronDown size={18} color={typeColor} />
+            <ChevronDown size={18} color="#FFFFFF" />
           )}
         </TouchableOpacity>
 
@@ -508,13 +509,12 @@ export default function BookingForm({
           style={[
             styles.submitButton,
             {
-              backgroundColor: typeColor,
+              backgroundColor: '#FFFFFF',
               opacity: canSubmit ? 1 : 0.4,
             },
-            canSubmit ? submitShadow : undefined,
           ]}
         >
-          <Text style={styles.submitButtonText}>SAVE BOOKING</Text>
+          <Text style={[styles.submitButtonText, { color: typeColor }]}>SAVE BOOKING</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -526,16 +526,11 @@ export default function BookingForm({
 // ──────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  headerBanner: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginHorizontal: -Spacing.lg,
-    marginTop: -Spacing.lg,
     marginBottom: Spacing.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
-    borderRadius: 20,
   },
   iconCircle: {
     width: 32,
@@ -544,7 +539,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerBannerTitle: {
+  headerTitle: {
     fontFamily: FontFamily.display,
     fontSize: FontSize.xl,
     color: '#FFFFFF',

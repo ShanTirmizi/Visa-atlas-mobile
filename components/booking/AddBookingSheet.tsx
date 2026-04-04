@@ -11,7 +11,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { Spacing } from '@/constants/theme';
-import { type BookingType } from '@/constants/bookings';
+import { type BookingType, getBookingColor } from '@/constants/bookings';
 import { findMatchingTrip } from '@/utils/tripMatcher';
 import BookingTypePicker from './BookingTypePicker';
 import BookingForm, { type BookingFormData } from './BookingForm';
@@ -37,7 +37,7 @@ const detailsKeyForType = (type: BookingType): string => {
 // ════════════════════════════════════════════════════════════════════════
 const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
   ({ onBookingCreated }, ref) => {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
     // ── State ────────────────────────────────────────────────────────
@@ -155,9 +155,11 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       return trips.find((t) => t._id === prelinkedTripId) ?? null;
     }, [prelinkedTripId, trips]);
 
-    // ── Sheet background adapts to step ────────────────────────────
-    const sheetBg = step === 'form' ? colors.card : colors.primary;
-    const handleColor = step === 'form' ? colors.textMuted : 'rgba(255,255,255,0.5)';
+    // ── Sheet background: always colorful ──────────────────────────
+    const sheetBg = step === 'form' && selectedType
+      ? getBookingColor(selectedType, isDark)
+      : colors.primary;
+    const handleColor = 'rgba(255,255,255,0.5)';
 
     // ── Render ───────────────────────────────────────────────────────
     return (
