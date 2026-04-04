@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Globe, Mail, Plane, MapPin } from 'lucide-react-native';
 import { useAuthActions } from '@convex-dev/auth/react';
+import { makeRedirectUri } from 'expo-auth-session';
+import { openAuthSessionAsync } from 'expo-web-browser';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 
@@ -12,20 +14,50 @@ export default function SignInScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signIn } = useAuthActions();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+
+  const redirectTo = makeRedirectUri();
 
   const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
     try {
-      await signIn('google');
-    } catch (error) {
-      console.error('Google sign in failed:', error);
+      const { redirect } = await signIn('google', { redirectTo });
+      if (Platform.OS === 'web') return;
+      if (redirect) {
+        const result = await openAuthSessionAsync(redirect.toString(), redirectTo);
+        if (result.type === 'success') {
+          const code = new URL(result.url).searchParams.get('code');
+          if (code) {
+            await signIn('google', { code });
+          }
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Sign In Failed', error?.message || 'Google sign in failed');
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
   const handleAppleSignIn = async () => {
+    setAppleLoading(true);
     try {
-      await signIn('apple');
-    } catch (error) {
-      console.error('Apple sign in failed:', error);
+      const { redirect } = await signIn('apple', { redirectTo });
+      if (Platform.OS === 'web') return;
+      if (redirect) {
+        const result = await openAuthSessionAsync(redirect.toString(), redirectTo);
+        if (result.type === 'success') {
+          const code = new URL(result.url).searchParams.get('code');
+          if (code) {
+            await signIn('apple', { code });
+          }
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Sign In Failed', error?.message || 'Apple sign in failed');
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -97,6 +129,7 @@ export default function SignInScreen() {
         <TouchableOpacity
           onPress={handleGoogleSignIn}
           activeOpacity={0.8}
+          disabled={googleLoading || appleLoading}
           style={[
             styles.socialButton,
             {
@@ -106,24 +139,37 @@ export default function SignInScreen() {
             },
           ]}
         >
-          <View style={styles.googleLogoWrap}>
-            <Text style={styles.googleG}>G</Text>
-          </View>
-          <Text style={[styles.socialText, { color: colors.foreground }]}>
-            Continue with Google
-          </Text>
+          {googleLoading ? (
+            <ActivityIndicator color={colors.foreground} />
+          ) : (
+            <>
+              <View style={styles.googleLogoWrap}>
+                <Text style={styles.googleG}>G</Text>
+              </View>
+              <Text style={[styles.socialText, { color: colors.foreground }]}>
+                Continue with Google
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
 
         {/* Apple button */}
         <TouchableOpacity
           onPress={handleAppleSignIn}
           activeOpacity={0.8}
+          disabled={googleLoading || appleLoading}
           style={[styles.socialButton, styles.appleButton]}
         >
-          <Text style={styles.appleIcon}>{'\uF8FF'}</Text>
-          <Text style={[styles.socialText, { color: '#FFFFFF' }]}>
-            Continue with Apple
-          </Text>
+          {appleLoading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Text style={styles.appleIcon}>{'\uF8FF'}</Text>
+              <Text style={[styles.socialText, { color: '#FFFFFF' }]}>
+                Continue with Apple
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
 
         {/* Divider */}

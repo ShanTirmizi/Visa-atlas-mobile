@@ -25,4 +25,10 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       reset: ResendOTPPasswordReset,
     }),
   ],
+  callbacks: {
+    // Allow mobile deep link redirects (exp://, visaatlas://)
+    async redirect({ redirectTo }) {
+      return redirectTo;
+    },
+  },
 });
