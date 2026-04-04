@@ -41,7 +41,7 @@ export default function BookingTypePicker({ onSelect, onScanComplete }: BookingT
                 styles.tile,
                 Shadows.subtle,
                 {
-                  backgroundColor: colors.surface,
+                  backgroundColor: colors.card,
                   borderColor: colors.border,
                 },
               ]}

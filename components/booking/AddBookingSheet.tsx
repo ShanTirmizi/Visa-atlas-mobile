@@ -167,7 +167,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         ref={bottomSheetRef}
         snapPoints={snapPoints}
         enableDynamicSizing={false}
-        backgroundStyle={{ backgroundColor: colors.surface }}
+        backgroundStyle={{ backgroundColor: colors.background }}
         handleIndicatorStyle={{ backgroundColor: colors.textMuted }}
         onDismiss={resetState}
       >

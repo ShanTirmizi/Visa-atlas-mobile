@@ -9,7 +9,6 @@ import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/them
 import { BOOKING_TYPES, type BookingType, getBookingColor, formatBookingDates } from '@/constants/bookings';
 
 // ── Constants ──────────────────────────────────────────────────────────
-const SECTION_COLOR = '#2A6B7C';
 const MAX_VISIBLE = 4;
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -39,14 +38,14 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
   const overflow = showAll ? 0 : sorted.length - MAX_VISIBLE;
 
   return (
-    <View style={[styles.sectionCard, Shadows.card]}>
+    <View>
       {/* ── Section header ─── */}
       <View style={styles.headerRow}>
-        <Calendar color="#FFF" size={15} />
-        <Text style={styles.headerTitle}>BOOKINGS</Text>
+        <Calendar color={colors.accent} size={15} />
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>BOOKINGS</Text>
         {sorted.length > 0 && (
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{sorted.length}</Text>
+          <View style={[styles.countBadge, { backgroundColor: colors.accentBg }]}>
+            <Text style={[styles.countText, { color: colors.accent }]}>{sorted.length}</Text>
           </View>
         )}
       </View>
@@ -54,14 +53,16 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
       {/* ── Empty state ─── */}
       {sorted.length === 0 && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>No bookings yet</Text>
-          <Text style={styles.emptySubtitle}>Add flights, hotels, and more</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No bookings yet</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Add flights, hotels, and more
+          </Text>
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={onAddBooking}
-            style={styles.emptyButton}
+            style={[styles.emptyButton, { backgroundColor: colors.accent }]}
           >
-            <Plus color={SECTION_COLOR} size={14} />
+            <Plus color="#FFFFFF" size={14} />
             <Text style={styles.emptyButtonText}>Add Booking</Text>
           </TouchableOpacity>
         </View>
@@ -81,7 +82,15 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
                 key={booking._id}
                 activeOpacity={0.75}
                 onPress={() => onBookingPress(booking)}
-                style={[styles.bookingCard, { borderLeftColor: typeColor }]}
+                style={[
+                  styles.bookingCard,
+                  Shadows.subtle,
+                  {
+                    backgroundColor: colors.card,
+                    borderLeftColor: typeColor,
+                    borderColor: colors.borderSubtle,
+                  },
+                ]}
               >
                 <View style={styles.bookingCardInner}>
                   <View style={styles.bookingIconTitle}>
@@ -111,8 +120,8 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
               onPress={() => setShowAll(true)}
               style={styles.showMoreRow}
             >
-              <ChevronDown color="rgba(255,255,255,0.7)" size={13} />
-              <Text style={styles.showMoreText}>
+              <ChevronDown color={colors.textMuted} size={13} />
+              <Text style={[styles.showMoreText, { color: colors.textMuted }]}>
                 Show {overflow} more booking{overflow !== 1 ? 's' : ''}
               </Text>
             </TouchableOpacity>
@@ -122,10 +131,10 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={onAddBooking}
-            style={styles.addButtonRow}
+            style={[styles.addButtonRow, { backgroundColor: colors.accentBg }]}
           >
-            <Plus color={SECTION_COLOR} size={13} />
-            <Text style={styles.addButtonText}>Add Booking</Text>
+            <Plus color={colors.accent} size={13} />
+            <Text style={[styles.addButtonText, { color: colors.accent }]}>Add Booking</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -135,29 +144,19 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
 
 // ── Styles ────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  sectionCard: {
-    backgroundColor: SECTION_COLOR,
-    borderRadius: 20,
-    padding: Spacing.lg,
-  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
     marginBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
-    paddingBottom: 10,
   },
   headerTitle: {
     fontFamily: FontFamily.display,
     fontSize: FontSize.lg,
-    color: '#FFFFFF',
     letterSpacing: 0.5,
     flex: 1,
   },
   countBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: Radius.full,
@@ -165,7 +164,6 @@ const styles = StyleSheet.create({
   countText: {
     fontFamily: FontFamily.condensedMedium,
     fontSize: FontSize.xs,
-    color: '#FFFFFF',
   },
   // Empty state
   emptyState: {
@@ -176,19 +174,16 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: FontFamily.semibold,
     fontSize: FontSize.base,
-    color: '#FFFFFF',
   },
   emptySubtitle: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.70)',
     marginBottom: Spacing.sm,
   },
   emptyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: Radius.sm,
@@ -197,16 +192,16 @@ const styles = StyleSheet.create({
   emptyButtonText: {
     fontFamily: FontFamily.semibold,
     fontSize: FontSize.sm,
-    color: SECTION_COLOR,
+    color: '#FFFFFF',
   },
   // Card list
   cardList: {
     gap: Spacing.xs,
   },
   bookingCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: Radius.sm,
     borderLeftWidth: 3,
+    borderWidth: 1,
     overflow: 'hidden',
   },
   bookingCardInner: {
@@ -240,7 +235,6 @@ const styles = StyleSheet.create({
   showMoreText: {
     fontFamily: FontFamily.condensedMedium,
     fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.75)',
   },
   // Add button (with bookings present)
   addButtonRow: {
@@ -248,7 +242,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    backgroundColor: '#FFFFFF',
     borderRadius: Radius.sm,
     paddingVertical: Spacing.sm,
     marginTop: Spacing.xs,
@@ -256,6 +249,5 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontFamily: FontFamily.semibold,
     fontSize: FontSize.sm,
-    color: SECTION_COLOR,
   },
 });
