@@ -63,8 +63,11 @@ function ThemedApp() {
     }
   }, [isAuthenticated, isLoading, segments]);
 
-  // Show loading screen while checking auth
-  if (isLoading) {
+  // Show loading screen while checking auth or waiting for redirect
+  const inAuthGroup = segments[0] === 'sign-in' || segments[0] === 'sign-in-email';
+  const showLoading = isLoading || (!isAuthenticated && !inAuthGroup);
+
+  if (showLoading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
