@@ -105,6 +105,12 @@ function ThemedApp() {
           name="chat/[tripId]"
           options={{ animation: 'slide_from_right' }}
         />
+        <Stack.Screen name="more/visas" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="more/favorites" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="more/visited" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="more/settings" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="more/calendar" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="more/email" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
         <Stack.Screen name="sign-in-email" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="email-connected" options={{ animation: 'none' }} />
