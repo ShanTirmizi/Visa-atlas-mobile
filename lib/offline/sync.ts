@@ -35,7 +35,7 @@ async function executeMutationIntent(
       }
       await client.mutation(api.trips.updateTripStatus, {
         id: documentId as Id<'trips'>,
-        status,
+        status: status as 'planned' | 'completed',
       });
       break;
     }
@@ -78,7 +78,7 @@ async function executeMutationIntent(
       }
       await client.mutation(api.visaGuides.updateStatus, {
         id: documentId as Id<'visaGuides'>,
-        status,
+        status: status as 'preparing' | 'submitted' | 'approved' | 'rejected',
       });
       break;
     }

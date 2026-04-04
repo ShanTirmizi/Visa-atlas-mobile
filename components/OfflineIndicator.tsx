@@ -22,7 +22,7 @@ export function OfflineIndicator() {
   if (!isOffline && !isSyncing) return null;
 
   const backgroundColor = isSyncing ? colors.card : '#F59E0B';
-  const textColor = isSyncing ? colors.text : '#000';
+  const textColor = isSyncing ? colors.foreground : '#000';
 
   let message = '';
   if (isSyncing) {
