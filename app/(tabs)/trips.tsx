@@ -7,7 +7,14 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from 'convex/react';
@@ -95,6 +102,11 @@ export default function TripsScreen() {
 
   const [sortBy, setSortBy] = useState<SortBy>('newest');
   const [activeTab, setActiveTab] = useState<'trips' | 'bookings'>('trips');
+
+  const switchTab = useCallback((tab: 'trips' | 'bookings') => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveTab(tab);
+  }, []);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const sorted = useMemo(() => {
@@ -266,7 +278,7 @@ export default function TripsScreen() {
         {/* Segmented control */}
         <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TouchableOpacity
-            onPress={() => setActiveTab('trips')}
+            onPress={() => switchTab('trips')}
             style={[
               styles.segment,
               activeTab === 'trips' && { backgroundColor: colors.accent },
@@ -282,7 +294,7 @@ export default function TripsScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setActiveTab('bookings')}
+            onPress={() => switchTab('bookings')}
             style={[
               styles.segment,
               activeTab === 'bookings' && { backgroundColor: colors.accent },
@@ -324,7 +336,7 @@ export default function TripsScreen() {
         {/* Segmented control */}
         <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TouchableOpacity
-            onPress={() => setActiveTab('trips')}
+            onPress={() => switchTab('trips')}
             style={[
               styles.segment,
               activeTab === 'trips' && { backgroundColor: colors.accent },
@@ -340,7 +352,7 @@ export default function TripsScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setActiveTab('bookings')}
+            onPress={() => switchTab('bookings')}
             style={[
               styles.segment,
               activeTab === 'bookings' && { backgroundColor: colors.accent },
@@ -394,7 +406,7 @@ export default function TripsScreen() {
       {/* Segmented control */}
       <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TouchableOpacity
-          onPress={() => setActiveTab('trips')}
+          onPress={() => switchTab('trips')}
           style={[
             styles.segment,
             activeTab === 'trips' && { backgroundColor: colors.accent },
@@ -410,7 +422,7 @@ export default function TripsScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => setActiveTab('bookings')}
+          onPress={() => switchTab('bookings')}
           style={[
             styles.segment,
             activeTab === 'bookings' && { backgroundColor: colors.accent },
