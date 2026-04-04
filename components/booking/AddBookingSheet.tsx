@@ -172,7 +172,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         onDismiss={resetState}
       >
         <BottomSheetScrollView
-          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: Spacing['3xl'] }}
+          contentContainerStyle={{ paddingTop: Spacing.sm, paddingBottom: Spacing['3xl'] }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
