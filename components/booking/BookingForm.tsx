@@ -441,17 +441,17 @@ export default function BookingForm({
         contentContainerStyle={{ padding: Spacing.lg, paddingBottom: Spacing['3xl'] }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Header ─────────────────────────── */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} hitSlop={12} style={styles.backButton}>
-            <ArrowLeft size={22} color={colors.foreground} />
+        {/* ── Colored Header Banner ─────────── */}
+        <View style={[styles.headerBanner, { backgroundColor: typeColor }]}>
+          <TouchableOpacity onPress={onBack} hitSlop={12}>
+            <ArrowLeft size={22} color="#FFFFFF" />
           </TouchableOpacity>
 
-          <View style={[styles.iconCircle, { backgroundColor: typeColor + '18' }]}>
-            <IconComponent size={18} color={typeColor} />
+          <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+            <IconComponent size={18} color="#FFFFFF" />
           </View>
 
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          <Text style={styles.headerBannerTitle}>
             Add {config.label}
           </Text>
         </View>
@@ -526,14 +526,16 @@ export default function BookingForm({
 // ──────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  header: {
+  headerBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.xl,
     gap: 12,
-  },
-  backButton: {
-    marginRight: 4,
+    marginHorizontal: -Spacing.lg,
+    marginTop: -Spacing.lg,
+    marginBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    borderRadius: 20,
   },
   iconCircle: {
     width: 32,
@@ -542,9 +544,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
+  headerBannerTitle: {
     fontFamily: FontFamily.display,
     fontSize: FontSize.xl,
+    color: '#FFFFFF',
     flex: 1,
   },
   fieldGroup: {

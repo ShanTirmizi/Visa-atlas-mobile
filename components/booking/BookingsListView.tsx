@@ -194,10 +194,10 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
               <View
                 style={[
                   styles.unassignedBanner,
-                  { backgroundColor: colors.accent },
+                  { backgroundColor: colors.warningBg, borderLeftWidth: 3, borderLeftColor: colors.warning },
                 ]}
               >
-                <Text style={[styles.unassignedText, { color: '#FFFFFF' }]}>
+                <Text style={[styles.unassignedText, { color: colors.foreground }]}>
                   {unassigned.length} unassigned booking
                   {unassigned.length !== 1 ? 's' : ''}
                 </Text>
