@@ -20,13 +20,14 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
   const { colors } = useTheme();
   const [showAll, setShowAll] = useState(false);
 
+  // Ensure no booking card color matches the section background (colors.primary/teal)
   const BOOKING_TYPE_THEME_COLORS: Record<string, string> = {
-    flight: colors.info,
-    hotel: colors.secondary,
-    experience: colors.accent,
-    car_rental: colors.warning,
-    insurance: colors.primary,
-    restaurant: colors.danger,
+    flight: colors.accent,     // orange
+    hotel: colors.warning,     // gold
+    experience: colors.secondary, // green
+    car_rental: '#D95E8A',     // pink — used in itinerary day cards
+    insurance: '#8B5CF6',      // purple — no theme token, unique to insurance
+    restaurant: colors.danger, // red
   };
 
   const bookings = useQuery(api.bookings.listBookingsByTrip, { tripId: tripId as Id<'trips'> });

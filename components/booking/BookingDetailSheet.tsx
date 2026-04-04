@@ -21,6 +21,7 @@ import {
 import { Copy, Trash2, Unlink } from 'lucide-react-native';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import {
   FontFamily,
@@ -158,7 +159,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
             style: 'destructive',
             onPress: async () => {
               try {
-                await deleteBooking({ id: booking.id as any });
+                await deleteBooking({ id: booking.id as Id<'bookings'> });
                 bottomSheetRef.current?.dismiss();
                 onDelete?.();
               } catch {
@@ -170,15 +171,28 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
       );
     }, [booking, deleteBooking, onDelete]);
 
-    const handleUnlink = useCallback(async () => {
+    const handleUnlink = useCallback(() => {
       if (!booking) return;
-      try {
-        await unlinkBookingFromTrip({ id: booking.id as any });
-        bottomSheetRef.current?.dismiss();
-        onUnlink?.();
-      } catch {
-        Alert.alert('Error', 'Failed to unlink booking. Please try again.');
-      }
+      Alert.alert(
+        'Unlink Booking',
+        `Are you sure you want to unlink "${booking.title}" from this trip?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Unlink',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await unlinkBookingFromTrip({ id: booking.id as Id<'bookings'> });
+                bottomSheetRef.current?.dismiss();
+                onUnlink?.();
+              } catch {
+                Alert.alert('Error', 'Failed to unlink booking. Please try again.');
+              }
+            },
+          },
+        ],
+      );
     }, [booking, unlinkBookingFromTrip, onUnlink]);
 
     // ── Backdrop ─────────────────────────────────────
