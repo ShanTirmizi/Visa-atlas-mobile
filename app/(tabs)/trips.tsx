@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
@@ -17,7 +18,15 @@ import { useOfflineMutation } from '@/hooks/use-offline-mutation';
 import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
-import { Plane, Trash2, Check, Globe, Clock, Wallet, MoveRight } from 'lucide-react-native';
+import {
+  Plane,
+  Check,
+  Globe,
+  Clock,
+  Wallet,
+  MoveRight,
+  ArrowUpDown,
+} from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import { getVisaCategoryColor } from '@/constants/theme';
@@ -27,12 +36,12 @@ import SegmentedControl from '@/components/ui/SegmentedControl';
 
 type SortBy = 'newest' | 'oldest' | 'name' | 'status';
 
-const SORT_OPTIONS: { value: SortBy; label: string }[] = [
-  { value: 'newest', label: 'Newest' },
-  { value: 'oldest', label: 'Oldest' },
-  { value: 'name', label: 'Name' },
-  { value: 'status', label: 'Status' },
-];
+const SORT_LABELS: Record<SortBy, string> = {
+  newest: 'Newest first',
+  oldest: 'Oldest first',
+  name: 'By name',
+  status: 'By status',
+};
 
 /* prettier-ignore */
 const A3_TO_A2: Record<string,string> = {
@@ -75,16 +84,52 @@ function formatDate(timestamp: number): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// ─── Skeleton card ──────────────────────────────────
-function SkeletonCard({ colors }: { colors: any }) {
+function formatTravelDate(isoString: string): string {
+  const d = new Date(isoString);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+interface HeroImageData {
+  url: string;
+  credit?: string;
+  creditUrl?: string;
+  link?: string;
+}
+
+function parseHeroImage(raw: string | null | undefined): HeroImageData | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'url' in parsed &&
+      typeof (parsed as Record<string, unknown>).url === 'string'
+    ) {
+      return parsed as HeroImageData;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ---- Skeleton card ----
+function SkeletonCard({ colors }: { colors: Record<string, string> }) {
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.borderSubtle, padding: Spacing.md }]}>
-      <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: '60%', height: 20 }]} />
-      <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: '40%', height: 14, marginTop: 8 }]} />
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-        <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 60, height: 24, borderRadius: 12 }]} />
-        <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 50, height: 24, borderRadius: 12 }]} />
-        <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 45, height: 24, borderRadius: 12 }]} />
+    <View style={[styles.card, Shadows.card, { backgroundColor: colors.card }]}>
+      {/* Image skeleton */}
+      <View style={[styles.heroArea, { backgroundColor: colors.shimmer }]} />
+      {/* Bottom section skeleton */}
+      <View style={styles.cardBottom}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 60, height: 24, borderRadius: 12 }]} />
+          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 50, height: 24, borderRadius: 12 }]} />
+          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 55, height: 24, borderRadius: 12 }]} />
+          <View style={{ flex: 1 }} />
+          <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 64, height: 24, borderRadius: 12 }]} />
+        </View>
+        <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 130, height: 14, borderRadius: 6, marginTop: 10 }]} />
       </View>
     </View>
   );
@@ -96,7 +141,7 @@ export default function TripsScreen() {
   const router = useRouter();
 
   const trips = useOfflineQuery(api.trips.listTrips, {});
-  const deleteTrip = useMutation(api.trips.deleteTrip); // Keep online-only (cascading delete)
+  const deleteTrip = useMutation(api.trips.deleteTrip);
   const updateStatus = useOfflineMutation(api.trips.updateTripStatus);
   const { isOffline } = useOffline();
 
@@ -142,7 +187,7 @@ export default function TripsScreen() {
   );
 
   const handleToggleStatus = useCallback(
-    async (id: any, currentStatus: string) => {
+    async (id: Id<'trips'>, currentStatus: string) => {
       await updateStatus({
         id,
         status: currentStatus === 'planned' ? 'completed' : 'planned',
@@ -151,119 +196,152 @@ export default function TripsScreen() {
     [updateStatus],
   );
 
+  const showSortMenu = useCallback(() => {
+    const options: SortBy[] = ['newest', 'oldest', 'name', 'status'];
+    Alert.alert(
+      'Sort trips',
+      undefined,
+      [
+        ...options.map((opt) => ({
+          text: `${sortBy === opt ? '\u2713 ' : ''}${SORT_LABELS[opt]}`,
+          onPress: () => setSortBy(opt),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    );
+  }, [sortBy]);
+
   const renderItem = useCallback(
-    ({ item }: { item: any }) => {
-      const catColor = getVisaCategoryColor(item.visaCategory, colors);
-      const isDeleting = deletingId === item._id;
+    ({ item }: { item: Record<string, unknown> }) => {
+      const catColor = getVisaCategoryColor(item.visaCategory as string, colors);
+      const isDeleting = deletingId === (item._id as string);
       const isCompleted = item.status === 'completed';
+      const heroImage = parseHeroImage(item.heroImage as string | null | undefined);
+      const hasImage = heroImage !== null;
 
       return (
         <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => router.push(`/trip/${item._id}`)}
-          style={[styles.card, Shadows.card, { backgroundColor: catColor }]}
+          activeOpacity={0.85}
+          onPress={() => router.push(`/trip/${item._id as string}`)}
+          onLongPress={() => handleDelete(item._id as string, item.countryName as string)}
+          delayLongPress={500}
+          style={[styles.card, Shadows.card, { backgroundColor: colors.card }]}
         >
-          <View style={styles.cardBody}>
-            {/* Top row — country name + flag */}
-            <View style={styles.topRow}>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                  {item.isMultiCountry && item.routeTitle ? (
-                    <>
-                      <Text style={[styles.countryName, { color: '#FFFFFF' }]}>
-                        {countryCodeToFlag(item.countryCode)}{' '}
-                        {item.routeTitle.split(/\s*→\s*/)[0]}
-                      </Text>
-                      <MoveRight color="#FFFFFF" size={18} style={{ opacity: 0.8 }} />
-                      <Text style={[styles.countryName, { color: '#FFFFFF' }]}>
-                        {item.routeTitle.split(/\s*→\s*/).slice(1).join(' → ')}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={[styles.countryName, { color: '#FFFFFF' }]}>
-                      {countryCodeToFlag(item.countryCode)}{' '}
-                      {item.countryName}
+          {/* Hero image area */}
+          <View style={[styles.heroArea, { backgroundColor: catColor }]}>
+            {hasImage && (
+              <Image
+                source={{ uri: heroImage.url }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+              />
+            )}
+            {/* Gradient overlay at bottom of image */}
+            <View style={styles.heroOverlay} />
+
+            {/* Country info overlaid on the image */}
+            <View style={styles.heroContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                {(item.isMultiCountry as boolean) && (item.routeTitle as string) ? (
+                  <>
+                    <Text style={styles.heroCountryName}>
+                      {countryCodeToFlag(item.countryCode as string)}{' '}
+                      {(item.routeTitle as string).split(/\s*\u2192\s*/)[0]}
                     </Text>
-                  )}
-                </View>
-                <Text style={[styles.regionText, { color: 'rgba(255,255,255,0.70)' }]}>
-                  {item.isMultiCountry ? 'Multi-country route' : `${item.region} \u00B7 ${item.capital}`}
-                </Text>
-                {item._role !== 'owner' && (
-                  <Text style={{ fontFamily: FontFamily.condensed, fontSize: 11, color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Shared · {item._role}
+                    <MoveRight color="#FFFFFF" size={18} style={{ opacity: 0.8 }} />
+                    <Text style={styles.heroCountryName}>
+                      {(item.routeTitle as string).split(/\s*\u2192\s*/).slice(1).join(' \u2192 ')}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.heroCountryName}>
+                    {countryCodeToFlag(item.countryCode as string)}{' '}
+                    {item.countryName as string}
                   </Text>
                 )}
               </View>
-            </View>
 
-            {/* Badges */}
-            <View style={styles.badgeRow}>
-              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
-                <Clock color="#FFFFFF" size={11} />
-                <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
-                  {item.duration}d
-                </Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
-                <Wallet color="#FFFFFF" size={11} />
-                <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
-                  {getCostSymbol(item.costLevel as 1 | 2 | 3)} {item.dailyBudget}
-                </Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
-                <Plane color="#FFFFFF" size={11} />
-                <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
-                  {item.flightHours}h
-                </Text>
-              </View>
-            </View>
-
-            {/* Footer — date + status + delete */}
-            <View style={styles.footer}>
-              <Text style={[styles.dateText, { color: 'rgba(255,255,255,0.60)' }]}>
-                {formatDate(item._creationTime)}
+              <Text style={styles.heroSubtitle}>
+                {(item.isMultiCountry as boolean)
+                  ? 'Multi-country route'
+                  : `${item.region as string} \u00B7 ${item.capital as string}`}
               </Text>
 
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  onPress={() => handleToggleStatus(item._id, item.status)}
-                  style={[
-                    styles.statusBtn,
-                    {
-                      backgroundColor: 'rgba(255,255,255,0.20)',
-                      borderColor: 'rgba(255,255,255,0.30)',
-                    },
-                  ]}
-                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                >
-                  {isCompleted && <Check color="#FFFFFF" size={11} />}
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: '#FFFFFF' },
-                    ]}
-                  >
-                    {isCompleted ? 'Done' : 'Planned'}
-                  </Text>
-                </TouchableOpacity>
+              {(item._role as string) !== 'owner' && (
+                <Text style={styles.heroSharedBadge}>
+                  Shared \u00B7 {item._role as string}
+                </Text>
+              )}
+            </View>
+          </View>
 
-                <TouchableOpacity
-                  onPress={() => handleDelete(item._id, item.countryName)}
-                  disabled={isDeleting}
-                  style={[
-                    styles.deleteBtn,
-                    { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)', opacity: isDeleting ? 0.4 : 1 },
-                  ]}
-                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                >
-                  {isDeleting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Trash2 color="rgba(255,255,255,0.80)" size={13} />
-                  )}
-                </TouchableOpacity>
+          {/* Bottom card section */}
+          <View style={[styles.cardBottom, { backgroundColor: colors.card }]}>
+            {/* Stats row + status */}
+            <View style={styles.statsRow}>
+              <View style={[styles.statChip, { backgroundColor: colors.shimmer }]}>
+                <Clock color={colors.textSecondary} size={11} />
+                <Text style={[styles.statChipText, { color: colors.textSecondary }]}>
+                  {item.duration as number}d
+                </Text>
               </View>
+
+              <View style={[styles.statChip, { backgroundColor: colors.shimmer }]}>
+                <Wallet color={colors.textSecondary} size={11} />
+                <Text style={[styles.statChipText, { color: colors.textSecondary }]}>
+                  {getCostSymbol((item.costLevel as 1 | 2 | 3) || 1)}
+                </Text>
+              </View>
+
+              <View style={[styles.statChip, { backgroundColor: colors.shimmer }]}>
+                <Plane color={colors.textSecondary} size={11} />
+                <Text style={[styles.statChipText, { color: colors.textSecondary }]}>
+                  {item.flightHours as number}h
+                </Text>
+              </View>
+
+              <View style={{ flex: 1 }} />
+
+              <TouchableOpacity
+                onPress={() => handleToggleStatus(item._id as Id<'trips'>, item.status as string)}
+                style={[
+                  styles.statusPill,
+                  isCompleted
+                    ? { backgroundColor: colors.visaFreeBg }
+                    : { backgroundColor: colors.primaryBg },
+                ]}
+                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              >
+                {isCompleted && <Check color={colors.visaFree} size={11} />}
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    { color: isCompleted ? colors.visaFree : colors.primary },
+                  ]}
+                >
+                  {isCompleted ? 'Done' : 'Planned'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Travel dates or creation date */}
+            <View style={styles.dateRow}>
+              {(item.startDate as string | undefined) ? (
+                <Text style={[styles.travelDate, { color: colors.textMuted }]}>
+                  {formatTravelDate(item.startDate as string)}
+                  {(item.endDate as string | undefined)
+                    ? ` \u2013 ${formatTravelDate(item.endDate as string)}`
+                    : ''}
+                </Text>
+              ) : (
+                <Text style={[styles.travelDate, { color: colors.textMuted }]}>
+                  Added {formatDate(item._creationTime as number)}
+                </Text>
+              )}
+
+              {isDeleting && (
+                <ActivityIndicator size="small" color={colors.danger} />
+              )}
             </View>
           </View>
         </TouchableOpacity>
@@ -272,60 +350,46 @@ export default function TripsScreen() {
     [colors, deletingId, handleDelete, handleToggleStatus, router],
   );
 
-  // ─── Loading state ─────────────
+  // ---- Header component (reused across states) ----
+  const renderHeader = (tripCount?: number) => (
+    <View style={styles.headerRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
+        {tripCount !== undefined && (
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            {tripCount} trip{tripCount !== 1 ? 's' : ''} planned
+          </Text>
+        )}
+      </View>
+      {tripCount !== undefined && tripCount > 1 && (
+        <TouchableOpacity
+          onPress={showSortMenu}
+          style={[styles.sortButton, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
+          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+        >
+          <ArrowUpDown color={colors.textSecondary} size={16} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  // ---- Loading state ----
   if (trips === undefined) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
-        <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
+        {renderHeader()}
 
         <SegmentedControl
           tabs={['My Trips', 'Bookings']}
           activeIndex={activeTab === 'trips' ? 0 : 1}
-          onTabPress={(i) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+          onTabPress={(i: number) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
         />
 
         {activeTab === 'trips' ? (
-          <>
-            <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer, width: 100, height: 14, marginTop: 4, borderRadius: 6 }]} />
-            <View style={{ marginTop: Spacing.lg, gap: 12 }}>
-              {[1, 2, 3].map((i) => (
-                <SkeletonCard key={i} colors={colors} />
-              ))}
-            </View>
-          </>
-        ) : (
-          <BookingsListView bottomInset={insets.bottom} />
-        )}
-      </View>
-    );
-  }
-
-  // ─── Empty state ───────────────
-  if (trips.length === 0) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
-        <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
-
-        <SegmentedControl
-          tabs={['My Trips', 'Bookings']}
-          activeIndex={activeTab === 'trips' ? 0 : 1}
-          onTabPress={(i) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
-        />
-
-        {activeTab === 'trips' ? (
-          <View style={[styles.emptyState, { backgroundColor: colors.primary }, Shadows.card]}>
-            <Plane color="rgba(255,255,255,0.5)" size={52} strokeWidth={1} />
-            <Text style={[styles.emptyTitle, { color: '#FFFFFF' }]}>No trips yet</Text>
-            <Text style={[styles.emptyBody, { color: 'rgba(255,255,255,0.80)' }]}>
-              Head to the map, pick a destination, and plan your next adventure.
-            </Text>
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)')}
-              style={[styles.exploreBtn, { backgroundColor: 'rgba(255,255,255,0.20)', borderColor: 'rgba(255,255,255,0.30)' }]}
-            >
-              <Globe color="#FFFFFF" size={16} />
-              <Text style={[styles.exploreBtnText, { color: '#FFFFFF' }]}>Explore the Map</Text>
-            </TouchableOpacity>
+          <View style={{ marginTop: Spacing.md, gap: 16 }}>
+            {[1, 2, 3].map((i) => (
+              <SkeletonCard key={i} colors={colors} />
+            ))}
           </View>
         ) : (
           <BookingsListView bottomInset={insets.bottom} />
@@ -334,22 +398,44 @@ export default function TripsScreen() {
     );
   }
 
-  // ─── Main list ─────────────────
+  // ---- Empty state ----
+  if (trips.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
+        {renderHeader()}
+
+        <SegmentedControl
+          tabs={['My Trips', 'Bookings']}
+          activeIndex={activeTab === 'trips' ? 0 : 1}
+          onTabPress={(i: number) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+        />
+
+        {activeTab === 'trips' ? (
+          <View style={styles.emptyContainer}>
+            <Globe color={colors.textMuted} size={56} strokeWidth={1} />
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+              No trips yet
+            </Text>
+            <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>
+              Start planning your next adventure
+            </Text>
+          </View>
+        ) : (
+          <BookingsListView bottomInset={insets.bottom} />
+        )}
+      </View>
+    );
+  }
+
+  // ---- Main list ----
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {trips.length} trip{trips.length !== 1 ? 's' : ''} planned
-          </Text>
-        </View>
-      </View>
+      {renderHeader(trips.length)}
 
       <SegmentedControl
         tabs={['My Trips', 'Bookings']}
         activeIndex={activeTab === 'trips' ? 0 : 1}
-        onTabPress={(i) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+        onTabPress={(i: number) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
       />
 
       <Animated.View
@@ -358,40 +444,13 @@ export default function TripsScreen() {
         style={{ flex: 1 }}
       >
         {activeTab === 'trips' ? (
-          <>
-            {/* Sort pills */}
-            <View style={styles.sortRow}>
-              {SORT_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt.value}
-                  onPress={() => setSortBy(opt.value)}
-                  style={[
-                    styles.sortPill,
-                    sortBy === opt.value
-                      ? { backgroundColor: colors.accent, ...Shadows.glow(colors.accent, 0.2) }
-                      : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.sortPillText,
-                      { color: sortBy === opt.value ? '#FFFFFF' : colors.textMuted },
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <FlatList
-              data={sorted}
-              renderItem={renderItem}
-              keyExtractor={(item) => item._id}
-              contentContainerStyle={{ paddingBottom: insets.bottom + 100, gap: 12 }}
-              showsVerticalScrollIndicator={false}
-            />
-          </>
+          <FlatList
+            data={sorted}
+            renderItem={renderItem}
+            keyExtractor={(item) => item._id as string}
+            contentContainerStyle={{ paddingTop: Spacing.sm, paddingBottom: insets.bottom + 100, gap: 16 }}
+            showsVerticalScrollIndicator={false}
+          />
         ) : (
           <BookingsListView bottomInset={insets.bottom} />
         )}
@@ -405,7 +464,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.lg,
   },
+  // ---- Header ----
   headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     marginBottom: Spacing.sm,
   },
   heading: {
@@ -414,118 +477,117 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   subtitle: {
-    fontFamily: FontFamily.serif,
+    fontFamily: 'Lora_400Regular_Italic',
     fontSize: FontSize.sm,
     marginTop: 2,
   },
-  // Sort pills
-  sortRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.sm,
+  sortButton: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
-  sortPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: Radius.full,
-  },
-  sortPillText: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: FontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  // Trip card — vibrant solid color like HabitQuest
+  // ---- Trip card (postcard) ----
   card: {
     borderRadius: 20,
     overflow: 'hidden',
   },
-  colorBar: {
-    width: 0,
-    display: 'none',
+  heroArea: {
+    height: 200,
+    justifyContent: 'flex-end',
   },
-  cardBody: {
-    flex: 1,
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    // Stronger at bottom via a tall bottom-weighted overlay
+    // We use a single semi-transparent layer since LinearGradient isn't available
+  },
+  heroContent: {
     padding: Spacing.md,
+    paddingBottom: Spacing.md,
+    zIndex: 1,
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  countryName: {
+  heroCountryName: {
     fontFamily: FontFamily.display,
-    fontSize: FontSize.xl,
-    letterSpacing: 0.3,
+    fontSize: FontSize['2xl'],
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
-  regionText: {
+  heroSubtitle: {
     fontFamily: FontFamily.serif,
-    fontSize: FontSize.xs,
+    fontSize: FontSize.sm,
+    color: 'rgba(255,255,255,0.80)',
     marginTop: 2,
   },
-  // Badges
-  badgeRow: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-    marginBottom: 12,
+  heroSharedBadge: {
+    fontFamily: FontFamily.condensedMedium,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.90)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 4,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    overflow: 'hidden',
   },
-  badge: {
+  // ---- Card bottom section ----
+  cardBottom: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: Radius.full,
   },
-  badgeText: {
+  statChipText: {
     fontFamily: FontFamily.condensedMedium,
-    fontSize: 11,
+    fontSize: 12,
   },
-  // Footer
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dateText: {
-    fontFamily: FontFamily.condensed,
-    fontSize: FontSize.xs,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  statusBtn: {
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Radius.xs,
-    borderWidth: 1,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
   },
-  statusText: {
+  statusPillText: {
     fontFamily: FontFamily.condensedMedium,
-    fontSize: 11,
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
-  deleteBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Radius.xs,
-    borderWidth: 1,
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  travelDate: {
+    fontFamily: FontFamily.condensed,
+    fontSize: FontSize.xs,
+  },
+  // ---- Empty state ----
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Empty state
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: Spacing['3xl'],
-    paddingHorizontal: Spacing.xl,
-    borderRadius: 20,
-    marginTop: Spacing.xl,
+    paddingBottom: 80,
   },
   emptyTitle: {
     fontFamily: FontFamily.display,
@@ -533,27 +595,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   emptyBody: {
-    fontFamily: FontFamily.serif,
+    fontFamily: 'Lora_400Regular_Italic',
     fontSize: FontSize.sm,
     textAlign: 'center',
     marginTop: Spacing.sm,
-    marginBottom: Spacing.lg,
     lineHeight: 20,
   },
-  exploreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-  },
-  exploreBtnText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.sm,
-  },
-  // Skeleton
+  // ---- Skeleton ----
   skeletonBar: {
     borderRadius: Radius.xs,
     opacity: 0.6,
