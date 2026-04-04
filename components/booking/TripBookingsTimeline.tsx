@@ -6,10 +6,9 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
-import { BOOKING_TYPES, type BookingType, getBookingColor, formatBookingDates } from '@/constants/bookings';
+import { BOOKING_TYPES, type BookingType, formatBookingDates } from '@/constants/bookings';
 
 const MAX_VISIBLE = 4;
-const SECTION_COLOR = '#5B8A72';
 
 interface TripBookingsTimelineProps {
   tripId: string;
@@ -18,8 +17,17 @@ interface TripBookingsTimelineProps {
 }
 
 export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBooking }: TripBookingsTimelineProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [showAll, setShowAll] = useState(false);
+
+  const BOOKING_TYPE_THEME_COLORS: Record<string, string> = {
+    flight: colors.info,
+    hotel: colors.secondary,
+    experience: colors.accent,
+    car_rental: colors.warning,
+    insurance: colors.primary,
+    restaurant: colors.danger,
+  };
 
   const bookings = useQuery(api.bookings.listBookingsByTrip, { tripId: tripId as Id<'trips'> });
 
@@ -33,7 +41,7 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
   const overflow = showAll ? 0 : sorted.length - MAX_VISIBLE;
 
   return (
-    <View style={[styles.sectionCard, Shadows.card]}>
+    <View style={[styles.sectionCard, { backgroundColor: colors.primary }, Shadows.card]}>
       {/* Section header */}
       <View style={styles.headerRow}>
         <Calendar color="#FFF" size={15} />
@@ -55,8 +63,8 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
             onPress={onAddBooking}
             style={styles.addButtonPill}
           >
-            <Plus color={SECTION_COLOR} size={14} />
-            <Text style={[styles.addButtonPillText, { color: SECTION_COLOR }]}>Add Booking</Text>
+            <Plus color={colors.primary} size={14} />
+            <Text style={[styles.addButtonPillText, { color: colors.primary }]}>Add Booking</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -67,7 +75,7 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
           {visible.map((booking) => {
             const type = booking.type as BookingType;
             const config = BOOKING_TYPES[type];
-            const typeColor = getBookingColor(type, isDark);
+            const cardColor = BOOKING_TYPE_THEME_COLORS[type] ?? colors.primary;
             const Icon = config.icon;
 
             return (
@@ -75,7 +83,7 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
                 key={booking._id}
                 activeOpacity={0.75}
                 onPress={() => onBookingPress(booking)}
-                style={[styles.bookingCard, { backgroundColor: typeColor }]}
+                style={[styles.bookingCard, { backgroundColor: cardColor }]}
               >
                 <View style={styles.bookingCardInner}>
                   <View style={styles.bookingTopRow}>
@@ -122,8 +130,8 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
             onPress={onAddBooking}
             style={styles.addButtonPill}
           >
-            <Plus color={SECTION_COLOR} size={13} />
-            <Text style={[styles.addButtonPillText, { color: SECTION_COLOR }]}>Add Booking</Text>
+            <Plus color={colors.primary} size={13} />
+            <Text style={[styles.addButtonPillText, { color: colors.primary }]}>Add Booking</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -133,7 +141,6 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
 
 const styles = StyleSheet.create({
   sectionCard: {
-    backgroundColor: SECTION_COLOR,
     borderRadius: 20,
     padding: Spacing.lg,
   },

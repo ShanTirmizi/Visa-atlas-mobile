@@ -57,6 +57,7 @@ import {
 } from '@/constants/theme';
 import TripBookingsTimeline from '@/components/booking/TripBookingsTimeline';
 import AddBookingSheet, { type AddBookingSheetRef } from '@/components/booking/AddBookingSheet';
+import BookingDetailSheet, { type BookingDetailSheetRef, type BookingDetailData } from '@/components/booking/BookingDetailSheet';
 import SegmentedControl from '@/components/ui/SegmentedControl';
 
 // ─── Types ──────────────────────────────────────────
@@ -161,6 +162,7 @@ export default function TripDetailScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const addBookingRef = useRef<AddBookingSheetRef>(null);
+  const bookingDetailRef = useRef<BookingDetailSheetRef>(null);
 
   const trip = useOfflineQuery(api.trips.getTrip, { id: id as Id<'trips'> });
   const collaborators = useQuery(api.trips.getCollaborators, id ? { tripId: id as Id<'trips'> } : 'skip');
@@ -427,6 +429,29 @@ export default function TripDetailScreen() {
               catColor={catColor}
               tripId={trip._id}
               onAddBooking={() => addBookingRef.current?.open(trip._id)}
+              onBookingPress={(booking) => {
+                let typeDetails: Record<string, string> | undefined;
+                if (booking.typeDetails && typeof booking.typeDetails === 'object') {
+                  typeDetails = booking.typeDetails as Record<string, string>;
+                }
+                const data: BookingDetailData = {
+                  id: booking._id as string,
+                  type: booking.type as BookingDetailData['type'],
+                  title: booking.title as string,
+                  startDate: booking.startDate as string,
+                  endDate: booking.endDate as string | undefined,
+                  location: booking.location as string | undefined,
+                  provider: booking.provider as string | undefined,
+                  status: booking.status as BookingDetailData['status'],
+                  confirmationNumber: booking.confirmationNumber as string | undefined,
+                  cost: booking.cost as number | undefined,
+                  currency: booking.currency as string | undefined,
+                  notes: booking.notes as string | undefined,
+                  tripId: booking.tripId as string | undefined,
+                  typeDetails,
+                };
+                bookingDetailRef.current?.open(data);
+              }}
             />
           )}
           {activeTab === 'itinerary' && (
@@ -451,8 +476,9 @@ export default function TripDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Add Booking bottom sheet */}
+      {/* Booking sheets */}
       <AddBookingSheet ref={addBookingRef} />
+      <BookingDetailSheet ref={bookingDetailRef} />
     </View>
   );
 }
@@ -468,6 +494,7 @@ function OverviewContent({
   catColor,
   tripId,
   onAddBooking,
+  onBookingPress,
 }: {
   trip: { visaCategory: string; currency: string; language: string; timezone: string; capital: string; dailyBudget: string; _id: string; [key: string]: unknown };
   highlights: string[];
@@ -476,6 +503,7 @@ function OverviewContent({
   catColor: string;
   tripId: string;
   onAddBooking: () => void;
+  onBookingPress: (booking: unknown) => void;
 }) {
   return (
     <View style={{ gap: Spacing.lg }}>
@@ -494,7 +522,7 @@ function OverviewContent({
       {/* Bookings Timeline */}
       <TripBookingsTimeline
         tripId={tripId}
-        onBookingPress={(booking) => {}}
+        onBookingPress={onBookingPress}
         onAddBooking={onAddBooking}
       />
 
