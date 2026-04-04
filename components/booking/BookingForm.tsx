@@ -447,16 +447,9 @@ export default function BookingForm({
           <TouchableOpacity
             onPress={onBack}
             hitSlop={12}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: 'rgba(255,255,255,0.2)',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            style={styles.backBtn}
           >
-            <ArrowLeft size={20} color="#FFFFFF" />
+            <ArrowLeft size={20} color={colors.foreground} />
           </TouchableOpacity>
 
           <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
@@ -542,6 +535,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginBottom: Spacing.xl,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.sm,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconCircle: {
     width: 32,

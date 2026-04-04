@@ -12,6 +12,13 @@
 - If a needed color token doesn't exist, add it to the `LightColors` and `DarkColors` objects in `constants/theme.ts`.
 - All colors must come from `useTheme().colors` — no inline hex or rgba values except `#FFFFFF` for white text on colored backgrounds.
 
+## UI Conventions (follow existing patterns)
+
+- **Back button**: White square, 40x40, `borderRadius: Radius.sm`, `backgroundColor: '#FFFFFF'`, dark arrow icon. See `app/trip/[id].tsx` backBtn style. Always follow this pattern.
+- **Bottom sheets**: Use `enableDynamicSizing={true}` with `maxDynamicContentSize` to auto-fit content. Never use fixed snap points that anchor sheets to 90% — sheets should be only as tall as their content.
+- **Bottom sheet backgrounds**: Use the relevant booking type color for booking sheets, `colors.background` for generic sheets.
+- **Always check existing codebase patterns** before introducing new UI conventions. If a pattern exists (back button style, card radius, shadow), follow it exactly.
+
 <!-- convex-ai-start -->
 This project uses [Convex](https://convex.dev) as its backend.
 

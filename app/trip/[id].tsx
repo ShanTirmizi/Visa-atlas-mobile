@@ -410,7 +410,7 @@ export default function TripDetailScreen() {
         </View>
 
         {/* ─── TAB BAR ─── */}
-        <View style={{ paddingHorizontal: Spacing.lg, marginTop: Spacing.sm, marginBottom: Spacing.xs }}>
+        <View style={{ paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm }}>
           <SegmentedControl
             tabs={tabs.map((t) => t.label.toUpperCase())}
             activeIndex={tabs.findIndex((t) => t.key === activeTab)}
@@ -1061,7 +1061,7 @@ const styles = StyleSheet.create({
   heroContent: {
     padding: Spacing.lg,
     paddingTop: 60,
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   heroTitle: {
     fontFamily: FontFamily.display,
