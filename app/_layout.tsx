@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { useConvexAuth } from 'convex/react';
 import { useRouter, useSegments } from 'expo-router';
@@ -68,11 +68,13 @@ function ThemedApp() {
   // Show loading screen while checking auth
   if (isLoading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <Text style={{ fontFamily: 'BebasNeue_400Regular', fontSize: 36, color: colors.foreground }}>
-          VISA ATLAS
-        </Text>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5D9C0' }]}>
+        <StatusBar style="dark" />
+        <Image
+          source={require('@/assets/icon.png')}
+          style={{ width: 120, height: 120 }}
+          resizeMode="contain"
+        />
       </View>
     );
   }
