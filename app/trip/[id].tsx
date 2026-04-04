@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery } from 'convex/react';
+import { useOfflineQuery } from '@/hooks/use-offline-query';
+import { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import {
   ArrowLeft,
@@ -155,7 +156,7 @@ export default function TripDetailScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 
-  const trip = useQuery(api.trips.getTrip, { id: id as any });
+  const trip = useOfflineQuery(api.trips.getTrip, { id: id as Id<'trips'> });
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   // Parsed data
