@@ -2,7 +2,7 @@
 // Drop-in replacement for Convex's useQuery that transparently serves cached
 // data when the device is offline.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'convex/react';
 import type { FunctionReference, FunctionArgs, FunctionReturnType } from 'convex/server';
 import { useOffline } from '@/contexts/offline-context';
@@ -32,18 +32,16 @@ interface CacheConfig {
   cacheRead: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
+// Keys ordered so more-specific names come before less-specific ones.
+// findCacheConfig uses substring matching, so "listBookingsByTrip" must
+// precede "listBookings" and "getGuideByCountry" must precede "getGuide".
 const CACHE_CONFIGS: Record<string, CacheConfig> = {
-  listTrips: {
+  listBookingsByTrip: {
     cacheWrite: async (data) =>
-      cacheTrips(data as Array<{ _id: string } & Record<string, unknown>>),
-    cacheRead: async () => getAllCachedTrips(),
-  },
-  getTrip: {
-    cacheWrite: async (data) => {
-      const doc = data as { _id: string };
-      await cacheTrip(doc._id, doc);
-    },
-    cacheRead: async (args) => getCachedTrip(args.id as string),
+      cacheBookings(
+        data as Array<{ _id: string; tripId?: string } & Record<string, unknown>>,
+      ),
+    cacheRead: async (args) => getCachedBookingsByTrip(args.tripId as string),
   },
   listBookings: {
     cacheWrite: async (data) =>
@@ -52,19 +50,35 @@ const CACHE_CONFIGS: Record<string, CacheConfig> = {
       ),
     cacheRead: async () => getAllCachedBookings(),
   },
-  listBookingsByTrip: {
-    cacheWrite: async (data) =>
-      cacheBookings(
-        data as Array<{ _id: string; tripId?: string } & Record<string, unknown>>,
-      ),
-    cacheRead: async (args) => getCachedBookingsByTrip(args.tripId as string),
+  getGuideByCountry: {
+    cacheWrite: async (data) => {
+      if (data == null) return;
+      const doc = data as { _id: string; countryCode: string };
+      await cacheVisaGuide(doc._id, doc.countryCode, doc);
+    },
+    cacheRead: async (args) =>
+      getCachedVisaGuideByCountry(args.countryCode as string),
   },
   getGuide: {
     cacheWrite: async (data) => {
+      if (data == null) return;
       const doc = data as { _id: string; countryCode: string };
       await cacheVisaGuide(doc._id, doc.countryCode, doc);
     },
     cacheRead: async (args) => getCachedVisaGuide(args.id as string),
+  },
+  listTrips: {
+    cacheWrite: async (data) =>
+      cacheTrips(data as Array<{ _id: string } & Record<string, unknown>>),
+    cacheRead: async () => getAllCachedTrips(),
+  },
+  getTrip: {
+    cacheWrite: async (data) => {
+      if (data == null) return;
+      const doc = data as { _id: string };
+      await cacheTrip(doc._id, doc);
+    },
+    cacheRead: async (args) => getCachedTrip(args.id as string),
   },
   listGuides: {
     cacheWrite: async (data) =>
@@ -72,14 +86,6 @@ const CACHE_CONFIGS: Record<string, CacheConfig> = {
         data as Array<{ _id: string; countryCode: string } & Record<string, unknown>>,
       ),
     cacheRead: async () => getAllCachedVisaGuides(),
-  },
-  getGuideByCountry: {
-    cacheWrite: async (data) => {
-      const doc = data as { _id: string; countryCode: string };
-      await cacheVisaGuide(doc._id, doc.countryCode, doc);
-    },
-    cacheRead: async (args) =>
-      getCachedVisaGuideByCountry(args.countryCode as string),
   },
   getMessages: {
     cacheWrite: async (data, args) =>
@@ -116,9 +122,12 @@ export function useOfflineQuery<Query extends FunctionReference<'query'>>(
     FunctionReturnType<Query> | undefined
   >(undefined);
 
-  // Resolve the args object for cache read/write (skip means no args).
-  const resolvedArgs: Record<string, unknown> =
-    args === 'skip' ? {} : (args as Record<string, unknown>);
+  // Stable serialised key so effects re-run when args actually change.
+  const argsKey = args === 'skip' ? 'skip' : JSON.stringify(args);
+  const resolvedArgs = useMemo<Record<string, unknown>>(
+    () => (args === 'skip' ? {} : (args as Record<string, unknown>)),
+    [argsKey],
+  );
 
   // Write to cache whenever live data arrives.
   useEffect(() => {
@@ -129,8 +138,7 @@ export function useOfflineQuery<Query extends FunctionReference<'query'>>(
     config.cacheWrite(liveData, resolvedArgs).catch(() => {
       // Cache write failures are non-fatal — silently ignore.
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveData]);
+  }, [liveData, queryRef, resolvedArgs]);
 
   // Read from cache when offline and live data is unavailable.
   useEffect(() => {
@@ -154,8 +162,7 @@ export function useOfflineQuery<Query extends FunctionReference<'query'>>(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOffline, liveData]);
+  }, [isOffline, liveData, queryRef, resolvedArgs]);
 
   // Prefer live data; fall back to cache only when offline.
   if (liveData !== undefined) return liveData;

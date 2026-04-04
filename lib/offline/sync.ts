@@ -143,36 +143,29 @@ export async function replayMutationQueue(client: ConvexReactClient): Promise<nu
  */
 export async function refreshCache(client: ConvexReactClient): Promise<void> {
   try {
-    // Trips
-    const trips = await client.query(api.trips.listTrips, {});
-    const tripDocs = trips as Array<{ _id: string } & Record<string, unknown>>;
-    await cacheTrips(tripDocs);
-    await removeStaleCacheEntries(
-      'cached_trips',
-      tripDocs.map((t) => t._id),
-    );
+    // Fetch all data in parallel for faster sync on slow connections
+    const [trips, bookings, guides] = await Promise.all([
+      client.query(api.trips.listTrips, {}),
+      client.query(api.bookings.listBookings, {}),
+      client.query(api.visaGuides.listGuides, {}),
+    ]);
 
-    // Bookings
-    const bookings = await client.query(api.bookings.listBookings, {});
+    const tripDocs = trips as Array<{ _id: string } & Record<string, unknown>>;
     const bookingDocs = bookings as Array<
       { _id: string; tripId?: string } & Record<string, unknown>
     >;
-    await cacheBookings(bookingDocs);
-    await removeStaleCacheEntries(
-      'cached_bookings',
-      bookingDocs.map((b) => b._id),
-    );
-
-    // Visa Guides
-    const guides = await client.query(api.visaGuides.listGuides, {});
     const guideDocs = guides as Array<
       { _id: string; countryCode: string } & Record<string, unknown>
     >;
+
+    await cacheTrips(tripDocs);
+    await removeStaleCacheEntries('cached_trips', tripDocs.map((t) => t._id));
+
+    await cacheBookings(bookingDocs);
+    await removeStaleCacheEntries('cached_bookings', bookingDocs.map((b) => b._id));
+
     await cacheVisaGuides(guideDocs);
-    await removeStaleCacheEntries(
-      'cached_visa_guides',
-      guideDocs.map((g) => g._id),
-    );
+    await removeStaleCacheEntries('cached_visa_guides', guideDocs.map((g) => g._id));
 
     await setSyncMeta('last_full_sync', String(Date.now()));
   } catch (err) {
