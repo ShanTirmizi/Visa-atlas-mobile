@@ -19,6 +19,7 @@ import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/them
 import { getVisaCategoryColor } from '@/constants/theme';
 import { getCostSymbol } from '@/data/travelData';
 import BookingsListView from '@/components/booking/BookingsListView';
+import SegmentedControl from '@/components/ui/SegmentedControl';
 
 type SortBy = 'newest' | 'oldest' | 'name' | 'status';
 
@@ -264,41 +265,11 @@ export default function TripsScreen() {
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
         <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
 
-        {/* Segmented control */}
-        <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <TouchableOpacity
-            onPress={() => setActiveTab('trips')}
-            style={[
-              styles.segment,
-              activeTab === 'trips' && { backgroundColor: colors.accent },
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === 'trips' ? '#FFFFFF' : colors.textMuted },
-              ]}
-            >
-              My Trips
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab('bookings')}
-            style={[
-              styles.segment,
-              activeTab === 'bookings' && { backgroundColor: colors.accent },
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === 'bookings' ? '#FFFFFF' : colors.textMuted },
-              ]}
-            >
-              Bookings
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <SegmentedControl
+          tabs={['My Trips', 'Bookings']}
+          activeIndex={activeTab === 'trips' ? 0 : 1}
+          onTabPress={(i) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+        />
 
         {activeTab === 'trips' ? (
           <>
@@ -322,41 +293,11 @@ export default function TripsScreen() {
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
         <Text style={[styles.heading, { color: colors.foreground }]}>My Trips</Text>
 
-        {/* Segmented control */}
-        <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <TouchableOpacity
-            onPress={() => setActiveTab('trips')}
-            style={[
-              styles.segment,
-              activeTab === 'trips' && { backgroundColor: colors.accent },
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === 'trips' ? '#FFFFFF' : colors.textMuted },
-              ]}
-            >
-              My Trips
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab('bookings')}
-            style={[
-              styles.segment,
-              activeTab === 'bookings' && { backgroundColor: colors.accent },
-            ]}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                { color: activeTab === 'bookings' ? '#FFFFFF' : colors.textMuted },
-              ]}
-            >
-              Bookings
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <SegmentedControl
+          tabs={['My Trips', 'Bookings']}
+          activeIndex={activeTab === 'trips' ? 0 : 1}
+          onTabPress={(i) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+        />
 
         {activeTab === 'trips' ? (
           <View style={[styles.emptyState, { backgroundColor: colors.primary }, Shadows.card]}>
@@ -392,41 +333,11 @@ export default function TripsScreen() {
         </View>
       </View>
 
-      {/* Segmented control */}
-      <View style={[styles.segmentedControl, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={() => setActiveTab('trips')}
-          style={[
-            styles.segment,
-            activeTab === 'trips' && { backgroundColor: colors.accent },
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              { color: activeTab === 'trips' ? '#FFFFFF' : colors.textMuted },
-            ]}
-          >
-            My Trips
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setActiveTab('bookings')}
-          style={[
-            styles.segment,
-            activeTab === 'bookings' && { backgroundColor: colors.accent },
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              { color: activeTab === 'bookings' ? '#FFFFFF' : colors.textMuted },
-            ]}
-          >
-            Bookings
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <SegmentedControl
+        tabs={['My Trips', 'Bookings']}
+        activeIndex={activeTab === 'trips' ? 0 : 1}
+        onTabPress={(i) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+      />
 
       <Animated.View
         key={activeTab}
@@ -628,26 +539,6 @@ const styles = StyleSheet.create({
   exploreBtnText: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.sm,
-  },
-  // Segmented control
-  segmentedControl: {
-    flexDirection: 'row',
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    padding: 3,
-    marginBottom: Spacing.md,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: Radius.xs,
-  },
-  segmentText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   // Skeleton
   skeletonBar: {
