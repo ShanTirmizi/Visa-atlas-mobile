@@ -11,7 +11,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { Spacing } from '@/constants/theme';
-import { type BookingType, getBookingColor } from '@/constants/bookings';
+import { type BookingType } from '@/constants/bookings';
 import { findMatchingTrip } from '@/utils/tripMatcher';
 import BookingTypePicker from './BookingTypePicker';
 import BookingForm, { type BookingFormData } from './BookingForm';
@@ -37,7 +37,7 @@ const detailsKeyForType = (type: BookingType): string => {
 // ════════════════════════════════════════════════════════════════════════
 const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
   ({ onBookingCreated }, ref) => {
-    const { colors, isDark } = useTheme();
+    const { colors } = useTheme();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
     // ── State ────────────────────────────────────────────────────────
@@ -50,12 +50,6 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     const createBooking = useMutation(api.bookings.createBooking);
     const linkBookingToTrip = useMutation(api.bookings.linkBookingToTrip);
     const trips = useQuery(api.trips.listTrips);
-
-    // ── Snap points change with step ─────────────────────────────────
-    const snapPoints = useMemo(
-      () => (step === 'type' ? ['55%'] : ['92%']),
-      [step],
-    );
 
     // ── Reset helper ─────────────────────────────────────────────────
     const resetState = useCallback(() => {
@@ -162,19 +156,14 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     }, [prelinkedTripId, trips]);
 
     // ── Sheet background adapts to step ────────────────────────────
-    const sheetBg = step === 'form' && selectedType
-      ? getBookingColor(selectedType, isDark)
-      : colors.background;
-    const handleColor = step === 'form' && selectedType
-      ? 'rgba(255,255,255,0.5)'
-      : colors.textMuted;
+    const sheetBg = step === 'form' ? colors.card : colors.primary;
+    const handleColor = step === 'form' ? colors.textMuted : 'rgba(255,255,255,0.5)';
 
     // ── Render ───────────────────────────────────────────────────────
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
-        snapPoints={snapPoints}
-        enableDynamicSizing={false}
+        enableDynamicSizing={true}
         backgroundStyle={{ backgroundColor: sheetBg }}
         handleIndicatorStyle={{ backgroundColor: handleColor }}
         onDismiss={resetState}

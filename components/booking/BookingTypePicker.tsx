@@ -22,7 +22,7 @@ export default function BookingTypePicker({ onSelect, onScanComplete }: BookingT
     <View style={styles.container}>
       <ScanBooking onScanComplete={onScanComplete} />
 
-      <Text style={[styles.title, { color: colors.foreground }]}>
+      <Text style={[styles.title, { color: '#FFFFFF' }]}>
         What are you booking?
       </Text>
 
