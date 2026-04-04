@@ -57,6 +57,7 @@ import {
 } from '@/constants/theme';
 import TripBookingsTimeline from '@/components/booking/TripBookingsTimeline';
 import AddBookingSheet, { type AddBookingSheetRef } from '@/components/booking/AddBookingSheet';
+import SegmentedControl from '@/components/ui/SegmentedControl';
 
 // ─── Types ──────────────────────────────────────────
 interface ItineraryDay {
@@ -407,30 +408,12 @@ export default function TripDetailScreen() {
         </View>
 
         {/* ─── TAB BAR ─── */}
-        <View style={[styles.tabBar, { borderBottomColor: colors.borderSubtle }]}>
-          {tabs.map((tab) => {
-            const active = activeTab === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                onPress={() => setActiveTab(tab.key)}
-                style={[
-                  styles.tab,
-                  { borderBottomColor: active ? colors.primary : 'transparent' },
-                ]}
-              >
-                {tab.icon}
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    { color: active ? colors.primary : colors.textMuted },
-                  ]}
-                >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        <View style={{ paddingHorizontal: Spacing.lg }}>
+          <SegmentedControl
+            tabs={tabs.map((t) => t.label.toUpperCase())}
+            activeIndex={tabs.findIndex((t) => t.key === activeTab)}
+            onTabPress={(index) => setActiveTab(tabs[index].key)}
+          />
         </View>
 
         {/* ─── TAB CONTENT ─── */}

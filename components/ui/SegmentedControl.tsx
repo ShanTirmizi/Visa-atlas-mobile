@@ -83,7 +83,7 @@ export default function SegmentedControl({ tabs, activeIndex, onTabPress }: Segm
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    borderRadius: Radius.sm,
+    borderRadius: 999,
     borderWidth: 1,
     padding: 3,
     marginBottom: Spacing.md,
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     top: 3,
     left: 3,
     bottom: 3,
-    borderRadius: Radius.xs,
+    borderRadius: 999,
   },
   tab: {
     flex: 1,
