@@ -22,7 +22,7 @@ const tokenStorage = {
 
 export function ConvexProvider({ children }: { children: React.ReactNode }) {
   return (
-    <ConvexAuthProvider client={convex} storage={tokenStorage}>
+    <ConvexAuthProvider client={convex} storage={tokenStorage} shouldHandleCode={false}>
       {children}
     </ConvexAuthProvider>
   );
