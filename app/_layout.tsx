@@ -39,6 +39,8 @@ import { VisaProvider } from '@/contexts/visa-context';
 import { CalendarProvider } from '@/contexts/calendar-context';
 import { EmailProvider } from '@/contexts/email-context';
 import { ToastProvider } from '@/contexts/toast-context';
+import { OfflineProvider } from '@/contexts/offline-context';
+import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { FontFamily, FontSize } from '@/constants/theme';
 import type { ThemeColors } from '@/constants/theme';
 
@@ -78,6 +80,7 @@ function ThemedApp() {
   return (
     <View style={styles.container}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
+      <OfflineIndicator />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -150,21 +153,23 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ConvexProvider>
-        <ThemeProvider>
-          <VisaProvider>
-            <CalendarProvider>
-              <EmailProvider>
-                <SafeAreaProvider>
-                  <ToastProvider>
-                    <BottomSheetModalProvider>
-                      <ThemedApp />
-                    </BottomSheetModalProvider>
-                  </ToastProvider>
-                </SafeAreaProvider>
-              </EmailProvider>
-            </CalendarProvider>
-          </VisaProvider>
-        </ThemeProvider>
+        <OfflineProvider>
+          <ThemeProvider>
+            <VisaProvider>
+              <CalendarProvider>
+                <EmailProvider>
+                  <SafeAreaProvider>
+                    <ToastProvider>
+                      <BottomSheetModalProvider>
+                        <ThemedApp />
+                      </BottomSheetModalProvider>
+                    </ToastProvider>
+                  </SafeAreaProvider>
+                </EmailProvider>
+              </CalendarProvider>
+            </VisaProvider>
+          </ThemeProvider>
+        </OfflineProvider>
       </ConvexProvider>
     </GestureHandlerRootView>
   );
