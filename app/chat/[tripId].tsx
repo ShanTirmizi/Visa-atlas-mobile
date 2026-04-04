@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery } from 'convex/react';
+import { useOfflineQuery } from '@/hooks/use-offline-query';
+import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { ArrowLeft, Send, Bot, User } from 'lucide-react-native';
@@ -40,9 +41,10 @@ export default function ChatScreen() {
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
-  const trip = useQuery(api.trips.getTrip, {
+  const trip = useOfflineQuery(api.trips.getTrip, {
     id: tripId as Id<'trips'>,
   });
+  const { isOffline } = useOffline();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -51,6 +53,7 @@ export default function ChatScreen() {
   const countryName = trip?.countryName ?? 'your trip';
 
   const sendMessage = useCallback(async () => {
+    if (isOffline) return;
     const text = inputText.trim();
     if (!text || isSending) return;
 
@@ -239,56 +242,65 @@ export default function ChatScreen() {
       )}
 
       {/* Input bar */}
-      <View
-        style={[
-          styles.inputBar,
-          {
-            paddingBottom: insets.bottom + Spacing.sm,
-            borderTopColor: colors.border,
-            backgroundColor: colors.background,
-          },
-        ]}
-      >
-        <TextInput
-          ref={inputRef}
+      {isOffline && (
+        <View style={{ padding: 16, alignItems: 'center', backgroundColor: colors.card }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: FontFamily.serif }}>
+            Chat is unavailable offline
+          </Text>
+        </View>
+      )}
+      {!isOffline && (
+        <View
           style={[
-            styles.input,
+            styles.inputBar,
             {
-              backgroundColor: colors.surface,
-              color: colors.foreground,
-              borderColor: colors.border,
+              paddingBottom: insets.bottom + Spacing.sm,
+              borderTopColor: colors.border,
+              backgroundColor: colors.background,
             },
           ]}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder="Ask about your trip..."
-          placeholderTextColor={colors.textMuted}
-          multiline
-          maxLength={500}
-          onSubmitEditing={sendMessage}
-          blurOnSubmit={false}
-        />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            {
-              backgroundColor: inputText.trim() ? colors.primary : colors.surface,
-              borderColor: colors.border,
-            },
-          ]}
-          onPress={sendMessage}
-          disabled={!inputText.trim() || isSending}
         >
-          {isSending ? (
-            <ActivityIndicator size="small" color={colors.primaryButtonText} />
-          ) : (
-            <Send
-              color={inputText.trim() ? colors.primaryButtonText : colors.textMuted}
-              size={18}
-            />
-          )}
-        </TouchableOpacity>
-      </View>
+          <TextInput
+            ref={inputRef}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.surface,
+                color: colors.foreground,
+                borderColor: colors.border,
+              },
+            ]}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder="Ask about your trip..."
+            placeholderTextColor={colors.textMuted}
+            multiline
+            maxLength={500}
+            onSubmitEditing={sendMessage}
+            blurOnSubmit={false}
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: inputText.trim() ? colors.primary : colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={sendMessage}
+            disabled={!inputText.trim() || isSending}
+          >
+            {isSending ? (
+              <ActivityIndicator size="small" color={colors.primaryButtonText} />
+            ) : (
+              <Send
+                color={inputText.trim() ? colors.primaryButtonText : colors.textMuted}
+                size={18}
+              />
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
