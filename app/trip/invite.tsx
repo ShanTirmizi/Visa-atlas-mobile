@@ -228,8 +228,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backBtn: {
-    width: 32,
-    alignItems: 'flex-start',
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontFamily: FontFamily.semibold,

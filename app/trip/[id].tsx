@@ -174,6 +174,7 @@ export default function TripDetailScreen() {
   const leaveMutation = useMutation(api.tripPresence.leave);
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [fabOpen, setFabOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -326,14 +327,32 @@ export default function TripDetailScreen() {
             ]}
           />
 
-          {/* Back button */}
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={[styles.backBtn]}
-            hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-          >
-            <ArrowLeft color={colors.foreground} size={20} />
-          </TouchableOpacity>
+          {/* Top action buttons */}
+          <View style={styles.topActions}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backBtn}
+              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            >
+              <ArrowLeft color={colors.foreground} size={20} />
+            </TouchableOpacity>
+
+            <View style={{ flex: 1 }} />
+
+            <TouchableOpacity
+              onPress={() => router.push(`/chat/${id}`)}
+              style={styles.backBtn}
+            >
+              <MessageCircle color={colors.foreground} size={20} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.push(`/trip/invite?tripId=${id}`)}
+              style={styles.backBtn}
+            >
+              <UserPlus color={colors.foreground} size={20} />
+            </TouchableOpacity>
+          </View>
 
           {/* Hero content */}
           <View style={styles.heroContent}>
@@ -480,47 +499,70 @@ export default function TripDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* ─── Floating action bar ─── */}
-      <View style={[styles.actionBar, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity
-          style={[styles.actionBarBtn, { backgroundColor: colors.card }]}
-          onPress={() => router.push(`/chat/${id}`)}
-          activeOpacity={0.8}
-        >
-          <MessageCircle size={20} color={colors.primary} />
-          <Text style={[styles.actionBarLabel, { color: colors.foreground }]}>Chat</Text>
-        </TouchableOpacity>
+      {/* ─── FAB ─── */}
+      <View style={[styles.fabContainer, { bottom: insets.bottom + 24 }]}>
+        {fabOpen && (
+          <>
+            <TouchableOpacity
+              style={styles.fabMiniRow}
+              onPress={() => { setFabOpen(false); router.push(`/chat/${id}`); }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>Chat</Text>
+              <View style={[styles.fabMini, { backgroundColor: colors.primary }]}>
+                <MessageCircle size={20} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.fabMiniRow}
+              onPress={() => { setFabOpen(false); router.push(`/trip/invite?tripId=${id}`); }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>Share</Text>
+              <View style={[styles.fabMini, { backgroundColor: colors.accent }]}>
+                <UserPlus size={20} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.fabMiniRow}
+              onPress={() => {
+                setFabOpen(false);
+                Alert.alert(
+                  trip.countryName,
+                  undefined,
+                  [
+                    {
+                      text: trip.status === 'planned' ? 'Mark as Done' : 'Mark as Planned',
+                      onPress: () => {},
+                    },
+                    { text: 'Cancel', style: 'cancel' },
+                  ],
+                );
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>
+                {trip.status === 'planned' ? 'Done' : 'Planned'}
+              </Text>
+              <View style={[styles.fabMini, { backgroundColor: colors.secondary }]}>
+                <Check size={20} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
 
         <TouchableOpacity
-          style={[styles.actionBarBtn, { backgroundColor: colors.card }]}
-          onPress={() => router.push(`/trip/invite?tripId=${id}`)}
-          activeOpacity={0.8}
+          onPress={() => setFabOpen(!fabOpen)}
+          style={[styles.fabMain, { backgroundColor: colors.accent }, Shadows.card]}
+          activeOpacity={0.85}
         >
-          <UserPlus size={20} color={colors.accent} />
-          <Text style={[styles.actionBarLabel, { color: colors.foreground }]}>Share</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionBarBtn, { backgroundColor: colors.card }]}
-          onPress={() => {
-            Alert.alert(
-              trip.countryName,
-              undefined,
-              [
-                {
-                  text: trip.status === 'planned' ? 'Mark as Done' : 'Mark as Planned',
-                  onPress: () => {
-                    // Status toggle would go here via mutation
-                  },
-                },
-                { text: 'Cancel', style: 'cancel' },
-              ],
-            );
-          }}
-          activeOpacity={0.8}
-        >
-          <MoreHorizontal size={20} color={colors.textSecondary} />
-          <Text style={[styles.actionBarLabel, { color: colors.foreground }]}>More</Text>
+          {fabOpen ? (
+            <MoreHorizontal size={26} color="#FFFFFF" style={{ transform: [{ rotate: '45deg' }] }} />
+          ) : (
+            <MoreHorizontal size={26} color="#FFFFFF" />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -1092,17 +1134,21 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: 56,
+    zIndex: 10,
+  },
   backBtn: {
-    position: 'absolute',
-    top: 56,
-    left: Spacing.lg,
     width: 40,
     height: 40,
     borderRadius: Radius.sm,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
     ...Shadows.card,
   },
   heroContent: {
@@ -1450,27 +1496,37 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.serif,
     fontSize: FontSize.sm,
   },
-  // Action bar
-  actionBar: {
-    flexDirection: 'row',
+  // FAB
+  fabContainer: {
+    position: 'absolute',
+    right: Spacing.lg,
+    alignItems: 'flex-end',
     gap: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.06)',
   },
-  actionBarBtn: {
-    flex: 1,
+  fabMiniRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  fabMiniLabel: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.xs,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.sm,
+  },
+  fabMini: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.md,
   },
-  actionBarLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  fabMain: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

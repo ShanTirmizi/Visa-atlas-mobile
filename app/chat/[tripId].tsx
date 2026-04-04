@@ -221,8 +221,16 @@ export default function ChatScreen() {
         <TouchableOpacity
           onPress={() => router.back()}
           hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            backgroundColor: '#FFFFFF',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          <ArrowLeft color={colors.foreground} size={24} />
+          <ArrowLeft color={colors.foreground} size={20} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>
