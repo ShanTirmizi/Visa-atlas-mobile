@@ -44,10 +44,20 @@ export default function BookingCard({
   const typeColor = getBookingColor(type, isDark);
   const Icon = config.icon;
 
+  // Use theme colors for card backgrounds (matching trip detail bookings)
+  const CARD_COLORS: Record<string, string> = {
+    flight: colors.accent,
+    hotel: colors.warning,
+    experience: colors.secondary,
+    car_rental: '#D95E8A',
+    insurance: '#8B5CF6',
+    restaurant: colors.danger,
+  };
+  const cardBg = CARD_COLORS[type] ?? typeColor;
+
   const isCancelled = status === 'cancelled';
   const isCompleted = status === 'completed';
 
-  // Build meta string: formatted dates + optional location
   const dateStr = formatBookingDates(
     new Date(startDate),
     endDate ? new Date(endDate) : undefined,
@@ -64,8 +74,8 @@ export default function BookingCard({
         styles.card,
         Shadows.subtle,
         {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
+          backgroundColor: cardBg,
+          borderColor: 'transparent',
           opacity: isCancelled ? 0.5 : 1,
         },
       ]}
@@ -76,10 +86,10 @@ export default function BookingCard({
         <View
           style={[
             styles.iconCircle,
-            { backgroundColor: typeColor + '18' },
+            { backgroundColor: 'rgba(255,255,255,0.2)' },
           ]}
         >
-          <Icon size={18} color={typeColor} />
+          <Icon size={18} color="#FFFFFF" />
         </View>
 
         {/* Content */}
@@ -88,20 +98,20 @@ export default function BookingCard({
             numberOfLines={1}
             style={[
               styles.title,
-              { color: colors.foreground },
+              { color: '#FFFFFF' },
               isCompleted && styles.titleCompleted,
             ]}
           >
             {title}
           </Text>
-          <Text numberOfLines={1} style={[styles.meta, { color: colors.textSecondary }]}>
+          <Text numberOfLines={1} style={[styles.meta, { color: 'rgba(255,255,255,0.75)' }]}>
             {metaText}
           </Text>
         </View>
 
         {/* Provider badge */}
-        <View style={[styles.providerBadge, { backgroundColor: typeColor + '18' }]}>
-          <Text style={[styles.providerText, { color: typeColor }]}>
+        <View style={[styles.providerBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+          <Text style={[styles.providerText, { color: '#FFFFFF' }]}>
             {provider}
           </Text>
         </View>
@@ -110,12 +120,12 @@ export default function BookingCard({
       {/* Trip link area */}
       {tripName ? (
         <View style={styles.tripChip}>
-          <Link2 size={12} color={colors.primary} />
-          <Text style={[styles.tripName, { color: colors.primary }]}>
+          <Link2 size={12} color="rgba(255,255,255,0.8)" />
+          <Text style={[styles.tripName, { color: '#FFFFFF' }]}>
             {tripName}
           </Text>
           {autoMatched && (
-            <Text style={[styles.autoLabel, { color: colors.textMuted }]}>
+            <Text style={[styles.autoLabel, { color: 'rgba(255,255,255,0.6)' }]}>
               auto
             </Text>
           )}
@@ -126,8 +136,8 @@ export default function BookingCard({
           onPress={onLinkTrip}
           style={styles.tripChip}
         >
-          <Link2 size={12} color={colors.textMuted} />
-          <Text style={[styles.linkPrompt, { color: colors.textMuted }]}>
+          <Link2 size={12} color="rgba(255,255,255,0.6)" />
+          <Text style={[styles.linkPrompt, { color: 'rgba(255,255,255,0.6)' }]}>
             Link to a trip
           </Text>
         </TouchableOpacity>

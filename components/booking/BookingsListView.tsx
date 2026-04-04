@@ -197,7 +197,7 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
                   { backgroundColor: colors.warningBg },
                 ]}
               >
-                <Text style={[styles.unassignedText, { color: colors.warning }]}>
+                <Text style={[styles.unassignedText, { color: colors.foreground }]}>
                   {unassigned.length} unassigned booking
                   {unassigned.length !== 1 ? 's' : ''}
                 </Text>
@@ -238,7 +238,7 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
         onPress={() => addSheetRef.current?.open()}
         style={[
           styles.fab,
-          { bottom: bottomInset + 80, backgroundColor: colors.accent },
+          { bottom: bottomInset + 100, backgroundColor: colors.accent },
           Shadows.glow(colors.accent),
         ]}
       >
