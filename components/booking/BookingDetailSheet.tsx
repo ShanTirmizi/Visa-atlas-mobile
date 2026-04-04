@@ -260,7 +260,7 @@ function FlightBoardingPass({
           style={[
             bpStyles.tearCircle,
             bpStyles.tearCircleLeft,
-            { backgroundColor: colors.background },
+            { backgroundColor: typeColor },
           ]}
         />
         {/* Dashed line */}
@@ -270,7 +270,7 @@ function FlightBoardingPass({
           style={[
             bpStyles.tearCircle,
             bpStyles.tearCircleRight,
-            { backgroundColor: colors.background },
+            { backgroundColor: typeColor },
           ]}
         />
       </View>
@@ -357,20 +357,20 @@ function FlightBoardingPass({
           <TouchableOpacity
             onPress={onUnlink}
             activeOpacity={0.7}
-            style={[styles.actionBtn, { backgroundColor: colors.card }]}
+            style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
           >
-            <Unlink size={15} color={colors.textSecondary} />
-            <Text style={[styles.actionText, { color: colors.textSecondary }]}>Unlink</Text>
+            <Unlink size={15} color="#FFFFFF" />
+            <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Unlink</Text>
           </TouchableOpacity>
         ) : null}
 
         <TouchableOpacity
           onPress={onDelete}
           activeOpacity={0.7}
-          style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]}
+          style={[styles.actionBtn, { backgroundColor: colors.danger }]}
         >
-          <Trash2 size={15} color={colors.danger} />
-          <Text style={[styles.actionText, { color: colors.danger }]}>Delete</Text>
+          <Trash2 size={15} color="#FFFFFF" />
+          <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -390,7 +390,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
     const deleteBooking = useMutation(api.bookings.deleteBooking);
     const unlinkBookingFromTrip = useMutation(api.bookings.unlinkBookingFromTrip);
 
-    const snapPoints = useMemo(() => ['70%'], []);
+    const snapPoints = useMemo(() => ['65%'], []);
 
     useImperativeHandle(ref, () => ({
       open: (data: BookingDetailData) => {
@@ -511,8 +511,8 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
     }
 
     const isFlight = booking.type === 'flight';
-    const sheetBg = isFlight ? colors.background : typeColor;
-    const handleColor = isFlight ? colors.textMuted : 'rgba(255,255,255,0.5)';
+    const sheetBg = typeColor; // Always use the booking type color as sheet background
+    const handleColor = 'rgba(255,255,255,0.5)';
 
     return (
       <BottomSheetModal
@@ -524,7 +524,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
         backgroundStyle={{ backgroundColor: sheetBg, borderRadius: 24 }}
       >
         <BottomSheetScrollView
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={{ paddingBottom: 16 }}
           showsVerticalScrollIndicator={false}
         >
           {isFlight ? (
@@ -624,20 +624,20 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
                   <TouchableOpacity
                     onPress={handleUnlink}
                     activeOpacity={0.7}
-                    style={[styles.actionBtn, { backgroundColor: colors.card }]}
+                    style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
                   >
-                    <Unlink size={15} color={colors.textSecondary} />
-                    <Text style={[styles.actionText, { color: colors.textSecondary }]}>Unlink</Text>
+                    <Unlink size={15} color="#FFFFFF" />
+                    <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Unlink</Text>
                   </TouchableOpacity>
                 )}
 
                 <TouchableOpacity
                   onPress={handleDelete}
                   activeOpacity={0.7}
-                  style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]}
+                  style={[styles.actionBtn, { backgroundColor: colors.danger }]}
                 >
-                  <Trash2 size={15} color={colors.danger} />
-                  <Text style={[styles.actionText, { color: colors.danger }]}>Delete</Text>
+                  <Trash2 size={15} color="#FFFFFF" />
+                  <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Delete</Text>
                 </TouchableOpacity>
               </View>
             </>
