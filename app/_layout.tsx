@@ -72,7 +72,7 @@ function ThemedApp() {
         <StatusBar style="dark" />
         <Image
           source={require('@/assets/icon.png')}
-          style={{ width: 120, height: 120 }}
+          style={{ width: 120, height: 120, borderRadius: 28 }}
           resizeMode="contain"
         />
       </View>
