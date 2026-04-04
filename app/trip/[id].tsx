@@ -429,7 +429,8 @@ export default function TripDetailScreen() {
               catColor={catColor}
               tripId={trip._id}
               onAddBooking={() => addBookingRef.current?.open(trip._id)}
-              onBookingPress={(booking) => {
+              onBookingPress={(raw) => {
+                const booking = raw as Record<string, unknown>;
                 let typeDetails: Record<string, string> | undefined;
                 if (booking.typeDetails && typeof booking.typeDetails === 'object') {
                   typeDetails = booking.typeDetails as Record<string, string>;
