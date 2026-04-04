@@ -26,6 +26,9 @@ import {
   Clock,
   Wallet,
   MoveRight,
+  Calendar,
+  ArrowDownAZ,
+  CheckCircle2,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
@@ -34,14 +37,14 @@ import { getCostSymbol } from '@/data/travelData';
 import BookingsListView from '@/components/booking/BookingsListView';
 import SegmentedControl from '@/components/ui/SegmentedControl';
 
-type SortBy = 'newest' | 'oldest' | 'name' | 'status';
+type SortBy = 'newest' | 'upcoming' | 'name' | 'status';
 
-const SORT_LABELS: Record<SortBy, string> = {
-  newest: 'Newest',
-  oldest: 'Oldest',
-  name: 'Name',
-  status: 'Status',
-};
+const SORT_OPTIONS: { key: SortBy; label: string; iconName: 'Clock' | 'Calendar' | 'ArrowDownAZ' | 'CheckCircle2' }[] = [
+  { key: 'newest', label: 'Recent', iconName: 'Clock' },
+  { key: 'upcoming', label: 'Upcoming', iconName: 'Calendar' },
+  { key: 'name', label: 'A–Z', iconName: 'ArrowDownAZ' },
+  { key: 'status', label: 'Status', iconName: 'CheckCircle2' },
+];
 
 /* prettier-ignore */
 const A3_TO_A2: Record<string,string> = {
@@ -151,7 +154,12 @@ export default function TripsScreen() {
     if (!trips) return [];
     return [...trips].sort((a, b) => {
       switch (sortBy) {
-        case 'oldest': return a._creationTime - b._creationTime;
+        case 'upcoming': {
+          // Trips with startDate come first, sorted by nearest date
+          const aDate = a.startDate ? new Date(a.startDate).getTime() : Infinity;
+          const bDate = b.startDate ? new Date(b.startDate).getTime() : Infinity;
+          return aDate - bDate;
+        }
         case 'name': return a.countryName.localeCompare(b.countryName);
         case 'status': return (a.status || '').localeCompare(b.status || '');
         default: return b._creationTime - a._creationTime;
@@ -194,7 +202,9 @@ export default function TripsScreen() {
     [updateStatus],
   );
 
-  // ---- Sort pills ----
+  // ---- Sort pills with icons ----
+  const ICON_MAP = { Clock, Calendar, ArrowDownAZ, CheckCircle2 };
+
   const renderSortPills = () => (
     <ScrollView
       horizontal
@@ -202,27 +212,32 @@ export default function TripsScreen() {
       style={styles.sortPillsRow}
       contentContainerStyle={{ paddingVertical: 4 }}
     >
-      {(['newest', 'oldest', 'name', 'status'] as const).map((opt) => (
-        <TouchableOpacity
-          key={opt}
-          onPress={() => setSortBy(opt)}
-          style={[
-            styles.sortPill,
-            sortBy === opt
-              ? { backgroundColor: colors.accent }
-              : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderSubtle },
-          ]}
-        >
-          <Text
+      {SORT_OPTIONS.map((opt) => {
+        const isActive = sortBy === opt.key;
+        const IconComp = ICON_MAP[opt.iconName];
+        return (
+          <TouchableOpacity
+            key={opt.key}
+            onPress={() => setSortBy(opt.key)}
             style={[
-              styles.sortPillText,
-              { color: sortBy === opt ? '#FFFFFF' : colors.textSecondary },
+              styles.sortPill,
+              isActive
+                ? { backgroundColor: colors.accent }
+                : { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderSubtle },
             ]}
           >
-            {SORT_LABELS[opt]}
-          </Text>
-        </TouchableOpacity>
-      ))}
+            <IconComp size={13} color={isActive ? '#FFFFFF' : colors.textSecondary} />
+            <Text
+              style={[
+                styles.sortPillText,
+                { color: isActive ? '#FFFFFF' : colors.textSecondary },
+              ]}
+            >
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </ScrollView>
   );
 
@@ -494,16 +509,17 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   sortPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 999,
     marginRight: 8,
   },
   sortPillText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontFamily: FontFamily.semibold,
+    fontSize: 12,
   },
   // ---- Variation B card ----
   card: {
