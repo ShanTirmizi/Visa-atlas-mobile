@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +46,8 @@ import {
   AlertCircle,
   Info,
   UserPlus,
+  MessageCircle,
+  MoreHorizontal,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import {
@@ -476,6 +479,50 @@ export default function TripDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* ─── Floating action bar ─── */}
+      <View style={[styles.actionBar, { paddingBottom: insets.bottom + 8 }]}>
+        <TouchableOpacity
+          style={[styles.actionBarBtn, { backgroundColor: colors.card }]}
+          onPress={() => router.push(`/chat/${id}`)}
+          activeOpacity={0.8}
+        >
+          <MessageCircle size={20} color={colors.primary} />
+          <Text style={[styles.actionBarLabel, { color: colors.foreground }]}>Chat</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionBarBtn, { backgroundColor: colors.card }]}
+          onPress={() => router.push(`/trip/invite?tripId=${id}`)}
+          activeOpacity={0.8}
+        >
+          <UserPlus size={20} color={colors.accent} />
+          <Text style={[styles.actionBarLabel, { color: colors.foreground }]}>Share</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionBarBtn, { backgroundColor: colors.card }]}
+          onPress={() => {
+            Alert.alert(
+              trip.countryName,
+              undefined,
+              [
+                {
+                  text: trip.status === 'planned' ? 'Mark as Done' : 'Mark as Planned',
+                  onPress: () => {
+                    // Status toggle would go here via mutation
+                  },
+                },
+                { text: 'Cancel', style: 'cancel' },
+              ],
+            );
+          }}
+          activeOpacity={0.8}
+        >
+          <MoreHorizontal size={20} color={colors.textSecondary} />
+          <Text style={[styles.actionBarLabel, { color: colors.foreground }]}>More</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Booking sheets */}
       <AddBookingSheet ref={addBookingRef} />
@@ -1402,5 +1449,28 @@ const styles = StyleSheet.create({
   emptyTabText: {
     fontFamily: FontFamily.serif,
     fontSize: FontSize.sm,
+  },
+  // Action bar
+  actionBar: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  actionBarBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+  },
+  actionBarLabel: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
