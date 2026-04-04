@@ -6,6 +6,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -38,7 +40,11 @@ const detailsKeyForType = (type: BookingType): string => {
 const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
   ({ onBookingCreated }, ref) => {
     const { colors, isDark } = useTheme();
+    const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+
+    // Max sheet height: screen height minus status bar / Dynamic Island area
+    const maxSheetHeight = Dimensions.get('window').height - insets.top - 10;
 
     // ── State ────────────────────────────────────────────────────────
     const [step, setStep] = useState<'type' | 'form'>('type');
@@ -166,7 +172,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       <BottomSheetModal
         ref={bottomSheetRef}
         enableDynamicSizing={true}
-        maxDynamicContentSize={700}
+        maxDynamicContentSize={maxSheetHeight}
         backgroundStyle={{ backgroundColor: sheetBg }}
         handleIndicatorStyle={{ backgroundColor: handleColor }}
         onDismiss={resetState}
