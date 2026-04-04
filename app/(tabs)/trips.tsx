@@ -16,6 +16,7 @@ import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useOfflineMutation } from '@/hooks/use-offline-mutation';
 import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
+import { Id } from '@/convex/_generated/dataModel';
 import { Plane, Trash2, Check, Globe, Clock, Wallet, MoveRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
@@ -130,7 +131,7 @@ export default function TripsScreen() {
             style: 'destructive',
             onPress: async () => {
               setDeletingId(id);
-              await deleteTrip({ id });
+              await deleteTrip({ id: id as Id<'trips'> });
               setDeletingId(null);
             },
           },

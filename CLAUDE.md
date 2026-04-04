@@ -3,6 +3,8 @@
 ## TypeScript Guidelines
 
 - Never use `any`. Use `unknown` when the type is not known, then narrow with type guards.
+- Prefer explicit type annotations over implicit `any` from untyped libraries.
+- Use Convex's `Id<"tableName">` and `Doc<"tableName">` types for document references.
 
 <!-- convex-ai-start -->
 This project uses [Convex](https://convex.dev) as its backend.

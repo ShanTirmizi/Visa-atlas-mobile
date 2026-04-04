@@ -44,7 +44,7 @@ export default function InviteScreen() {
         tripId: tripId as Id<'trips'>,
         role,
       });
-      const deepLink = `visaatlas://invite/${result.code}`;
+      const deepLink = `visaatlas://invite/${result.inviteCode}`;
       await Share.share({
         message: `Join my trip on Visa Atlas! ${deepLink}`,
         url: deepLink,

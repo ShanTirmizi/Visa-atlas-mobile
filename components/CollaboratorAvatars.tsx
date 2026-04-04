@@ -132,7 +132,7 @@ export function CollaboratorAvatars({
             ]}
           >
             <Avatar
-              name={c.userName}
+              name={c.userName ?? 'Unknown'}
               imageUrl={c.userImage}
               size={AVATAR_SIZE - 2}
               isOnline={onlineIds.has(c.userId)}

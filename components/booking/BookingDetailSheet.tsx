@@ -54,7 +54,7 @@ export interface BookingDetailData {
   startDate: string;
   endDate?: string;
   location?: string;
-  provider: string;
+  provider?: string;
   status: BookingStatus;
   confirmationNumber?: string;
   cost?: number;
@@ -302,7 +302,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
               },
             ]}
           >
-            <InfoRow label="Provider" value={booking.provider} colors={colors} />
+            {booking.provider && <InfoRow label="Provider" value={booking.provider} colors={colors} />}
 
             {formattedCost && (
               <InfoRow label="Cost" value={formattedCost} colors={colors} />

@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { requireAuth } from "./lib/auth";
 
 export const getByProvider = query({
   args: { provider: v.union(v.literal("gmail"), v.literal("outlook")) },
@@ -43,7 +44,8 @@ export const upsertAccount = mutation({
       });
       return existing._id;
     }
-    return await ctx.db.insert("emailAccounts", { ...args, isConnected: true });
+    const userId = await requireAuth(ctx);
+    return await ctx.db.insert("emailAccounts", { ...args, isConnected: true, userId });
   },
 });
 
@@ -64,7 +66,7 @@ export const updateTokens = mutation({
 export const updateScanState = mutation({
   args: {
     id: v.id("emailAccounts"),
-    lastScanTime: v.string(),
+    lastScanTime: v.number(),
     lastScanMessageId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {

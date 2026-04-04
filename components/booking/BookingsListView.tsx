@@ -223,7 +223,7 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
             startDate={item.startDate}
             endDate={item.endDate}
             location={item.location}
-            provider={item.provider}
+            provider={item.provider ?? ''}
             status={item.status as any}
             tripName={getTripName(item.tripId)}
             autoMatched={item.autoMatched}

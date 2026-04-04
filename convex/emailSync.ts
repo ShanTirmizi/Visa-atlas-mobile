@@ -538,7 +538,7 @@ export const scanGmail = action({
       if (messages.length === 0) {
         await ctx.runMutation(api.emailAccounts.updateScanState, {
           id: account._id,
-          lastScanTime: new Date().toISOString(),
+          lastScanTime: Date.now(),
         });
         return { imported: 0, reviewed: 0, error: null };
       }
@@ -628,7 +628,7 @@ export const scanGmail = action({
       // 12. Update scan state
       await ctx.runMutation(api.emailAccounts.updateScanState, {
         id: account._id,
-        lastScanTime: new Date().toISOString(),
+        lastScanTime: Date.now(),
         lastScanMessageId: lastMessageId,
       });
 
