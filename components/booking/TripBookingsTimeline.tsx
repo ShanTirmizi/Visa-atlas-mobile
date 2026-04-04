@@ -6,7 +6,7 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
-import { BOOKING_TYPES, type BookingType, formatBookingDates } from '@/constants/bookings';
+import { BOOKING_TYPES, type BookingType, getBookingColor, formatBookingDates } from '@/constants/bookings';
 
 const MAX_VISIBLE = 4;
 
@@ -17,18 +17,8 @@ interface TripBookingsTimelineProps {
 }
 
 export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBooking }: TripBookingsTimelineProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [showAll, setShowAll] = useState(false);
-
-  // Ensure no booking card color matches the section background (colors.primary/teal)
-  const BOOKING_TYPE_THEME_COLORS: Record<string, string> = {
-    flight: colors.accent,     // orange
-    hotel: colors.warning,     // gold
-    experience: colors.secondary, // green
-    car_rental: '#D95E8A',     // pink — used in itinerary day cards
-    insurance: '#8B5CF6',      // purple — no theme token, unique to insurance
-    restaurant: colors.danger, // red
-  };
 
   const bookings = useQuery(api.bookings.listBookingsByTrip, { tripId: tripId as Id<'trips'> });
 
@@ -76,7 +66,7 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
           {visible.map((booking) => {
             const type = booking.type as BookingType;
             const config = BOOKING_TYPES[type];
-            const cardColor = BOOKING_TYPE_THEME_COLORS[type] ?? colors.primary;
+            const cardColor = getBookingColor(type, isDark);
             const Icon = config.icon;
 
             return (

@@ -19,7 +19,7 @@ import {
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { Copy, Trash2, Unlink, MapPin, Plane } from 'lucide-react-native';
+import { Copy, Trash2, Unlink, Link2, MapPin, Plane } from 'lucide-react-native';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
@@ -153,6 +153,7 @@ interface FlightBoardingPassProps {
   onCopyConfirmation: () => void;
   onDelete: () => void;
   onUnlink: () => void;
+  onLinkTrip?: () => void;
 }
 
 function FlightBoardingPass({
@@ -167,6 +168,7 @@ function FlightBoardingPass({
   onCopyConfirmation,
   onDelete,
   onUnlink,
+  onLinkTrip,
 }: FlightBoardingPassProps) {
   const details = booking.typeDetails ?? {};
   const airline = details.airline ?? booking.title;
@@ -363,6 +365,15 @@ function FlightBoardingPass({
           >
             <Unlink size={15} color="#FFFFFF" />
             <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Unlink</Text>
+          </TouchableOpacity>
+        ) : onLinkTrip ? (
+          <TouchableOpacity
+            onPress={onLinkTrip}
+            activeOpacity={0.7}
+            style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+          >
+            <Link2 size={15} color="#FFFFFF" />
+            <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Link to Trip</Text>
           </TouchableOpacity>
         ) : null}
 

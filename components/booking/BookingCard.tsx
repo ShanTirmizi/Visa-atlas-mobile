@@ -44,16 +44,8 @@ export default function BookingCard({
   const typeColor = getBookingColor(type, isDark);
   const Icon = config.icon;
 
-  // Use theme colors for card backgrounds (matching trip detail bookings)
-  const CARD_COLORS: Record<string, string> = {
-    flight: colors.accent,
-    hotel: colors.warning,
-    experience: colors.secondary,
-    car_rental: '#D95E8A',
-    insurance: '#8B5CF6',
-    restaurant: colors.danger,
-  };
-  const cardBg = CARD_COLORS[type] ?? typeColor;
+  // Card background matches the bottom sheet color for that booking type
+  const cardBg = typeColor;
 
   const isCancelled = status === 'cancelled';
   const isCompleted = status === 'completed';

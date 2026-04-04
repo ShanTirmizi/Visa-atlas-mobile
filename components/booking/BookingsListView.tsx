@@ -194,10 +194,10 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
               <View
                 style={[
                   styles.unassignedBanner,
-                  { backgroundColor: colors.warningBg },
+                  { backgroundColor: colors.accent },
                 ]}
               >
-                <Text style={[styles.unassignedText, { color: colors.foreground }]}>
+                <Text style={[styles.unassignedText, { color: '#FFFFFF' }]}>
                   {unassigned.length} unassigned booking
                   {unassigned.length !== 1 ? 's' : ''}
                 </Text>
@@ -309,8 +309,8 @@ const styles = StyleSheet.create({
   unassignedBanner: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    borderRadius: Radius.sm,
-    marginBottom: Spacing.xs,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.sm,
   },
   unassignedText: {
     fontFamily: FontFamily.condensedMedium,
