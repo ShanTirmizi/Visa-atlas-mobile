@@ -41,20 +41,20 @@ export default function BookingTypePicker({ onSelect, onScanComplete }: BookingT
                 styles.tile,
                 Shadows.subtle,
                 {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
+                  backgroundColor: typeColor,
+                  borderColor: 'transparent',
                 },
               ]}
             >
               <View
                 style={[
                   styles.iconCircle,
-                  { backgroundColor: typeColor + '22' },
+                  { backgroundColor: 'rgba(255,255,255,0.2)' },
                 ]}
               >
-                <Icon size={24} color={typeColor} />
+                <Icon size={24} color="#FFFFFF" />
               </View>
-              <Text style={[styles.label, { color: colors.foreground }]}>
+              <Text style={[styles.label, { color: '#FFFFFF' }]}>
                 {config.label}
               </Text>
             </TouchableOpacity>
