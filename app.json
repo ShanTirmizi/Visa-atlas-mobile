@@ -37,7 +37,8 @@
           "origin": "https://visa-atlas.vercel.app"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-secure-store"
     ]
   }
 }
