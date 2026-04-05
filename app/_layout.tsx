@@ -115,6 +115,8 @@ function ThemedApp() {
         <Stack.Screen name="more/settings" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="more/calendar" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="more/email" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="more/privacy-policy" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="more/terms" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
         <Stack.Screen name="sign-in-email" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="email-connected" options={{ animation: 'none' }} />

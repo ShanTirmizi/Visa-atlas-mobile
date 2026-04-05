@@ -9,9 +9,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Trash2, Info, LogOut, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Info, LogOut, ChevronRight, Download, UserX, FileText, Shield } from 'lucide-react-native';
 import { useAuthActions } from '@convex-dev/auth/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
@@ -22,6 +26,8 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { setHeldVisas } = useVisa();
   const { signOut } = useAuthActions();
+  const deleteAccount = useMutation(api.account.deleteAccount);
+  const userData = useQuery(api.account.exportUserData);
 
   return (
     <ScrollView
@@ -82,6 +88,82 @@ export default function SettingsScreen() {
         <ChevronRight color="#FFFFFF" size={18} />
       </TouchableOpacity>
 
+      {/* Export My Data */}
+      <TouchableOpacity
+        style={[
+          styles.settingRow,
+          { backgroundColor: colors.info, borderWidth: 0 },
+        ]}
+        onPress={async () => {
+          try {
+            if (!userData) {
+              Alert.alert('Export', 'Loading your data, please try again in a moment.');
+              return;
+            }
+            const json = JSON.stringify(userData, null, 2);
+            const fileUri = `${FileSystem.documentDirectory}visa-atlas-export.json`;
+            await FileSystem.writeAsStringAsync(fileUri, json);
+            await Sharing.shareAsync(fileUri, {
+              mimeType: 'application/json',
+              dialogTitle: 'Export Your Data',
+            });
+          } catch {
+            Alert.alert('Export Failed', 'Could not export your data. Please try again.');
+          }
+        }}
+      >
+        <View style={styles.settingInfo}>
+          <Download color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+            Export My Data
+          </Text>
+        </View>
+        <ChevronRight color="#FFFFFF" size={18} />
+      </TouchableOpacity>
+
+      {/* Delete Account */}
+      <TouchableOpacity
+        style={[
+          styles.settingRow,
+          { backgroundColor: colors.danger, borderWidth: 0 },
+        ]}
+        onPress={() => {
+          Alert.alert(
+            'Delete Account',
+            'This will permanently delete your account and ALL your data (trips, bookings, visa guides, email connections, messages). This action cannot be undone.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete Everything',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await deleteAccount({});
+                    await AsyncStorage.multiRemove([
+                      '@visa_atlas_held_visas',
+                      '@visa_atlas_favorites',
+                      '@visa_atlas_visited',
+                      '@visa_atlas_expiry_dates',
+                    ]);
+                    signOut();
+                  } catch {
+                    Alert.alert('Error', 'Failed to delete account. Please try again.');
+                  }
+                },
+              },
+            ],
+          );
+        }}
+      >
+        <View style={styles.settingInfo}>
+          <UserX color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+            Delete Account
+          </Text>
+        </View>
+        <ChevronRight color="#FFFFFF" size={18} />
+      </TouchableOpacity>
+
       {/* About */}
       <View
         style={[
@@ -99,6 +181,43 @@ export default function SettingsScreen() {
           1.0.0
         </Text>
       </View>
+
+      {/* Legal */}
+      <Text style={[styles.legalHeading, { color: colors.textSecondary }]}>
+        Legal
+      </Text>
+
+      <TouchableOpacity
+        style={[
+          styles.settingRow,
+          { backgroundColor: colors.primary, borderWidth: 0 },
+        ]}
+        onPress={() => router.push('/more/privacy-policy' as any)}
+      >
+        <View style={styles.settingInfo}>
+          <Shield color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+            Privacy Policy
+          </Text>
+        </View>
+        <ChevronRight color="#FFFFFF" size={18} />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[
+          styles.settingRow,
+          { backgroundColor: colors.primary, borderWidth: 0 },
+        ]}
+        onPress={() => router.push('/more/terms' as any)}
+      >
+        <View style={styles.settingInfo}>
+          <FileText color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+            Terms of Service
+          </Text>
+        </View>
+        <ChevronRight color="#FFFFFF" size={18} />
+      </TouchableOpacity>
 
       {/* Sign Out */}
       <TouchableOpacity
@@ -169,5 +288,11 @@ const styles = StyleSheet.create({
   settingValue: {
     fontFamily: FontFamily.serif,
     fontSize: FontSize.sm,
+  },
+  legalHeading: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: FontSize.base,
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.sm,
   },
 });

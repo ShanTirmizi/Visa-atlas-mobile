@@ -194,7 +194,20 @@ export default function SignInScreen() {
 
       {/* Footer */}
       <Text style={[styles.footer, { color: colors.textMuted }]}>
-        By continuing, you agree to our Terms of Service
+        By continuing, you agree to our{' '}
+        <Text
+          style={[styles.footerLink, { color: colors.primary }]}
+          onPress={() => router.push('/more/terms' as any)}
+        >
+          Terms of Service
+        </Text>
+        {' '}and{' '}
+        <Text
+          style={[styles.footerLink, { color: colors.primary }]}
+          onPress={() => router.push('/more/privacy-policy' as any)}
+        >
+          Privacy Policy
+        </Text>
       </Text>
     </View>
   );
@@ -338,5 +351,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     marginTop: Spacing.lg,
+  },
+  footerLink: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 11,
+    textDecorationLine: 'underline',
   },
 });
