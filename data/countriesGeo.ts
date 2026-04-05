@@ -1,6 +1,6 @@
 import { feature } from 'topojson-client';
 import type { Topology } from 'topojson-specification';
-import type { FeatureCollection, MultiPolygon, Polygon } from 'geojson';
+import type { FeatureCollection, MultiPolygon, Polygon, Position } from 'geojson';
 
 // world-atlas 110m resolution — ~300KB
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -50,9 +50,206 @@ const NUMERIC_TO_ALPHA3: Record<string, string> = {
   '275': 'PSE', '304': 'GRL', '540': 'NCL',
 };
 
+// ──────────────────────────────────────────────────────
+// Geometry fixes for MapLibre GL rendering
+// ──────────────────────────────────────────────────────
+// The world-atlas TopoJSON uses D3's spherical convention (CW = exterior ring).
+// MapLibre GL follows RFC 7946 (CCW = exterior ring on the Cartesian plane).
+// Without rewinding, MapLibre treats every country polygon as a "hole",
+// causing horizontal band artifacts across the entire map.
+//
+// Additionally, Russia, Fiji, and Antarctica cross the antimeridian (±180° longitude).
+// MapLibre cannot render polygons that wrap around the date line — it draws
+// a straight line connecting the east and west edges instead.
+// We split those polygons at the antimeridian into separate east/west halves.
+// ──────────────────────────────────────────────────────
+
+/**
+ * Enforce RFC 7946 winding order on all polygon rings.
+ * Outer rings become counter-clockwise, inner rings clockwise
+ * (on the Cartesian / projected plane), which is what MapLibre expects.
+ *
+ * Based on @mapbox/geojson-rewind (MIT), inlined to avoid untyped dependency.
+ */
+function rewindRing(ring: Position[], dir: boolean): void {
+  let area = 0;
+  let err = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const k = (ring[i][0] - ring[j][0]) * (ring[j][1] + ring[i][1]);
+    const m = area + k;
+    err += Math.abs(area) >= Math.abs(k) ? area - m + k : k - m + area;
+    area = m;
+  }
+  if (area + err >= 0 !== !!dir) ring.reverse();
+}
+
+function rewindPolygonRings(rings: Position[][], outer: boolean): void {
+  if (rings.length === 0) return;
+  rewindRing(rings[0], outer);
+  for (let i = 1; i < rings.length; i++) {
+    rewindRing(rings[i], !outer);
+  }
+}
+
+function rewindFeatureCollection(
+  fc: FeatureCollection<Polygon | MultiPolygon>,
+): void {
+  for (const feat of fc.features) {
+    const geom = feat.geometry;
+    if (geom.type === 'Polygon') {
+      rewindPolygonRings(geom.coordinates, false);
+    } else if (geom.type === 'MultiPolygon') {
+      for (const poly of geom.coordinates) {
+        rewindPolygonRings(poly, false);
+      }
+    }
+  }
+}
+
+/**
+ * Split a polygon ring that crosses the antimeridian (±180° longitude)
+ * into separate east-hemisphere and west-hemisphere polygons.
+ *
+ * Returns the original polygon wrapped in an array if it doesn't cross,
+ * or two polygon coordinate arrays (east and west halves) if it does.
+ */
+function splitPolygonAtAntimeridian(
+  polyCoords: Position[][],
+): Position[][][] {
+  const ring = polyCoords[0]; // outer ring
+
+  // Detect if any edge jumps more than 180° in longitude
+  let hasCrossing = false;
+  for (let i = 1; i < ring.length; i++) {
+    if (Math.abs(ring[i][0] - ring[i - 1][0]) > 180) {
+      hasCrossing = true;
+      break;
+    }
+  }
+  if (!hasCrossing) return [polyCoords];
+
+  const eastParts: Position[][] = [];
+  const westParts: Position[][] = [];
+  let currentEast: Position[] = [];
+  let currentWest: Position[] = [];
+
+  for (let i = 0; i < ring.length - 1; i++) {
+    const curr = ring[i];
+    const next = ring[i + 1];
+
+    // Add current vertex to the appropriate side
+    if (curr[0] >= 0) {
+      currentEast.push(curr);
+    } else {
+      currentWest.push(curr);
+    }
+
+    // Check if the edge to the next vertex crosses the antimeridian
+    if (Math.abs(next[0] - curr[0]) > 180) {
+      // Interpolate the latitude at the ±180° crossing
+      if (curr[0] >= 0) {
+        // East → West crossing
+        const dLng = 180 - curr[0] + (180 + next[0]);
+        const crossLat =
+          dLng === 0
+            ? (curr[1] + next[1]) / 2
+            : curr[1] + ((180 - curr[0]) / dLng) * (next[1] - curr[1]);
+        currentEast.push([180, crossLat]);
+        if (currentEast.length > 0) eastParts.push(currentEast);
+        currentEast = [];
+        currentWest.push([-180, crossLat]);
+      } else {
+        // West → East crossing
+        const dLng = 180 + curr[0] + (180 - next[0]);
+        const crossLat =
+          dLng === 0
+            ? (curr[1] + next[1]) / 2
+            : curr[1] +
+              ((-180 - curr[0]) / -dLng) * (next[1] - curr[1]);
+        currentWest.push([-180, crossLat]);
+        if (currentWest.length > 0) westParts.push(currentWest);
+        currentWest = [];
+        currentEast.push([180, crossLat]);
+      }
+    }
+  }
+
+  // Flush remaining segments
+  if (currentEast.length > 0) eastParts.push(currentEast);
+  if (currentWest.length > 0) westParts.push(currentWest);
+
+  // Merge all segments on each side into closed rings
+  const results: Position[][][] = [];
+
+  const allEast = eastParts.flat();
+  if (allEast.length > 2) {
+    if (
+      allEast[0][0] !== allEast[allEast.length - 1][0] ||
+      allEast[0][1] !== allEast[allEast.length - 1][1]
+    ) {
+      allEast.push([...allEast[0]]);
+    }
+    results.push([allEast]);
+  }
+
+  const allWest = westParts.flat();
+  if (allWest.length > 2) {
+    if (
+      allWest[0][0] !== allWest[allWest.length - 1][0] ||
+      allWest[0][1] !== allWest[allWest.length - 1][1]
+    ) {
+      allWest.push([...allWest[0]]);
+    }
+    results.push([allWest]);
+  }
+
+  return results.length > 0 ? results : [polyCoords];
+}
+
+/**
+ * Process an entire FeatureCollection, splitting any polygons that
+ * cross the antimeridian into multiple polygons.
+ */
+function splitAntimeridianCrossings(
+  fc: FeatureCollection<Polygon | MultiPolygon>,
+): FeatureCollection<Polygon | MultiPolygon> {
+  const features = fc.features.map((feat) => {
+    const geom = feat.geometry;
+    if (geom.type === 'Polygon') {
+      const splits = splitPolygonAtAntimeridian(geom.coordinates);
+      if (splits.length === 1) return feat;
+      return {
+        ...feat,
+        geometry: {
+          type: 'MultiPolygon' as const,
+          coordinates: splits,
+        },
+      };
+    } else if (geom.type === 'MultiPolygon') {
+      const allPolys: Position[][][] = [];
+      for (const poly of geom.coordinates) {
+        allPolys.push(...splitPolygonAtAntimeridian(poly));
+      }
+      return {
+        ...feat,
+        geometry: {
+          type: 'MultiPolygon' as const,
+          coordinates: allPolys,
+        },
+      };
+    }
+    return feat;
+  });
+  return { ...fc, features };
+}
+
 /**
  * Returns a GeoJSON FeatureCollection of world countries
  * with ISO alpha-3 codes as the `iso_a3` property on each feature.
+ *
+ * The geometry is post-processed to:
+ * 1. Fix polygon winding order for MapLibre GL (RFC 7946 CCW outer rings)
+ * 2. Split polygons at the antimeridian (Russia, Fiji, Antarctica)
  */
 export function getCountriesGeoJSON(): FeatureCollection<Polygon | MultiPolygon> {
   const countriesObject = worldTopology.objects.countries;
@@ -60,7 +257,20 @@ export function getCountriesGeoJSON(): FeatureCollection<Polygon | MultiPolygon>
 
   const geo = feature(worldTopology, countriesObject) as FeatureCollection<Polygon | MultiPolygon>;
 
-  for (const feat of geo.features) {
+  // Fix winding order: D3/TopoJSON uses CW exterior rings (spherical),
+  // but MapLibre expects CCW exterior rings (RFC 7946 / Cartesian plane).
+  rewindFeatureCollection(geo);
+
+  // Split polygons that cross the ±180° antimeridian into east/west halves.
+  // Without this, MapLibre draws a line straight across the map connecting
+  // the eastern and western edges of these countries.
+  const split = splitAntimeridianCrossings(geo);
+
+  // Re-apply winding after split (splitting can produce inverted rings)
+  rewindFeatureCollection(split);
+
+  // Attach ISO alpha-3 codes
+  for (const feat of split.features) {
     const numericId = feat.id as string;
     feat.properties = {
       ...feat.properties,
@@ -68,5 +278,5 @@ export function getCountriesGeoJSON(): FeatureCollection<Polygon | MultiPolygon>
     };
   }
 
-  return geo;
+  return split;
 }
