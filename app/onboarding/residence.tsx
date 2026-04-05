@@ -124,7 +124,7 @@ export default function ResidencePickerScreen() {
           Where do you live?
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          This helps us find the right embassies and processing times
+          Your residence affects where you apply for visas and which benefits you qualify for
         </Text>
       </View>
 
