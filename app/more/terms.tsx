@@ -263,7 +263,7 @@ export default function TermsScreen() {
           If you have questions about these Terms of Service or need support,
           please contact us at:
         </P>
-        <P colors={colors}>support@tirmazilabs.com</P>
+        <P colors={colors}>shan@tirmizilabs.com</P>
       </Section>
     </ScrollView>
   );

@@ -240,7 +240,7 @@ export default function PrivacyPolicyScreen() {
           If you have questions or requests regarding this Privacy Policy or
           your personal data, please contact us at:
         </P>
-        <P colors={colors}>privacy@tirmazilabs.com</P>
+        <P colors={colors}>shan@tirmizilabs.com</P>
       </Section>
     </ScrollView>
   );

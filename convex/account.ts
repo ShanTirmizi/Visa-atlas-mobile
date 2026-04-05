@@ -1,5 +1,4 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
 import { requireAuth } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
