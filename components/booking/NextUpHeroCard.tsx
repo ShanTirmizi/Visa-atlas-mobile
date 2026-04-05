@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Radius, Shadows } from '@/constants/theme';
 import {
@@ -119,21 +118,11 @@ export default function NextUpHeroCard({
     };
   }, [type, startDate, endDate, typeDetails, location, cost, currency]);
 
-  // Gradient colors: light tint of type → secondary warm tint
-  const gradientLight = getTintedBackground(type, false);
-  const gradientEnd = isDark ? 'rgba(30, 20, 40, 0.8)' : '#E8D5F5';
-  const gradientStart = isDark ? getTintedBackground(type, true) : gradientLight;
-
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
       <View style={[styles.container, Shadows.card]}>
-        {/* Top: gradient header */}
-        <LinearGradient
-          colors={[gradientStart, gradientEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
+        {/* Top: tinted header */}
+        <View style={[styles.header, { backgroundColor: getTintedBackground(type, isDark) }]}>
           <View style={styles.headerTop}>
             <Text style={[styles.nextUpLabel, { color: isDark ? '#8B949E' : '#6B7280' }]}>
               NEXT UP
@@ -164,7 +153,7 @@ export default function NextUpHeroCard({
               ) : null}
             </View>
           </View>
-        </LinearGradient>
+        </View>
 
         {/* Bottom: detail row */}
         <View style={[styles.detailRow, { backgroundColor: isDark ? '#161B22' : '#FFFFFF' }]}>
