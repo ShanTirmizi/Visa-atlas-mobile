@@ -21,6 +21,7 @@ const KEYS = {
   passports: '@visa_atlas_passports',
   visaMap: '@visa_atlas_visa_map',
   onboarded: '@visa_atlas_onboarded',
+  residence: '@visa_atlas_residence',
 } as const;
 
 // ──────────────────────────────────────────────
@@ -80,6 +81,11 @@ interface VisaContextValue {
   setVisaMap: (map: CountryVisa[]) => void;
   /** Set onboarding completion */
   setOnboarded: (value: boolean) => void;
+
+  /** Country code where user lives */
+  residence: string | null;
+  /** Set residence country code */
+  setResidence: (code: string | null) => void;
 }
 
 // ──────────────────────────────────────────────
@@ -143,6 +149,7 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
   const [passports, setPassportsState] = useState<string[]>([]);
   const [visaMapData, setVisaMapState] = useState<CountryVisa[] | null>(null);
   const [onboarded, setOnboardedState] = useState(false);
+  const [residence, setResidenceState] = useState<string | null>(null);
 
   // Load all persisted data on mount
   useEffect(() => {
@@ -154,7 +161,8 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.getItem(KEYS.passports),
       AsyncStorage.getItem(KEYS.visaMap),
       AsyncStorage.getItem(KEYS.onboarded),
-    ]).then(([h, f, v, e, passportsRaw, visaMapRaw, onboardedRaw]) => {
+      AsyncStorage.getItem(KEYS.residence),
+    ]).then(([h, f, v, e, passportsRaw, visaMapRaw, onboardedRaw, residenceRaw]) => {
       setHeldVisasState(h);
       setFavoritesState(f);
       setVisitedState(v);
@@ -167,6 +175,7 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
         try { setVisaMapState(JSON.parse(visaMapRaw)); } catch {}
       }
       if (onboardedRaw === 'true') setOnboardedState(true);
+      if (residenceRaw) setResidenceState(residenceRaw);
 
       setLoaded(true);
     });
@@ -240,6 +249,15 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(KEYS.onboarded, String(value));
   }, []);
 
+  const setResidence = useCallback((code: string | null) => {
+    setResidenceState(code);
+    if (code) {
+      AsyncStorage.setItem(KEYS.residence, code);
+    } else {
+      AsyncStorage.removeItem(KEYS.residence);
+    }
+  }, []);
+
   // ── Expiry Dates ──
 
   const setExpiryDate = useCallback(
@@ -291,6 +309,8 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       setPassports,
       setVisaMap,
       setOnboarded,
+      residence,
+      setResidence,
     }),
     [
       heldVisas,
@@ -313,6 +333,8 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       setPassports,
       setVisaMap,
       setOnboarded,
+      residence,
+      setResidence,
     ],
   );
 
