@@ -292,8 +292,11 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
           }),
         });
         if (!res.ok) throw new Error('Search failed');
-        const data: { pick: string; reason: string } = await res.json();
-        setResult({ code: data.pick, reason: data.reason });
+        const data = await res.json();
+        // API returns { pick: { code, name, ... } | null, reason: string }
+        const pickCode = typeof data.pick === 'string' ? data.pick : data.pick?.code;
+        if (!pickCode) throw new Error('No destination found');
+        setResult({ code: pickCode, reason: data.reason || '' });
         setStep('reveal');
       } catch {
         setError('Something went wrong. Please try again.');
