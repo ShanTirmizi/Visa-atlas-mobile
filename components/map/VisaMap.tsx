@@ -108,19 +108,19 @@ export function VisaMap({
   // Build the fillOpacity expression
   const fillOpacityExpression = useMemo(() => {
     if (activeFilters.size === 0) {
-      // No filters — all countries at 0.7
-      return 0.7;
+      // No filters — all countries at full opacity
+      return 0.9;
     }
-    // With filters — matching 0.7, non-matching 0.08
+    // With filters — matching full, non-matching dimmed
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     for (const [code, entry] of countryLookup) {
       if (activeFilters.has(entry.categoryKey)) {
-        expr.push(code, 0.7);
+        expr.push(code, 0.9);
       } else {
-        expr.push(code, 0.08);
+        expr.push(code, 0.1);
       }
     }
-    expr.push(0.08); // default for unknown countries
+    expr.push(0.1); // default for unknown countries
     return expr;
   }, [countryLookup, activeFilters]);
 
@@ -230,6 +230,7 @@ export function VisaMap({
             style={{
               fillColor: fillColorExpression as unknown as string,
               fillOpacity: fillOpacityExpression as unknown as number,
+              fillAntialias: true,
             }}
           />
           <MapLibreGL.LineLayer
