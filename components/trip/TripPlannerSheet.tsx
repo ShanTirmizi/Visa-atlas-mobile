@@ -131,6 +131,45 @@ function usePlaneAnimation(isActive: boolean) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// TypingDots
+// ════════════════════════════════════════════════════════════════════════
+function TypingDots({ color }: { color: string }) {
+  const dot1 = useSharedValue(0.4);
+  const dot2 = useSharedValue(0.4);
+  const dot3 = useSharedValue(0.4);
+
+  useEffect(() => {
+    const anim = (sv: { value: number }, delay: number) => {
+      sv.value = withRepeat(
+        withSequence(
+          withTiming(0.4, { duration: delay }),
+          withTiming(1, { duration: 400, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0.4, { duration: 400, easing: Easing.inOut(Easing.ease) }),
+        ),
+        -1,
+      );
+    };
+    anim(dot1, 0);
+    anim(dot2, 200);
+    anim(dot3, 400);
+  }, [dot1, dot2, dot3]);
+
+  const s1 = useAnimatedStyle(() => ({ transform: [{ scale: dot1.value }], opacity: dot1.value }));
+  const s2 = useAnimatedStyle(() => ({ transform: [{ scale: dot2.value }], opacity: dot2.value }));
+  const s3 = useAnimatedStyle(() => ({ transform: [{ scale: dot3.value }], opacity: dot3.value }));
+
+  const dotStyle = { width: 6, height: 6, borderRadius: 3, backgroundColor: color };
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 8, marginTop: Spacing.lg }}>
+      <Animated.View style={[dotStyle, s1]} />
+      <Animated.View style={[dotStyle, s2]} />
+      <Animated.View style={[dotStyle, s3]} />
+    </View>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // TripPlannerSheet
 // ════════════════════════════════════════════════════════════════════════
 const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
@@ -588,6 +627,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               >
                 {LOAD_MSGS[tick % LOAD_MSGS.length]}
               </Animated.Text>
+
+              {/* Typing dots */}
+              <TypingDots color={colors.primary} />
             </View>
           )}
         </BottomSheetScrollView>
