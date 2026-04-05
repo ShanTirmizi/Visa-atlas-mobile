@@ -7,6 +7,7 @@ import React, {
   useMemo,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { visaData, type CountryVisa } from '@/data/visaData';
 
 // ──────────────────────────────────────────────
 // Storage keys
@@ -17,6 +18,9 @@ const KEYS = {
   favorites: '@visa_atlas_favorites',
   visited: '@visa_atlas_visited',
   expiryDates: '@visa_atlas_expiry_dates',
+  passports: '@visa_atlas_passports',
+  visaMap: '@visa_atlas_visa_map',
+  onboarded: '@visa_atlas_onboarded',
 } as const;
 
 // ──────────────────────────────────────────────
@@ -62,6 +66,20 @@ interface VisaContextValue {
 
   /** Whether the initial load from AsyncStorage has completed */
   loaded: boolean;
+
+  /** User's passport country codes */
+  passports: string[];
+  /** AI-generated visa data for user's passport, or null if not yet generated */
+  visaMap: CountryVisa[] | null;
+  /** Whether onboarding has been completed */
+  onboarded: boolean;
+
+  /** Set passport country codes */
+  setPassports: (codes: string[]) => void;
+  /** Set the AI-generated visa map */
+  setVisaMap: (map: CountryVisa[]) => void;
+  /** Set onboarding completion */
+  setOnboarded: (value: boolean) => void;
 }
 
 // ──────────────────────────────────────────────
@@ -122,6 +140,9 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
     {},
   );
   const [loaded, setLoaded] = useState(false);
+  const [passports, setPassportsState] = useState<string[]>([]);
+  const [visaMapData, setVisaMapState] = useState<CountryVisa[] | null>(null);
+  const [onboarded, setOnboardedState] = useState(false);
 
   // Load all persisted data on mount
   useEffect(() => {
@@ -130,11 +151,23 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       loadStringArray(KEYS.favorites),
       loadStringArray(KEYS.visited),
       loadRecord(KEYS.expiryDates),
-    ]).then(([h, f, v, e]) => {
+      AsyncStorage.getItem(KEYS.passports),
+      AsyncStorage.getItem(KEYS.visaMap),
+      AsyncStorage.getItem(KEYS.onboarded),
+    ]).then(([h, f, v, e, passportsRaw, visaMapRaw, onboardedRaw]) => {
       setHeldVisasState(h);
       setFavoritesState(f);
       setVisitedState(v);
       setExpiryDatesState(e);
+
+      if (passportsRaw) {
+        try { setPassportsState(JSON.parse(passportsRaw)); } catch {}
+      }
+      if (visaMapRaw) {
+        try { setVisaMapState(JSON.parse(visaMapRaw)); } catch {}
+      }
+      if (onboardedRaw === 'true') setOnboardedState(true);
+
       setLoaded(true);
     });
   }, []);
@@ -190,6 +223,23 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
     [visited],
   );
 
+  // ── Passports / VisaMap / Onboarded ──
+
+  const setPassports = useCallback((codes: string[]) => {
+    setPassportsState(codes);
+    AsyncStorage.setItem(KEYS.passports, JSON.stringify(codes));
+  }, []);
+
+  const setVisaMap = useCallback((map: CountryVisa[]) => {
+    setVisaMapState(map);
+    AsyncStorage.setItem(KEYS.visaMap, JSON.stringify(map));
+  }, []);
+
+  const setOnboarded = useCallback((value: boolean) => {
+    setOnboardedState(value);
+    AsyncStorage.setItem(KEYS.onboarded, String(value));
+  }, []);
+
   // ── Expiry Dates ──
 
   const setExpiryDate = useCallback(
@@ -235,6 +285,12 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       removeExpiryDate,
       getExpiryDate,
       loaded,
+      passports,
+      visaMap: visaMapData,
+      onboarded,
+      setPassports,
+      setVisaMap,
+      setOnboarded,
     }),
     [
       heldVisas,
@@ -251,6 +307,12 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       removeExpiryDate,
       getExpiryDate,
       loaded,
+      passports,
+      visaMapData,
+      onboarded,
+      setPassports,
+      setVisaMap,
+      setOnboarded,
     ],
   );
 
@@ -269,4 +331,13 @@ export function useVisa(): VisaContextValue {
     throw new Error('useVisa must be used within VisaProvider');
   }
   return context;
+}
+
+/**
+ * Returns the AI-generated visa data if available, falling back to hardcoded data.
+ * Components should use this instead of importing visaData directly.
+ */
+export function useVisaData(): CountryVisa[] {
+  const { visaMap } = useVisa();
+  return visaMap ?? visaData;
 }
