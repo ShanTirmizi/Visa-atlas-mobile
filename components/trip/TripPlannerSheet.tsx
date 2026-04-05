@@ -351,56 +351,31 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                   );
                 })}
 
-                {/* Custom pill */}
-                <TouchableOpacity
-                  onPress={() => {
-                    setDays(null);
-                    setCustomDays('');
+              </View>
+
+              {/* Custom duration input */}
+              <View style={[s.customRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[s.customLabel, { color: colors.textSecondary }]}>
+                  Or custom:
+                </Text>
+                <TextInput
+                  style={[s.customInput, {
+                    borderColor: colors.border,
+                    backgroundColor: colors.surface,
+                    color: colors.foreground,
+                  }]}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  placeholder="Days"
+                  placeholderTextColor={colors.textMuted}
+                  value={customDays}
+                  onChangeText={(t) => {
+                    setCustomDays(t);
+                    const n = parseInt(t);
+                    if (n > 0 && n <= 30) setDays(n);
+                    else if (t === '') setDays(null);
                   }}
-                  activeOpacity={0.7}
-                  style={[
-                    s.durationPill,
-                    {
-                      backgroundColor: customDays && days && !DURATIONS.includes(days)
-                        ? colors.accent : colors.card,
-                      borderColor: customDays && days && !DURATIONS.includes(days)
-                        ? colors.accent : colors.border,
-                    },
-                  ]}
-                >
-                  {customDays ? (
-                    <>
-                      <TextInput
-                        style={[s.durationNumber, {
-                          color: days && !DURATIONS.includes(days) ? '#FFFFFF' : colors.foreground,
-                          padding: 0,
-                          textAlign: 'center',
-                          minWidth: 30,
-                        }]}
-                        keyboardType="number-pad"
-                        maxLength={2}
-                        value={customDays}
-                        autoFocus
-                        onChangeText={(t) => {
-                          setCustomDays(t);
-                          const n = parseInt(t);
-                          if (n > 0 && n <= 30) setDays(n);
-                          else if (t === '') setDays(null);
-                        }}
-                      />
-                      <Text style={[
-                        s.durationLabel,
-                        { color: days && !DURATIONS.includes(days) ? 'rgba(255,255,255,0.85)' : colors.textMuted },
-                      ]}>
-                        DAYS
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={[s.customPillLabel, { color: colors.textMuted }]}>
-                      Custom
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                />
               </View>
 
               {/* Next button */}
@@ -723,9 +698,28 @@ const makeStyles = (colors: ThemeColors) =>
       color: '#FFFFFF',
       letterSpacing: 0.3,
     },
-    customPillLabel: {
+    customRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+      padding: Spacing.md,
+      borderRadius: 20,
+      borderWidth: 1,
+      marginBottom: Spacing.lg,
+    },
+    customLabel: {
       fontFamily: FontFamily.semibold,
       fontSize: FontSize.sm,
+    },
+    customInput: {
+      width: 70,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: Radius.sm,
+      borderWidth: 1,
+      fontFamily: FontFamily.bold,
+      fontSize: FontSize.base,
+      textAlign: 'center',
     },
     nextBtn: {
       alignItems: 'center',
