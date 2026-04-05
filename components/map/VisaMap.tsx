@@ -5,9 +5,9 @@ import { useTheme } from '@/contexts/theme-context';
 import { getVisaCategoryColor, type VisaCategory } from '@/constants/categories';
 import {
   type VisaCategory as DataVisaCategory,
-  visaData,
   resolveCountry,
   type HeldVisaType,
+  type CountryVisa,
 } from '@/data/visaData';
 import { getCountriesGeoJSON } from '@/data/countriesGeo';
 import CountryInfoCard from './CountryInfoCard';
@@ -26,6 +26,7 @@ export interface VisaMapProps {
   onCountrySelect: (code: string) => void;
   selectedCountry?: string | null;
   sheetCollapsed?: boolean;
+  countries: CountryVisa[];
 }
 
 // Map data-layer category names (visa-free) to UI category keys (visa_free)
@@ -71,6 +72,7 @@ export function VisaMap({
   heldVisas,
   onCountrySelect,
   sheetCollapsed = true,
+  countries,
 }: VisaMapProps) {
   const { colors, isDark } = useTheme();
   const [selected, setSelected] = useState<SelectedInfo | null>(null);
@@ -81,7 +83,7 @@ export function VisaMap({
   // Build lookup: code → { categoryKey, name, maxStay }
   const countryLookup = useMemo(() => {
     const lookup = new Map<string, CountryLookupEntry>();
-    for (const country of visaData) {
+    for (const country of countries) {
       const resolved = resolveCountry(country, typedHeldVisas);
       const categoryKey = normalizeCategoryKey(resolved.category);
       lookup.set(country.code, {
@@ -91,7 +93,7 @@ export function VisaMap({
       });
     }
     return lookup;
-  }, [typedHeldVisas]);
+  }, [countries, typedHeldVisas]);
 
   // Build the fillColor expression: ['match', ['get', 'iso_a3'], code1, color1, ..., default]
   const fillColorExpression = useMemo(() => {

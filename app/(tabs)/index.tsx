@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useTheme } from '@/contexts/theme-context';
-import { useVisa } from '@/contexts/visa-context';
+import { useVisa, useVisaData } from '@/contexts/visa-context';
 import {
   FontFamily,
   FontSize,
@@ -18,7 +18,6 @@ import {
   type VisaCategoryConfig,
 } from '@/constants/categories';
 import {
-  visaData,
   resolveCountry,
   type CountryVisa,
   type HeldVisaType,
@@ -64,6 +63,7 @@ export default function ExploreScreen() {
 
   // Context
   const { heldVisas, favorites, visited, toggleFavorite } = useVisa();
+  const dynamicVisaData = useVisaData();
 
   // Convert held visas to the typed set used by resolveCountry
   const heldVisasSet = useMemo(
@@ -75,7 +75,7 @@ export default function ExploreScreen() {
   const filteredCountries = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
 
-    return visaData
+    return dynamicVisaData
       .filter((country: CountryVisa) => {
         // Skip home country
         if (country.code === 'IND') return false;
@@ -97,7 +97,7 @@ export default function ExploreScreen() {
         return true;
       })
       .sort((a: CountryVisa, b: CountryVisa) => a.name.localeCompare(b.name));
-  }, [searchQuery, activeFilters, heldVisasSet]);
+  }, [searchQuery, activeFilters, heldVisasSet, dynamicVisaData]);
 
   // Also build the set for the map (same active filters)
   const mapActiveFilters = activeFilters;
@@ -145,6 +145,7 @@ export default function ExploreScreen() {
           heldVisas={new Set(heldVisas)}
           onCountrySelect={handleCountrySelect}
           sheetCollapsed={sheetIndex === 0}
+          countries={dynamicVisaData}
         />
       </View>
 
