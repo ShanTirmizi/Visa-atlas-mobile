@@ -360,6 +360,21 @@ export function useVisa(): VisaContextValue {
  * Components should use this instead of importing visaData directly.
  */
 export function useVisaData(): CountryVisa[] {
-  const { visaMap } = useVisa();
-  return visaMap ?? visaData;
+  const { visaMap, passports, residence } = useVisa();
+  const base = visaMap ?? visaData;
+
+  // Mark residence and passport countries as "home" (visa-free)
+  const homeCodes = new Set<string>([
+    ...passports,
+    ...(residence ? [residence] : []),
+  ]);
+
+  if (homeCodes.size === 0) return base;
+
+  return base.map((country) => {
+    if (homeCodes.has(country.code) && country.category !== 'visa-free') {
+      return { ...country, category: 'visa-free' as const, notes: 'Home country' };
+    }
+    return country;
+  });
 }
