@@ -12,6 +12,12 @@
 - If a needed color token doesn't exist, add it to the `LightColors` and `DarkColors` objects in `constants/theme.ts`.
 - All colors must come from `useTheme().colors` — no inline hex or rgba values except `#FFFFFF` for white text on colored backgrounds.
 
+## Convex Security Guidelines
+
+- Every public Convex query, mutation, and action MUST call `requireAuth(ctx)` or `checkTripPermission(ctx, ...)` at the top of its handler. No exceptions.
+- After getting the userId from `requireAuth`, always verify ownership before reading or modifying a document (e.g., `if (doc.userId !== userId) throw new Error("...")`).
+- Never accept a userId as a function argument for authorization. Always derive it server-side via `requireAuth`.
+
 ## UI Conventions (follow existing patterns)
 
 - **Back button**: White square, 40x40, `borderRadius: Radius.sm`, `backgroundColor: '#FFFFFF'`, dark arrow icon. See `app/trip/[id].tsx` backBtn style. Always follow this pattern.
