@@ -16,6 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import {
   BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { Plane } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -272,7 +273,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
 
     // ── Backdrop ────────────────────────────────────────────────────
     const renderBackdrop = useCallback(
-      (props: any) => (
+      (props: BottomSheetBackdropProps) => (
         <BottomSheetBackdrop
           {...props}
           disappearsOnIndex={-1}
