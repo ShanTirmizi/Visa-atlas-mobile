@@ -57,6 +57,7 @@ export default function ExploreScreen() {
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const [sheetIndex, setSheetIndex] = useState(0);
 
   // Context
   const { heldVisas, favorites, visited, toggleFavorite } = useVisa();
@@ -140,6 +141,7 @@ export default function ExploreScreen() {
           activeFilters={mapActiveFilters}
           heldVisas={new Set(heldVisas)}
           onCountrySelect={handleCountrySelect}
+          sheetCollapsed={sheetIndex === 0}
         />
       </View>
 
@@ -157,6 +159,7 @@ export default function ExploreScreen() {
           { backgroundColor: colors.textMuted },
         ]}
         enablePanDownToClose={false}
+        onChange={setSheetIndex}
       >
         {/* Sheet header */}
         <View style={styles.sheetHeader}>

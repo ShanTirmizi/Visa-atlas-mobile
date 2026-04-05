@@ -25,6 +25,7 @@ export interface VisaMapProps {
   heldVisas: Set<string>;
   onCountrySelect: (code: string) => void;
   selectedCountry?: string | null;
+  sheetCollapsed?: boolean;
 }
 
 // Map data-layer category names (visa-free) to UI category keys (visa_free)
@@ -69,6 +70,7 @@ export function VisaMap({
   activeFilters,
   heldVisas,
   onCountrySelect,
+  sheetCollapsed = true,
 }: VisaMapProps) {
   const { colors, isDark } = useTheme();
   const [selected, setSelected] = useState<SelectedInfo | null>(null);
@@ -242,7 +244,7 @@ export function VisaMap({
       </MapLibreGL.MapView>
 
       <View style={styles.overlay} pointerEvents="box-none">
-        {selected != null && (
+        {selected != null && sheetCollapsed && (
           <CountryInfoCard
             code={selected.code}
             name={selected.name}
