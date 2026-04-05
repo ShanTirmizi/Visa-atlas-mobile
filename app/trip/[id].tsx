@@ -12,6 +12,7 @@ import {
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedScrollHandler,
   withSpring,
   withTiming,
   interpolate,
@@ -176,7 +177,7 @@ export default function TripDetailScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<Animated.ScrollView>(null);
   const addBookingRef = useRef<AddBookingSheetRef>(null);
   const bookingDetailRef = useRef<BookingDetailSheetRef>(null);
 
@@ -189,6 +190,24 @@ export default function TripDetailScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [fabOpen, setFabOpen] = useState(false);
   const fabProgress = useSharedValue(0);
+
+  // Parallax scroll tracking
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+  const heroImageStyle = useAnimatedStyle(() => ({
+    transform: [{
+      translateY: interpolate(
+        scrollY.value,
+        [-200, 0, 300],
+        [-100, 0, 150],
+        'clamp',
+      ),
+    }],
+  }));
 
   const toggleFab = () => {
     const next = !fabOpen;
@@ -371,48 +390,54 @@ export default function TripDetailScreen() {
   // ─── Render ───────────────────
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView
+      <Animated.ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
         {/* ─── HERO ─── */}
-        <View style={[styles.hero, { paddingTop: insets.top }]}>
+        <View style={styles.heroContainer}>
           {heroImage?.url && (
-            <Image
+            <Animated.Image
               source={{ uri: heroImage.url }}
-              style={StyleSheet.absoluteFillObject}
+              style={[styles.heroImage, heroImageStyle]}
               resizeMode="cover"
             />
           )}
+
+          {/* Dark overlay for text readability */}
           <View
             style={[
               StyleSheet.absoluteFillObject,
               {
                 backgroundColor: heroImage?.url
-                  ? 'rgba(0,0,0,0.45)'
+                  ? 'rgba(0,0,0,0.35)'
                   : colors.surface,
               },
             ]}
           />
 
-          {/* Back button only */}
-          <View style={styles.topActions}>
+          {/* Back button */}
+          <View style={[styles.topActions, { paddingTop: insets.top + Spacing.sm }]}>
             <BackButton />
           </View>
 
-          {/* Hero content */}
+          {/* Content at bottom of hero */}
           <View style={styles.heroContent}>
             <Text
               style={[
                 styles.heroTitle,
-                { color: heroImage?.url ? '#fff' : colors.foreground },
+                { color: heroImage?.url ? '#FFFFFF' : colors.foreground },
               ]}
             >
               {trip.isMultiCountry && trip.routeTitle
                 ? trip.routeTitle.split(/\s*→\s*/)[0]
                 : trip.countryName}
             </Text>
+
+            {/* Multi-country route pills */}
             {trip.isMultiCountry && trip.routeTitle && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 {trip.routeTitle.split(/\s*→\s*/).map((country: string, idx: number) => (
@@ -429,6 +454,7 @@ export default function TripDetailScreen() {
                 ))}
               </View>
             )}
+
             <Text
               style={[
                 styles.heroSubtitle,
@@ -438,7 +464,7 @@ export default function TripDetailScreen() {
               {trip.isMultiCountry ? 'Multi-country route' : `${trip.region} \u00B7 ${trip.capital}`}
             </Text>
 
-            {/* Hero badges */}
+            {/* Badges */}
             <View style={styles.heroBadgeRow}>
               <View style={[styles.heroBadge, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
                 <Clock color="#fff" size={12} />
@@ -464,6 +490,7 @@ export default function TripDetailScreen() {
               )}
             </View>
 
+            {/* Collaborator avatars */}
             {collaborators && collaborators.length > 1 && (
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
                 <CollaboratorAvatars
@@ -471,7 +498,7 @@ export default function TripDetailScreen() {
                   presenceUsers={presenceUsers ?? []}
                 />
                 <TouchableOpacity onPress={() => router.push(`/trip/invite?tripId=${id}`)}>
-                  <UserPlus size={20} color={colors.primary} />
+                  <UserPlus size={20} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
             )}
@@ -544,7 +571,7 @@ export default function TripDetailScreen() {
             />
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* ─── Backdrop when FAB is open ─── */}
       <Animated.View
@@ -1140,31 +1167,41 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   // Hero
-  hero: {
-    minHeight: 220,
-    justifyContent: 'flex-end',
+  heroContainer: {
+    height: 300,
     overflow: 'hidden',
+  },
+  heroImage: {
+    position: 'absolute',
+    top: -50,
+    left: 0,
+    right: 0,
+    height: 400,
   },
   topActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
     zIndex: 10,
   },
   heroContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     padding: Spacing.lg,
-    paddingTop: 60,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.xl,
   },
   heroTitle: {
     fontFamily: FontFamily.display,
-    fontSize: FontSize['4xl'],
-    letterSpacing: 1,
+    fontSize: FontSize['3xl'],
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   heroSubtitle: {
-    fontFamily: FontFamily.serif,
+    fontFamily: FontFamily.regular,
     fontSize: FontSize.sm,
     marginTop: 2,
   },
