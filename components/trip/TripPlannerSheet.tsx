@@ -256,10 +256,49 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
+
+        // ── Fetch images (hero + per-activity) ─────────────────────
+        let heroImageJson: string | undefined;
+        let activityImagesJson: string | undefined;
+        try {
+          type ItineraryDay = {
+            morningPlace?: string;
+            afternoonPlace?: string;
+            eveningPlace?: string;
+          };
+          const itineraryDays: ItineraryDay[] = data.itinerary
+            ? (JSON.parse(data.itinerary) as ItineraryDay[])
+            : [];
+          const activities = itineraryDays.flatMap((d) => [
+            d.morningPlace ? { name: 'morning', place: d.morningPlace } : null,
+            d.afternoonPlace ? { name: 'afternoon', place: d.afternoonPlace } : null,
+            d.eveningPlace ? { name: 'evening', place: d.eveningPlace } : null,
+          ]).filter(Boolean);
+
+          const imgRes = await fetch(endpoints.tripImages, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              countryName: data.countryName,
+              capital: data.capital,
+              activities,
+            }),
+          });
+          if (imgRes.ok) {
+            const imgData = await imgRes.json() as { hero: unknown; activities: unknown[] };
+            if (imgData.hero) heroImageJson = JSON.stringify(imgData.hero);
+            if (imgData.activities?.length) activityImagesJson = JSON.stringify(imgData.activities);
+          }
+        } catch {
+          // Images are non-critical — proceed without them
+        }
+
         const tripId = await createTrip({
           ...data,
           status: 'planned' as const,
           companions: party !== 'solo' ? JSON.stringify({ party }) : undefined,
+          heroImage: heroImageJson,
+          activityImages: activityImagesJson,
         });
         setTimeout(() => {
           bottomSheetRef.current?.dismiss();
