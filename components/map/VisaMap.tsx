@@ -144,6 +144,7 @@ export function VisaMap({
   // Handle tap on a country shape
   const handleShapePress = useCallback(
     (event: { features: Array<{ properties?: Record<string, unknown> }> }) => {
+      shapeJustPressed.current = true;
       const feature = event.features?.[0];
       const iso = feature?.properties?.iso_a3 as string | undefined;
       if (!iso) {
@@ -174,8 +175,16 @@ export function VisaMap({
     [selected, countryLookup],
   );
 
+  // Track whether a shape was just pressed (prevents MapView.onPress from dismissing)
+  const shapeJustPressed = React.useRef(false);
+
   // Handle tap on empty map area (ocean)
   const handleMapPress = useCallback(() => {
+    // If a shape was just pressed, skip — the shape handler already set selection
+    if (shapeJustPressed.current) {
+      shapeJustPressed.current = false;
+      return;
+    }
     setSelected(null);
   }, []);
 
@@ -184,10 +193,6 @@ export function VisaMap({
       onCountrySelect(selected.code);
     }
   }, [selected, onCountrySelect]);
-
-  const handleDismiss = useCallback(() => {
-    setSelected(null);
-  }, []);
 
   const mapStyle = isDark ? DARK_STYLE : LIGHT_STYLE;
 
@@ -239,7 +244,6 @@ export function VisaMap({
           categoryKey={selected.categoryKey as VisaCategory}
           maxStay={selected.maxStay}
           onViewDetails={handleViewDetails}
-          onDismiss={handleDismiss}
         />
       )}
 
