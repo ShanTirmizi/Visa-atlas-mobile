@@ -22,6 +22,7 @@ export interface CalendarEvent {
   startDate: string; // ISO date
   endDate: string; // ISO date
   organizer?: string; // email or name
+  allDay?: boolean; // all-day events are almost never bookings
 }
 
 export interface ClassifiedEvent {
@@ -37,6 +38,9 @@ export interface ClassifiedEvent {
 // ──────────────────────────────────────────────
 
 export function classifyEvent(event: CalendarEvent): ClassifiedEvent | null {
+  // All-day events are almost never travel bookings (holidays, birthdays, etc.)
+  if (event.allDay) return null;
+
   const combined = [
     event.title ?? '',
     event.notes ?? '',

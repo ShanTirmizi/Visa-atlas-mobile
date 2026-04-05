@@ -35,7 +35,22 @@ export async function hasCalendarPermission(): Promise<boolean> {
  */
 async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
   const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-  const calendarIds = calendars.map((cal) => cal.id);
+
+  // Skip subscription/holiday calendars — they contain public holidays, not bookings
+  const filteredCalendars = calendars.filter((cal) => {
+    const name = (cal.title || '').toLowerCase();
+    const sourceName = ((cal.source as Record<string, unknown>)?.name as string || '').toLowerCase();
+    const isHolidayCalendar =
+      name.includes('holiday') ||
+      name.includes('holidays') ||
+      sourceName.includes('holiday') ||
+      sourceName.includes('holidays') ||
+      cal.type === 'SUBSCRIBED' ||
+      (cal.source as Record<string, unknown>)?.type === 'SUBSCRIBED';
+    return !isHolidayCalendar;
+  });
+
+  const calendarIds = filteredCalendars.map((cal) => cal.id);
 
   if (calendarIds.length === 0) {
     return [];
@@ -59,6 +74,7 @@ async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
     startDate: toISODateString(event.startDate),
     endDate: toISODateString(event.endDate),
     organizer: (event as any).organizerEmail || undefined,
+    allDay: event.allDay ?? false,
   }));
 }
 

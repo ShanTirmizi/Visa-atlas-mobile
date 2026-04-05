@@ -159,7 +159,6 @@ export const GENERIC_TRAVEL_KEYWORDS: string[] = [
   'travel',
   'trip',
   'vacation',
-  'holiday',
 ];
 
 // ──────────────────────────────────────────────
