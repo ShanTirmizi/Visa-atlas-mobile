@@ -8,7 +8,7 @@ import {
   BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { Shield, BookOpen } from 'lucide-react-native';
+import { Shield, BookOpen, ChevronLeft } from 'lucide-react-native';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -320,16 +320,19 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
         >
           {step !== 'loading' && (
             <View>
-              <View style={s.header}>
-                <Text style={[s.title, { color: colors.foreground }]}>
-                  {STEP_CONFIG[step].title}
-                </Text>
-                {prevStep() && (
-                  <TouchableOpacity onPress={() => setStep(prevStep()!)}>
-                    <Text style={[s.backLink, { color: colors.primary }]}>Back</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              {prevStep() && (
+                <TouchableOpacity
+                  onPress={() => setStep(prevStep()!)}
+                  style={s.backBtn}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                >
+                  <ChevronLeft size={18} color={colors.textSecondary} />
+                  <Text style={[s.backBtnText, { color: colors.textSecondary }]}>Back</Text>
+                </TouchableOpacity>
+              )}
+              <Text style={[s.title, { color: colors.foreground }]}>
+                {STEP_CONFIG[step].title}
+              </Text>
               <Text style={[s.subtitle, { color: colors.textSecondary }]}>
                 {STEP_CONFIG[step].subtitle}
               </Text>
@@ -433,20 +436,20 @@ export default VisaGuideSheet;
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    header: {
+    backBtn: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+      gap: 2,
+      marginBottom: Spacing.xs,
+    },
+    backBtnText: {
+      fontFamily: FontFamily.medium,
+      fontSize: FontSize.sm,
     },
     title: {
       fontFamily: FontFamily.display,
       fontSize: FontSize['3xl'],
       letterSpacing: 0.5,
-    },
-    backLink: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.sm,
-      textDecorationLine: 'underline',
     },
     subtitle: {
       fontFamily: FontFamily.regular,
