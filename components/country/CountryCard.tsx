@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Star, Clock, DollarSign } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
 import type { ThemeColors } from '@/constants/theme';
 import {
   FontFamily,
@@ -15,6 +16,7 @@ import type { CountryVisa, VisaCategory, HeldVisaType } from '@/data/visaData';
 import { resolveCountry } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
 import { travelData } from '@/data/travelData';
+import { getFlightHours } from '@/utils/flightTime';
 
 // Convert ISO 3166-1 alpha-3 code to flag emoji via regional indicator symbols
 function isoToFlag(code: string): string {
@@ -112,6 +114,7 @@ function CountryCardComponent({
   onToggleFavorite,
 }: CountryCardProps) {
   const { colors } = useTheme();
+  const { residence } = useVisa();
 
   const resolved = useMemo(
     () => resolveCountry(country, heldVisas),
@@ -122,6 +125,7 @@ function CountryCardComponent({
   const travel = travelData[country.code];
   const flag = isoToFlag(country.code);
   const cardBg = getCardBgColor(resolved.category, colors);
+  const flightHours = getFlightHours(residence ?? 'GBR', country.code);
 
   return (
     <TouchableOpacity
@@ -170,7 +174,7 @@ function CountryCardComponent({
                 <View style={styles.indicator}>
                   <Clock size={12} color="rgba(255,255,255,0.7)" />
                   <Text style={styles.indicatorText}>
-                    {travel.flightHoursFromLondon}h
+                    {flightHours != null ? `${flightHours}h` : '—'}
                   </Text>
                 </View>
               </>

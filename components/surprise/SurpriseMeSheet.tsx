@@ -21,12 +21,14 @@ import Animated, {
   FadeOut,
 } from 'react-native-reanimated';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
 import { endpoints } from '@/constants/api';
 import { visaData, resolveCountry, type HeldVisaType } from '@/data/visaData';
 import { travelData } from '@/data/travelData';
+import { getFlightHours } from '@/utils/flightTime';
 import {
   getVisaCategoryColor, getVisaCategoryShortLabel, type VisaCategory,
 } from '@/constants/categories';
@@ -211,6 +213,7 @@ function TypingDots({ color }: { color: string }) {
 const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
   ({ heldVisas, onCountrySelected }, ref) => {
     const { colors } = useTheme();
+    const { residence } = useVisa();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
@@ -329,7 +332,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
         name: country.name,
         flag: getFlag(result.code),
         category: catKey,
-        flightHours: travel?.flightHoursFromLondon,
+        flightHours: getFlightHours(residence ?? 'GBR', result.code) ?? travel?.flightHoursFromLondon,
         costLevel: travel?.costLevel,
         reason: result.reason,
       };

@@ -21,6 +21,7 @@ import {
 } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
 import { travelData } from '@/data/travelData';
+import { getFlightHours } from '@/utils/flightTime';
 import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
 import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
 import { useQuery, useConvexAuth } from 'convex/react';
@@ -81,7 +82,7 @@ export default function CountryDetailScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { heldVisas, isFavorite, toggleFavorite, isVisited, toggleVisited } = useVisa();
+  const { heldVisas, isFavorite, toggleFavorite, isVisited, toggleVisited, residence } = useVisa();
 
   const country = useMemo(() => visaData.find((c) => c.code === code) ?? null, [code]);
   const meta = country ? countryMeta[country.code] : null;
@@ -101,6 +102,7 @@ export default function CountryDetailScreen() {
 
   const flag = country ? toFlag(country.code) : '';
   const cost$ = travel ? '$'.repeat(travel.costLevel) : '';
+  const flightHours = country ? getFlightHours(residence ?? 'GBR', country.code) : null;
   const s = useMemo(() => makeStyles(colors), [colors]);
 
   // ── Not found ─────────────────────────────────────────────────────────
@@ -190,7 +192,7 @@ export default function CountryDetailScreen() {
         {/* ── QUICK INFO ───────────────────────────────────────────── */}
         {(meta || travel) && (
           <View style={s.grid}>
-            {travel && <QuickCard icon={<Clock size={16} color="#FFFFFF" />} value={`${travel.flightHoursFromLondon}h`} label="Flight" bg={colors.primary} />}
+            {travel && <QuickCard icon={<Clock size={16} color="#FFFFFF" />} value={flightHours != null ? `${flightHours}h` : '—'} label="Flight" bg={colors.primary} />}
             {travel && <QuickCard icon={<DollarSign size={16} color="#FFFFFF" />} value={cost$} label="Cost" bg={colors.secondary} />}
             {meta && <QuickCard icon={<Banknote size={16} color="#FFFFFF" />} value={meta.currencyCode} label="Currency" bg={colors.accent} />}
             {meta && <QuickCard icon={<Languages size={16} color="#FFFFFF" />} value={meta.language} label="Language" bg={colors.warning} />}

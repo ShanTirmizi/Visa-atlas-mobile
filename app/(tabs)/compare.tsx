@@ -38,6 +38,7 @@ import {
 } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
 import { travelData, type TravelInfo } from '@/data/travelData';
+import { getFlightHours } from '@/utils/flightTime';
 
 // ---------------------------------------------------------------------------
 // Enable LayoutAnimation on Android
@@ -436,7 +437,7 @@ function LoadingState({ colors }: { colors: ThemeColors }) {
 export default function CompareScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { heldVisas } = useVisa();
+  const { heldVisas, residence } = useVisa();
 
   const [countryA, setCountryA] = useState('');
   const [countryB, setCountryB] = useState('');
@@ -486,7 +487,7 @@ export default function CompareScreen() {
         currency: metaA.currency,
         language: metaA.language,
         dailyBudget: travelA.dailyBudget,
-        flightHours: travelA.flightHoursFromLondon,
+        flightHours: getFlightHours(residence ?? 'GBR', selectedA.code) ?? travelA.flightHoursFromLondon,
         costLevel: travelA.costLevel,
         visaCategory: categoryLabels[resolvedA.category],
         bestTimeNote: travelA.bestTimeNote,
@@ -498,7 +499,7 @@ export default function CompareScreen() {
         currency: metaB.currency,
         language: metaB.language,
         dailyBudget: travelB.dailyBudget,
-        flightHours: travelB.flightHoursFromLondon,
+        flightHours: getFlightHours(residence ?? 'GBR', selectedB.code) ?? travelB.flightHoursFromLondon,
         costLevel: travelB.costLevel,
         visaCategory: categoryLabels[resolvedB.category],
         bestTimeNote: travelB.bestTimeNote,
