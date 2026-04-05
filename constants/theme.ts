@@ -90,6 +90,7 @@ export const LightColors = {
   solidTextSub: 'rgba(255,255,255,0.70)',
   solidTextMuted: 'rgba(255,255,255,0.60)',
   solidOverlay: 'rgba(255,255,255,0.20)',
+  solidOverlayMd: 'rgba(255,255,255,0.25)',
   solidBorder: 'rgba(255,255,255,0.15)',
 } as const;
 
@@ -181,6 +182,7 @@ export const DarkColors = {
   solidTextSub: 'rgba(255,255,255,0.70)',
   solidTextMuted: 'rgba(255,255,255,0.60)',
   solidOverlay: 'rgba(255,255,255,0.20)',
+  solidOverlayMd: 'rgba(255,255,255,0.25)',
   solidBorder: 'rgba(255,255,255,0.15)',
 } as const;
 

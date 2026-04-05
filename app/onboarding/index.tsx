@@ -120,7 +120,7 @@ export default function PassportPickerScreen() {
           {item.name}
         </Text>
         {isSelected && (
-          <View style={styles.checkWrap}>
+          <View style={[styles.checkWrap, { backgroundColor: colors.solidOverlayMd }]}>
             <Check size={16} color="#FFFFFF" />
           </View>
         )}
@@ -323,7 +323,6 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },

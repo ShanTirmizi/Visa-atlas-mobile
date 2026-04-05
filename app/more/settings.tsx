@@ -64,7 +64,7 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           style={[styles.travelRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-          onPress={() => router.push('/onboarding' as any)}
+          onPress={() => router.push('/onboarding' as import('expo-router').Href)}
           activeOpacity={0.7}
         >
           <View style={styles.travelRowContent}>
@@ -78,7 +78,7 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           style={[styles.travelRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-          onPress={() => router.push('/more/visas' as any)}
+          onPress={() => router.push('/more/visas' as import('expo-router').Href)}
           activeOpacity={0.7}
         >
           <View style={styles.travelRowContent}>
@@ -218,7 +218,7 @@ export default function SettingsScreen() {
             Version
           </Text>
         </View>
-        <Text style={[styles.settingValue, { color: 'rgba(255,255,255,0.70)' }]}>
+        <Text style={[styles.settingValue, { color: colors.solidTextSub }]}>
           1.0.0
         </Text>
       </View>
@@ -233,7 +233,7 @@ export default function SettingsScreen() {
           styles.settingRow,
           { backgroundColor: colors.primary, borderWidth: 0 },
         ]}
-        onPress={() => router.push('/more/privacy-policy' as any)}
+        onPress={() => router.push('/more/privacy-policy' as import('expo-router').Href)}
       >
         <View style={styles.settingInfo}>
           <Shield color="#FFFFFF" size={20} />
@@ -249,7 +249,7 @@ export default function SettingsScreen() {
           styles.settingRow,
           { backgroundColor: colors.primary, borderWidth: 0 },
         ]}
-        onPress={() => router.push('/more/terms' as any)}
+        onPress={() => router.push('/more/terms' as import('expo-router').Href)}
       >
         <View style={styles.settingInfo}>
           <FileText color="#FFFFFF" size={20} />
