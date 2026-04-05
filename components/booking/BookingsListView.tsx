@@ -1,5 +1,12 @@
-import React, { useRef, useMemo, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import React, { useRef, useMemo, useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  SectionList,
+  TouchableOpacity,
+  StyleSheet,
+  RefreshControl,
+} from 'react-native';
 import { Plus } from 'lucide-react-native';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -9,64 +16,38 @@ import { useEmail } from '@/contexts/email-context';
 import CalendarReviewSheet, { type CalendarReviewSheetRef } from './CalendarReviewSheet';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import BookingCard from './BookingCard';
+import NextUpHeroCard from './NextUpHeroCard';
+import BookingFilterChips from './BookingFilterChips';
 import AddBookingSheet, { type AddBookingSheetRef } from './AddBookingSheet';
-import BookingDetailSheet, { type BookingDetailSheetRef, type BookingDetailData } from './BookingDetailSheet';
-import { BOOKING_TYPES } from '@/constants/bookings';
-
-// ──────────────────────────────────────────────
-// Types
-// ──────────────────────────────────────────────
+import BookingDetailSheet, {
+  type BookingDetailSheetRef,
+  type BookingDetailData,
+} from './BookingDetailSheet';
+import { BOOKING_TYPES, type BookingType } from '@/constants/bookings';
 
 interface BookingsListViewProps {
   bottomInset: number;
 }
-
-// ──────────────────────────────────────────────
-// Detail-key mapping (car_rental -> carDetails, etc.)
-// ──────────────────────────────────────────────
 
 function detailsKeyForType(type: string): string {
   if (type === 'car_rental') return 'carDetails';
   return `${type}Details`;
 }
 
-// ════════════════════════════════════════════════
-// BookingsListView
-// ════════════════════════════════════════════════
-
 export default function BookingsListView({ bottomInset }: BookingsListViewProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { isConnected, isSyncing, sync, reviewItems, clearReviewItems } = useCalendar();
   const { gmailAccount, isSyncing: isEmailSyncing, syncGmail } = useEmail();
 
-  // ── Data ──────────────────────────────────────
+  const [activeFilter, setActiveFilter] = useState<BookingType | 'all'>('all');
+
   const bookings = useQuery(api.bookings.listBookings);
   const trips = useQuery(api.trips.listTrips);
 
-  // ── Refs ──────────────────────────────────────
   const addSheetRef = useRef<AddBookingSheetRef>(null);
   const detailSheetRef = useRef<BookingDetailSheetRef>(null);
   const reviewSheetRef = useRef<CalendarReviewSheetRef>(null);
 
-  // ── Split bookings into unassigned & upcoming ─
-  const { unassigned, upcoming } = useMemo(() => {
-    if (!bookings) return { unassigned: [], upcoming: [] };
-
-    const unassignedList = bookings.filter((b) => !b.tripId);
-    const upcomingList = bookings
-      .filter((b) => !!b.tripId)
-      .sort((a, b) => a.startDate.localeCompare(b.startDate));
-
-    return { unassigned: unassignedList, upcoming: upcomingList };
-  }, [bookings]);
-
-  // Merged list: unassigned first, then upcoming
-  const allBookings = useMemo(
-    () => [...unassigned, ...upcoming],
-    [unassigned, upcoming],
-  );
-
-  // ── Trip name lookup ──────────────────────────
   const getTripName = useCallback(
     (tripId: string | undefined): string | undefined => {
       if (!tripId || !trips) return undefined;
@@ -79,21 +60,87 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
     [trips],
   );
 
-  // ── Open detail sheet ─────────────────────────
-  const handleOpenDetail = useCallback(
-    (booking: (typeof allBookings)[number]) => {
-      const detailsKey = detailsKeyForType(booking.type);
-      const rawDetails = (booking as any)[detailsKey] as string | undefined;
-
-      let typeDetails: Record<string, string> | undefined;
-      if (rawDetails) {
-        try {
-          typeDetails = JSON.parse(rawDetails);
-        } catch {
-          // ignore parse errors
-        }
+  const parseTypeDetails = useCallback(
+    (booking: NonNullable<typeof bookings>[number]): Record<string, string> | undefined => {
+      const key = detailsKeyForType(booking.type);
+      const raw = (booking as Record<string, unknown>)[key] as string | undefined;
+      if (!raw) return undefined;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return undefined;
       }
+    },
+    [],
+  );
 
+  const nextUpBooking = useMemo(() => {
+    if (!bookings) return null;
+    const now = new Date();
+    return (
+      bookings
+        .filter(
+          (b) =>
+            (b.status === 'upcoming' || b.status === 'active') &&
+            new Date(b.startDate) >= now,
+        )
+        .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null
+    );
+  }, [bookings]);
+
+  const filteredBookings = useMemo(() => {
+    if (!bookings) return [];
+    let list = bookings;
+    if (activeFilter !== 'all') {
+      list = list.filter((b) => b.type === activeFilter);
+    }
+    return list;
+  }, [bookings, activeFilter]);
+
+  const sections = useMemo(() => {
+    const unlinked = filteredBookings.filter((b) => !b.tripId);
+    const linked = filteredBookings.filter((b) => !!b.tripId);
+
+    const tripGroups = new Map<string, typeof linked>();
+    for (const b of linked) {
+      const id = b.tripId!;
+      if (!tripGroups.has(id)) tripGroups.set(id, []);
+      tripGroups.get(id)!.push(b);
+    }
+
+    for (const group of tripGroups.values()) {
+      group.sort((a, b) => a.startDate.localeCompare(b.startDate));
+    }
+
+    const tripSections = Array.from(tripGroups.entries())
+      .sort(([, a], [, b]) => a[0].startDate.localeCompare(b[0].startDate))
+      .map(([tripId, data]) => ({
+        key: tripId,
+        title: getTripName(tripId) || 'Unknown Trip',
+        count: data.length,
+        isUnlinked: false,
+        data,
+      }));
+
+    const result = [];
+
+    if (unlinked.length > 0) {
+      result.push({
+        key: '__unlinked__',
+        title: 'Unlinked',
+        count: unlinked.length,
+        isUnlinked: true,
+        data: unlinked,
+      });
+    }
+
+    result.push(...tripSections);
+    return result;
+  }, [filteredBookings, getTripName]);
+
+  const handleOpenDetail = useCallback(
+    (booking: NonNullable<typeof bookings>[number]) => {
+      const typeDetails = parseTypeDetails(booking);
       const data: BookingDetailData = {
         id: booking._id,
         type: booking.type as BookingDetailData['type'],
@@ -111,43 +158,36 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
         tripName: getTripName(booking.tripId),
         typeDetails,
       };
-
       detailSheetRef.current?.open(data);
     },
-    [getTripName],
+    [getTripName, parseTypeDetails],
   );
 
-  // ── Loading state ─────────────────────────────
+  // Loading state
   if (bookings === undefined) {
     return (
       <View style={styles.container}>
         {[0, 1, 2].map((i) => (
           <View
             key={i}
-            style={[
-              styles.skeleton,
-              { backgroundColor: colors.shimmer },
-            ]}
+            style={[styles.skeleton, { backgroundColor: colors.shimmer }]}
           />
         ))}
       </View>
     );
   }
 
-  // ── Empty state ───────────────────────────────
+  // Empty state
   if (bookings.length === 0) {
     return (
       <View style={styles.container}>
         <View
-          style={[
-            styles.emptyCard,
-            Shadows.card,
-            { backgroundColor: colors.primary },
-          ]}
+          style={[styles.emptyCard, Shadows.card, { backgroundColor: colors.primary }]}
         >
           <Text style={styles.emptyTitle}>No bookings yet</Text>
           <Text style={styles.emptyBody}>
-            Add your flights, hotels, and experiences to keep everything in one place.
+            Add your flights, hotels, and experiences to keep everything in one
+            place.
           </Text>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -158,26 +198,23 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
             <Text style={styles.emptyButtonText}>Add Booking</Text>
           </TouchableOpacity>
         </View>
-
         <AddBookingSheet ref={addSheetRef} />
         <BookingDetailSheet ref={detailSheetRef} />
       </View>
     );
   }
 
-  // ── Main list ─────────────────────────────────
+  // Main list
   return (
     <View style={styles.container}>
-      <FlatList
-        data={allBookings}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item._id}
-        contentContainerStyle={{
-          paddingBottom: bottomInset + 100,
-          gap: 10,
-        }}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={{ paddingBottom: bottomInset + 100 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          (isConnected || gmailAccount?.isConnected) ? (
+          isConnected || gmailAccount?.isConnected ? (
             <RefreshControl
               refreshing={isSyncing || isEmailSyncing}
               onRefresh={() => {
@@ -189,46 +226,104 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
           ) : undefined
         }
         ListHeaderComponent={
-          <>
-            {unassigned.length > 0 && (
-              <View
-                style={[
-                  styles.unassignedBanner,
-                  { backgroundColor: colors.warningBg, borderLeftWidth: 3, borderLeftColor: colors.warning },
-                ]}
-              >
-                <Text style={[styles.unassignedText, { color: colors.foreground }]}>
-                  {unassigned.length} unassigned booking
-                  {unassigned.length !== 1 ? 's' : ''}
-                </Text>
-              </View>
+          <View style={styles.listHeader}>
+            {nextUpBooking && (
+              <NextUpHeroCard
+                type={nextUpBooking.type as BookingType}
+                title={nextUpBooking.title}
+                startDate={nextUpBooking.startDate}
+                endDate={nextUpBooking.endDate}
+                provider={nextUpBooking.provider}
+                location={nextUpBooking.location}
+                tripName={getTripName(nextUpBooking.tripId)}
+                cost={nextUpBooking.cost}
+                currency={nextUpBooking.currency}
+                typeDetails={parseTypeDetails(nextUpBooking)}
+                onPress={() => handleOpenDetail(nextUpBooking)}
+              />
             )}
+
+            <BookingFilterChips
+              activeFilter={activeFilter}
+              onFilterChange={setActiveFilter}
+            />
+
             {reviewItems.length > 0 && (
               <TouchableOpacity
                 onPress={() => reviewSheetRef.current?.open(reviewItems)}
                 style={[styles.reviewBanner, { backgroundColor: colors.info + '15' }]}
               >
                 <Text style={[styles.reviewBannerText, { color: colors.info }]}>
-                  {reviewItems.length} calendar event{reviewItems.length !== 1 ? 's' : ''} to review
+                  {reviewItems.length} calendar event
+                  {reviewItems.length !== 1 ? 's' : ''} to review
                 </Text>
               </TouchableOpacity>
             )}
-          </>
+          </View>
         }
-        renderItem={({ item }) => (
-          <BookingCard
-            id={item._id}
-            type={item.type as any}
-            title={item.title}
-            startDate={item.startDate}
-            endDate={item.endDate}
-            location={item.location}
-            provider={item.provider ?? ''}
-            status={item.status as any}
-            tripName={getTripName(item.tripId)}
-            autoMatched={item.autoMatched}
-            onPress={() => handleOpenDetail(item)}
-          />
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            {section.isUnlinked ? (
+              <View
+                style={[
+                  styles.unlinkedBanner,
+                  {
+                    backgroundColor: colors.warningBg,
+                    borderLeftColor: colors.warning,
+                  },
+                ]}
+              >
+                <Text style={[styles.unlinkedText, { color: isDark ? colors.warning : '#92400E' }]}>
+                  {section.count} booking{section.count !== 1 ? 's' : ''} need
+                  linking
+                </Text>
+                <Text style={[styles.unlinkedArrow, { color: isDark ? colors.warning : '#B45309' }]}>
+                  {`View \u2192`}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.tripHeader}>
+                <Text
+                  style={[styles.tripHeaderText, { color: isDark ? '#8B949E' : '#8B7355' }]}
+                >
+                  {section.title.toUpperCase()}
+                </Text>
+                <View
+                  style={[
+                    styles.countBadge,
+                    { backgroundColor: isDark ? '#1C2333' : '#e8ddd0' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.countBadgeText,
+                      { color: isDark ? '#8B949E' : '#8B7355' },
+                    ]}
+                  >
+                    {section.count} booking{section.count !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+        renderItem={({ item, section }) => (
+          <View style={styles.cardWrapper}>
+            <BookingCard
+              type={item.type as BookingType}
+              title={item.title}
+              startDate={item.startDate}
+              endDate={item.endDate}
+              location={item.location}
+              provider={item.provider}
+              status={item.status as 'upcoming' | 'active' | 'completed' | 'cancelled'}
+              cost={item.cost}
+              currency={item.currency}
+              typeDetails={parseTypeDetails(item)}
+              isUnlinked={section.isUnlinked}
+              onPress={() => handleOpenDetail(item)}
+            />
+          </View>
         )}
       />
 
@@ -252,23 +347,19 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
   );
 }
 
-// ──────────────────────────────────────────────
-// Static styles
-// ──────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-
-  // ── Loading skeleton ──────────────────────────
+  listHeader: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
   skeleton: {
     height: 72,
     borderRadius: Radius.md,
     marginBottom: 10,
   },
-
-  // ── Empty state ───────────────────────────────
   emptyCard: {
     borderRadius: Radius.lg,
     padding: Spacing.xl,
@@ -304,34 +395,58 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: '#FFFFFF',
   },
-
-  // ── Unassigned banner ─────────────────────────
-  unassignedBanner: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.md,
+  sectionHeader: {
+    marginTop: Spacing.md,
     marginBottom: Spacing.sm,
   },
-  unassignedText: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: FontSize.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  tripHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-
-  // ── Review banner ─────────────────────────────
+  tripHeaderText: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: FontSize.sm,
+    letterSpacing: 0.8,
+  },
+  countBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+  },
+  countBadgeText: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: 10,
+  },
+  unlinkedBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
+    borderLeftWidth: 3,
+  },
+  unlinkedText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 12,
+  },
+  unlinkedArrow: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xs,
+  },
+  cardWrapper: {
+    marginBottom: Spacing.sm,
+  },
   reviewBanner: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: Radius.sm,
-    marginBottom: Spacing.sm,
   },
   reviewBannerText: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.sm,
   },
-
-  // ── FAB ───────────────────────────────────────
   fab: {
     position: 'absolute',
     right: 0,
