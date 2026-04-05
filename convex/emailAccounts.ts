@@ -5,19 +5,26 @@ import { requireAuth } from "./lib/auth";
 export const getByProvider = query({
   args: { provider: v.union(v.literal("gmail"), v.literal("outlook")) },
   handler: async (ctx, args) => {
-    const accounts = await ctx.db
+    const userId = await requireAuth(ctx);
+    const account = await ctx.db
       .query("emailAccounts")
-      .withIndex("by_provider", (q) => q.eq("provider", args.provider))
-      .collect();
-    return accounts[0] ?? null;
+      .withIndex("by_user_and_provider", (q) =>
+        q.eq("userId", userId).eq("provider", args.provider),
+      )
+      .unique();
+    return account ?? null;
   },
 });
 
 export const listConnected = query({
   args: {},
   handler: async (ctx) => {
-    const all = await ctx.db.query("emailAccounts").collect();
-    return all.filter((a) => a.isConnected);
+    const userId = await requireAuth(ctx);
+    const accounts = await ctx.db
+      .query("emailAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    return accounts.filter((a) => a.isConnected);
   },
 });
 
@@ -30,10 +37,13 @@ export const upsertAccount = mutation({
     tokenExpiry: v.number(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
     const existing = await ctx.db
       .query("emailAccounts")
-      .withIndex("by_provider", (q) => q.eq("provider", args.provider))
-      .first();
+      .withIndex("by_user_and_provider", (q) =>
+        q.eq("userId", userId).eq("provider", args.provider),
+      )
+      .unique();
     if (existing) {
       await ctx.db.patch(existing._id, {
         email: args.email,
@@ -44,8 +54,11 @@ export const upsertAccount = mutation({
       });
       return existing._id;
     }
-    const userId = await requireAuth(ctx);
-    return await ctx.db.insert("emailAccounts", { ...args, isConnected: true, userId });
+    return await ctx.db.insert("emailAccounts", {
+      ...args,
+      isConnected: true,
+      userId,
+    });
   },
 });
 
@@ -56,6 +69,12 @@ export const updateTokens = mutation({
     tokenExpiry: v.number(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    const account = await ctx.db.get(args.id);
+    if (account === null) throw new Error("Email account not found");
+    if (account.userId !== userId) {
+      throw new Error("You don't have access to this email account");
+    }
     await ctx.db.patch(args.id, {
       accessToken: args.accessToken,
       tokenExpiry: args.tokenExpiry,
@@ -70,6 +89,12 @@ export const updateScanState = mutation({
     lastScanMessageId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    const account = await ctx.db.get(args.id);
+    if (account === null) throw new Error("Email account not found");
+    if (account.userId !== userId) {
+      throw new Error("You don't have access to this email account");
+    }
     const { id, ...updates } = args;
     await ctx.db.patch(id, updates);
   },
@@ -78,6 +103,12 @@ export const updateScanState = mutation({
 export const disconnect = mutation({
   args: { id: v.id("emailAccounts") },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    const account = await ctx.db.get(args.id);
+    if (account === null) throw new Error("Email account not found");
+    if (account.userId !== userId) {
+      throw new Error("You don't have access to this email account");
+    }
     await ctx.db.delete(args.id);
   },
 });

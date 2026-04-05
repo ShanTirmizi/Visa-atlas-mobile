@@ -141,7 +141,10 @@ export default defineSchema({
     isConnected: v.boolean(),
     lastScanTime: v.optional(v.number()),
     lastScanMessageId: v.optional(v.string()),
-  }).index("by_provider", ["provider"]),
+  })
+    .index("by_provider", ["provider"])
+    .index("by_user_and_provider", ["userId", "provider"])
+    .index("by_user", ["userId"]),
 
   // ── Trip Collaborators ──
   tripCollaborators: defineTable({
