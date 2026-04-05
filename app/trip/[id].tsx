@@ -31,8 +31,6 @@ import {
   Wallet,
   Plane,
   Sun,
-  Moon,
-  Coffee,
   Lightbulb,
   Shield,
   Phone,
@@ -65,20 +63,26 @@ import {
   Radius,
   Shadows,
   getVisaCategoryColor,
+  type ThemeColors,
 } from '@/constants/theme';
 import TripBookingsTimeline from '@/components/booking/TripBookingsTimeline';
 import AddBookingSheet, { type AddBookingSheetRef } from '@/components/booking/AddBookingSheet';
 import BookingDetailSheet, { type BookingDetailSheetRef, type BookingDetailData } from '@/components/booking/BookingDetailSheet';
 import SegmentedControl from '@/components/ui/SegmentedControl';
 import BackButton from '@/components/ui/BackButton';
+import ActivityCard from '@/components/trip/ActivityCard';
+import DayHeader from '@/components/trip/DayHeader';
 
 // ─── Types ──────────────────────────────────────────
 interface ItineraryDay {
   day: number;
   title: string;
   morning: string;
+  morningPlace?: string;
   afternoon: string;
+  afternoonPlace?: string;
   evening: string;
+  eveningPlace?: string;
   tip: string;
 }
 interface BudgetBreakdown {
@@ -311,6 +315,13 @@ export default function TripDetailScreen() {
       >(trip?.dayImages, []),
     [trip?.dayImages],
   );
+  const activityImages = useMemo(
+    () =>
+      safeParse<
+        Array<{ url: string; thumb: string; credit: string; source: string } | null>
+      >(trip?.activityImages, []),
+    [trip?.activityImages],
+  );
 
   // ─── Loading ──────────────────
   if (trip === undefined) {
@@ -516,7 +527,7 @@ export default function TripDetailScreen() {
           {activeTab === 'itinerary' && (
             <ItineraryContent
               itinerary={itinerary}
-              dayImages={dayImages}
+              activityImages={activityImages}
               colors={colors}
             />
           )}
@@ -731,12 +742,12 @@ function StatItem({ label, value, color, colors }: { label: string; value: strin
 // =====================================================================
 function ItineraryContent({
   itinerary,
-  dayImages,
+  activityImages,
   colors,
 }: {
   itinerary: ItineraryDay[];
-  dayImages: Array<{ url: string; thumb: string; credit: string; creditUrl: string } | null>;
-  colors: any;
+  activityImages: Array<{ url: string; thumb: string; credit: string; source: string } | null>;
+  colors: ThemeColors;
 }) {
   if (itinerary.length === 0) {
     return (
@@ -749,99 +760,45 @@ function ItineraryContent({
     );
   }
 
-  const dayColors = [colors.primary, colors.secondary, colors.accent, '#D95E8A', colors.warning, colors.info, '#8B5CF6'];
-
   return (
-    <View style={{ gap: Spacing.md }}>
-      {itinerary.map((day, idx) => {
-        const img = dayImages[idx];
-        const dayAccent = dayColors[idx % dayColors.length];
+    <View style={{ gap: Spacing.sm }}>
+      {itinerary.map((day, dayIdx) => {
+        const morningImg = activityImages[dayIdx * 3];
+        const afternoonImg = activityImages[dayIdx * 3 + 1];
+        const eveningImg = activityImages[dayIdx * 3 + 2];
+
         return (
-          <View
-            key={day.day}
-            style={[styles.dayCard, Shadows.card, { backgroundColor: dayAccent, borderColor: 'transparent' }]}
-          >
-            {/* Day image */}
-            {img?.url && (
-              <Image
-                source={{ uri: img.thumb || img.url }}
-                style={styles.dayImage}
-                resizeMode="cover"
-              />
-            )}
+          <React.Fragment key={day.day}>
+            <DayHeader dayNumber={day.day} title={day.title} />
 
-            {/* Day header */}
-            <View style={styles.dayHeader}>
-              <View style={[styles.dayBadge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
-                <Text style={[styles.dayBadgeText, { color: '#FFFFFF' }]}>
-                  Day {day.day}
-                </Text>
-              </View>
-              <Text style={[styles.dayTitle, { color: '#FFFFFF' }]} numberOfLines={2}>
-                {day.title}
-              </Text>
-            </View>
+            <ActivityCard
+              timeSlot="morning"
+              description={day.morning}
+              placeName={day.morningPlace}
+              imageUrl={morningImg?.url}
+            />
+            <ActivityCard
+              timeSlot="afternoon"
+              description={day.afternoon}
+              placeName={day.afternoonPlace}
+              imageUrl={afternoonImg?.url}
+            />
+            <ActivityCard
+              timeSlot="evening"
+              description={day.evening}
+              placeName={day.eveningPlace}
+              imageUrl={eveningImg?.url}
+            />
 
-            {/* Time slots */}
-            <View style={styles.timeSlots}>
-              <TimeSlot
-                icon={<Coffee color="rgba(255,255,255,0.80)" size={14} />}
-                label="Morning"
-                text={day.morning}
-                colors={colors}
-                labelColor="rgba(255,255,255,0.80)"
-              />
-              <TimeSlot
-                icon={<Sun color="rgba(255,255,255,0.80)" size={14} />}
-                label="Afternoon"
-                text={day.afternoon}
-                colors={colors}
-                labelColor="rgba(255,255,255,0.80)"
-              />
-              <TimeSlot
-                icon={<Moon color="rgba(255,255,255,0.80)" size={14} />}
-                label="Evening"
-                text={day.evening}
-                colors={colors}
-                labelColor="rgba(255,255,255,0.80)"
-              />
-            </View>
-
-            {/* Tip */}
             {day.tip ? (
-              <View style={[styles.tipRow, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-                <Lightbulb color="#FFFFFF" size={13} />
-                <Text style={[styles.tipText, { color: '#FFFFFF' }]}>{day.tip}</Text>
+              <View style={[styles.tipCard, { backgroundColor: colors.surfaceLight }]}>
+                <Lightbulb color={colors.textMuted} size={13} />
+                <Text style={[styles.tipCardText, { color: colors.textSecondary }]}>{day.tip}</Text>
               </View>
             ) : null}
-          </View>
+          </React.Fragment>
         );
       })}
-    </View>
-  );
-}
-
-function TimeSlot({
-  icon,
-  label,
-  text,
-  colors,
-  labelColor,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  text: string;
-  colors: any;
-  labelColor?: string;
-}) {
-  if (!text) return null;
-  return (
-    <View style={styles.timeSlot}>
-      <View style={styles.timeSlotHeader}>
-        {icon}
-        <Text style={[styles.timeSlotLabel, { color: 'rgba(255,255,255,0.80)' }]}>{label}</Text>
-      </View>
-      <Text style={[styles.timeSlotText, { color: '#FFFFFF' }]}>{text}</Text>
     </View>
   );
 }
@@ -1352,81 +1309,18 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
   },
   // Itinerary
-  dayCard: {
-    borderRadius: 20,
-    borderWidth: 0,
-    overflow: 'hidden',
-  },
-  dayImage: {
-    width: '100%',
-    height: 140,
-  },
-  dayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xs,
-  },
-  dayBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radius.full,
-  },
-  dayBadgeText: {
-    fontFamily: FontFamily.condensedBold,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  dayTitle: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize.lg,
-    flex: 1,
-    letterSpacing: 0.3,
-  },
-  timeSlots: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
-    paddingTop: Spacing.xs,
-    gap: 16,
-  },
-  timeSlot: {
-    gap: 4,
-  },
-  timeSlotHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  timeSlotLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  timeSlotText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    lineHeight: 22,
-    marginLeft: 19,
-  },
-  tipRow: {
+  tipCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-    marginTop: Spacing.sm,
+    gap: Spacing.sm,
     padding: Spacing.md,
     borderRadius: Radius.md,
   },
-  tipText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    lineHeight: 20,
+  tipCardText: {
     flex: 1,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    lineHeight: 18,
   },
   // Budget
   budgetRow: {
