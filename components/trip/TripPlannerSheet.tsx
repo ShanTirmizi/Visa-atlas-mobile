@@ -2,7 +2,7 @@ import React, {
   useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo,
 } from 'react';
 import {
-  View, Text, TouchableOpacity, TextInput, Animated, ActivityIndicator, StyleSheet,
+  View, Text, TouchableOpacity, TextInput, StyleSheet,
 } from 'react-native';
 import {
   BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
@@ -100,7 +100,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const [tick, setTick] = useState(0);
 
     const createTrip = useMutation(api.trips.createTrip);
-    const progressAnim = useRef(new Animated.Value(0)).current;
 
     // ── Snap points change with step ────────────────────────────────
     const snapPoints = useMemo(
@@ -114,16 +113,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       const id = setInterval(() => setTick((t) => t + 1), 3000);
       return () => clearInterval(id);
     }, [step]);
-
-    // ── Asymptotic progress bar ─────────────────────────────────────
-    useEffect(() => {
-      if (step !== 'loading') { progressAnim.setValue(0); return; }
-      Animated.timing(progressAnim, {
-        toValue: 95 * (1 - Math.exp(-tick / 8)),
-        duration: 2500,
-        useNativeDriver: false,
-      }).start();
-    }, [tick, step, progressAnim]);
 
     // ── Toggle activity chip ────────────────────────────────────────
     const toggleStyle = useCallback((s: string) => {
@@ -146,8 +135,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setActivityStyles(new Set());
       setError('');
       setTick(0);
-      progressAnim.setValue(0);
-    }, [progressAnim]);
+    }, []);
 
     // ── Imperative handle for parent ────────────────────────────────
     useImperativeHandle(ref, () => ({
@@ -187,19 +175,15 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           status: 'planned' as const,
           companions: party !== 'solo' ? JSON.stringify({ party }) : undefined,
         });
-        Animated.timing(progressAnim, {
-          toValue: 100,
-          duration: 400,
-          useNativeDriver: false,
-        }).start(() => {
+        setTimeout(() => {
           bottomSheetRef.current?.dismiss();
           onTripCreated(String(tripId));
-        });
+        }, 300);
       } catch {
         setError('Failed to generate trip. Please try again.');
         setStep('prefs');
       }
-    }, [country, days, meta, travel, resolved, heldVisas, vibe, budget, interests, activityStyles, party, createTrip, progressAnim, onTripCreated]);
+    }, [country, days, meta, travel, resolved, heldVisas, vibe, budget, interests, activityStyles, party, createTrip, onTripCreated]);
 
     // ── Backdrop ────────────────────────────────────────────────────
     const renderBackdrop = useCallback(
@@ -531,32 +515,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           {/* ── Loading ──────────────────────────────────────────── */}
           {step === 'loading' && (
             <View style={s.loadingContainer}>
-              <View style={[s.loadingCard, {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-              }]}>
-                <ActivityIndicator size="large" color={colors.primary} style={{ marginBottom: Spacing.lg }} />
-                <Text style={[s.loadingMsg, { color: colors.textSecondary }]}>
-                  {LOAD_MSGS[tick % LOAD_MSGS.length]}
-                </Text>
-                <View style={[s.progressTrack, { backgroundColor: colors.primaryBg }]}>
-                  <Animated.View
-                    style={[
-                      s.progressBar,
-                      {
-                        backgroundColor: colors.primary,
-                        width: progressAnim.interpolate({
-                          inputRange: [0, 100],
-                          outputRange: ['0%', '100%'],
-                        }),
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={[s.loadingHint, { color: colors.textMuted }]}>
-                  This usually takes 15-30 seconds
-                </Text>
-              </View>
+              <Text style={[s.loadingMsg, { color: colors.foreground }]}>
+                {LOAD_MSGS[tick % LOAD_MSGS.length]}
+              </Text>
             </View>
           )}
         </BottomSheetScrollView>
@@ -755,34 +716,15 @@ const makeStyles = (colors: ThemeColors) =>
 
     // ── Loading ───────────────────────────────────────────────
     loadingContainer: {
-      paddingTop: Spacing['3xl'],
-    },
-    loadingCard: {
+      flex: 1,
       alignItems: 'center',
-      padding: Spacing.xl,
-      borderRadius: 20,
-      borderWidth: 1,
+      justifyContent: 'center',
+      paddingVertical: Spacing['5xl'],
     },
     loadingMsg: {
-      fontFamily: FontFamily.regular,
-      fontSize: FontSize.sm,
+      fontFamily: FontFamily.semibold,
+      fontSize: FontSize.base,
       textAlign: 'center',
       minHeight: 20,
-      marginBottom: Spacing.lg,
-    },
-    progressTrack: {
-      width: '100%',
-      height: 4,
-      borderRadius: 2,
-      overflow: 'hidden',
-    },
-    progressBar: {
-      height: '100%',
-      borderRadius: 2,
-    },
-    loadingHint: {
-      fontFamily: FontFamily.regular,
-      fontSize: FontSize.xs,
-      marginTop: Spacing.md,
     },
   });
