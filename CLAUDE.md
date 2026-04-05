@@ -1,5 +1,11 @@
 # CLAUDE.md
 
+## Quality Philosophy
+
+- **Always choose the premium approach.** Never recommend a simpler option just because the better one is "high effort" — Claude is doing the implementation, not a human team, so complexity is not a cost. If the best solution requires a new library, a full rewrite, or a complex architecture, do it.
+- **The app must feel premium.** Every screen, animation, and interaction should feel polished and intentional. Think award-winning travel app, not MVP prototype. When in doubt, look at how Airbnb, Apple Maps, or Revolut would do it.
+- **No cutting corners on UI/UX.** Don't ship "good enough" — ship "this feels great." If a feature needs 500 lines to feel right, write 500 lines. If a library swap makes a feature dramatically better, swap the library.
+
 ## TypeScript Guidelines
 
 - Never use `any`. Use `unknown` when the type is not known, then narrow with type guards.
