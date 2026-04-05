@@ -23,7 +23,7 @@ import BookingDetailSheet, {
   type BookingDetailSheetRef,
   type BookingDetailData,
 } from './BookingDetailSheet';
-import { BOOKING_TYPES, type BookingType } from '@/constants/bookings';
+import { type BookingType, BOOKING_TYPES } from '@/constants/bookings';
 
 interface BookingsListViewProps {
   bottomInset: number;
@@ -137,6 +137,10 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
     result.push(...tripSections);
     return result;
   }, [filteredBookings, getTripName]);
+
+  const FilterIcon = activeFilter !== 'all' ? BOOKING_TYPES[activeFilter].icon : null;
+  const activeFilterLabel =
+    activeFilter === 'all' ? '' : BOOKING_TYPES[activeFilter].label.toLowerCase() + 's';
 
   const handleOpenDetail = useCallback(
     (booking: NonNullable<typeof bookings>[number]) => {
@@ -260,6 +264,21 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
               </TouchableOpacity>
             )}
           </View>
+        }
+        ListEmptyComponent={
+          activeFilter !== 'all' && FilterIcon ? (
+            <View style={styles.filterEmpty}>
+              <View style={[styles.filterEmptyIcon, { backgroundColor: colors.surfaceLight }]}>
+                <FilterIcon size={28} color={colors.textMuted} />
+              </View>
+              <Text style={[styles.filterEmptyTitle, { color: colors.foreground }]}>
+                No {activeFilterLabel}
+              </Text>
+              <Text style={[styles.filterEmptyBody, { color: colors.textSecondary }]}>
+                You don't have any {activeFilterLabel} booked yet.{'\n'}Tap + to add one.
+              </Text>
+            </View>
+          ) : null
         }
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHeader}>
@@ -446,6 +465,30 @@ const styles = StyleSheet.create({
   reviewBannerText: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.sm,
+  },
+  filterEmpty: {
+    alignItems: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 32,
+  },
+  filterEmptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  filterEmptyTitle: {
+    fontFamily: FontFamily.semibold,
+    fontSize: FontSize.lg,
+    marginBottom: 8,
+  },
+  filterEmptyBody: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   fab: {
     position: 'absolute',
