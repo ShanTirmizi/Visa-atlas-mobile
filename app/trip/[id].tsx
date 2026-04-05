@@ -9,6 +9,13 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  interpolate,
+} from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from 'convex/react';
@@ -175,6 +182,44 @@ export default function TripDetailScreen() {
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [fabOpen, setFabOpen] = useState(false);
+  const fabProgress = useSharedValue(0);
+
+  const toggleFab = () => {
+    const next = !fabOpen;
+    setFabOpen(next);
+    fabProgress.value = withSpring(next ? 1 : 0, { damping: 15, stiffness: 200, mass: 0.6 });
+  };
+
+  // Main FAB rotation
+  const fabRotateStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${interpolate(fabProgress.value, [0, 1], [0, 45])}deg` }],
+  }));
+
+  // Backdrop opacity
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(fabProgress.value, { duration: 200 }),
+    pointerEvents: fabProgress.value > 0.1 ? 'auto' as const : 'none' as const,
+  }));
+
+  // Staggered mini button animations
+  const miniStyle = (index: number) => {
+    const delay = index * 0.15; // stagger
+    return useAnimatedStyle(() => {
+      const progress = fabProgress.value;
+      const staggeredProgress = Math.max(0, Math.min(1, (progress - delay) / (1 - delay)));
+      return {
+        opacity: interpolate(staggeredProgress, [0, 1], [0, 1]),
+        transform: [
+          { translateY: interpolate(staggeredProgress, [0, 1], [20, 0]) },
+          { scale: interpolate(staggeredProgress, [0, 1], [0.8, 1]) },
+        ],
+      };
+    });
+  };
+
+  const mini0Style = miniStyle(0);
+  const mini1Style = miniStyle(1);
+  const mini2Style = miniStyle(2);
 
   useEffect(() => {
     if (!id) return;
@@ -327,7 +372,7 @@ export default function TripDetailScreen() {
             ]}
           />
 
-          {/* Top action buttons */}
+          {/* Back button only */}
           <View style={styles.topActions}>
             <TouchableOpacity
               onPress={() => router.back()}
@@ -335,22 +380,6 @@ export default function TripDetailScreen() {
               hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
             >
               <ArrowLeft color={colors.foreground} size={20} />
-            </TouchableOpacity>
-
-            <View style={{ flex: 1 }} />
-
-            <TouchableOpacity
-              onPress={() => router.push(`/chat/${id}`)}
-              style={styles.backBtn}
-            >
-              <MessageCircle color={colors.foreground} size={20} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => router.push(`/trip/invite?tripId=${id}`)}
-              style={styles.backBtn}
-            >
-              <UserPlus color={colors.foreground} size={20} />
             </TouchableOpacity>
           </View>
 
@@ -499,70 +528,85 @@ export default function TripDetailScreen() {
         </View>
       </ScrollView>
 
+      {/* ─── Backdrop when FAB is open ─── */}
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFillObject,
+          { backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 50 },
+          backdropStyle,
+        ]}
+      >
+        <TouchableOpacity style={{ flex: 1 }} onPress={toggleFab} activeOpacity={1} />
+      </Animated.View>
+
       {/* ─── FAB ─── */}
-      <View style={[styles.fabContainer, { bottom: insets.bottom + 24 }]}>
-        {fabOpen && (
-          <>
-            <TouchableOpacity
-              style={styles.fabMiniRow}
-              onPress={() => { setFabOpen(false); router.push(`/chat/${id}`); }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>Chat</Text>
-              <View style={[styles.fabMini, { backgroundColor: colors.primary }]}>
-                <MessageCircle size={20} color="#FFFFFF" />
-              </View>
-            </TouchableOpacity>
+      <View style={[styles.fabContainer, { bottom: insets.bottom + 24, zIndex: 51 }]}>
+        {/* Mini action 1: Status toggle */}
+        <Animated.View style={mini2Style}>
+          <TouchableOpacity
+            style={styles.fabMiniRow}
+            onPress={() => {
+              toggleFab();
+              Alert.alert(
+                trip.countryName,
+                undefined,
+                [
+                  {
+                    text: trip.status === 'planned' ? 'Mark as Done' : 'Mark as Planned',
+                    onPress: () => {},
+                  },
+                  { text: 'Cancel', style: 'cancel' },
+                ],
+              );
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>
+              {trip.status === 'planned' ? 'Done' : 'Planned'}
+            </Text>
+            <View style={[styles.fabMini, { backgroundColor: colors.secondary }]}>
+              <Check size={20} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
 
-            <TouchableOpacity
-              style={styles.fabMiniRow}
-              onPress={() => { setFabOpen(false); router.push(`/trip/invite?tripId=${id}`); }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>Share</Text>
-              <View style={[styles.fabMini, { backgroundColor: colors.accent }]}>
-                <UserPlus size={20} color="#FFFFFF" />
-              </View>
-            </TouchableOpacity>
+        {/* Mini action 2: Share */}
+        <Animated.View style={mini1Style}>
+          <TouchableOpacity
+            style={styles.fabMiniRow}
+            onPress={() => { toggleFab(); router.push(`/trip/invite?tripId=${id}`); }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>Share</Text>
+            <View style={[styles.fabMini, { backgroundColor: colors.accent }]}>
+              <UserPlus size={20} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
 
-            <TouchableOpacity
-              style={styles.fabMiniRow}
-              onPress={() => {
-                setFabOpen(false);
-                Alert.alert(
-                  trip.countryName,
-                  undefined,
-                  [
-                    {
-                      text: trip.status === 'planned' ? 'Mark as Done' : 'Mark as Planned',
-                      onPress: () => {},
-                    },
-                    { text: 'Cancel', style: 'cancel' },
-                  ],
-                );
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>
-                {trip.status === 'planned' ? 'Done' : 'Planned'}
-              </Text>
-              <View style={[styles.fabMini, { backgroundColor: colors.secondary }]}>
-                <Check size={20} color="#FFFFFF" />
-              </View>
-            </TouchableOpacity>
-          </>
-        )}
+        {/* Mini action 3: Chat */}
+        <Animated.View style={mini0Style}>
+          <TouchableOpacity
+            style={styles.fabMiniRow}
+            onPress={() => { toggleFab(); router.push(`/chat/${id}`); }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.fabMiniLabel, { backgroundColor: colors.card, color: colors.foreground }]}>Chat</Text>
+            <View style={[styles.fabMini, { backgroundColor: colors.primary }]}>
+              <MessageCircle size={20} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
 
+        {/* Main FAB button */}
         <TouchableOpacity
-          onPress={() => setFabOpen(!fabOpen)}
+          onPress={toggleFab}
           style={[styles.fabMain, { backgroundColor: colors.accent }, Shadows.card]}
           activeOpacity={0.85}
         >
-          {fabOpen ? (
-            <MoreHorizontal size={26} color="#FFFFFF" style={{ transform: [{ rotate: '45deg' }] }} />
-          ) : (
+          <Animated.View style={fabRotateStyle}>
             <MoreHorizontal size={26} color="#FFFFFF" />
-          )}
+          </Animated.View>
         </TouchableOpacity>
       </View>
 
@@ -1139,7 +1183,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    paddingTop: 56,
+    paddingTop: Spacing.sm,
     zIndex: 10,
   },
   backBtn: {
