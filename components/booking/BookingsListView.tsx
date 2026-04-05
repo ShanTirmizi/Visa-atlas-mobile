@@ -296,9 +296,6 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
                   {section.count} booking{section.count !== 1 ? 's' : ''} need
                   linking
                 </Text>
-                <Text style={[styles.unlinkedArrow, { color: isDark ? colors.warning : '#B45309' }]}>
-                  {`View \u2192`}
-                </Text>
               </View>
             ) : (
               <View style={styles.tripHeader}>
@@ -449,10 +446,6 @@ const styles = StyleSheet.create({
   unlinkedText: {
     fontFamily: FontFamily.semibold,
     fontSize: 12,
-  },
-  unlinkedArrow: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xs,
   },
   cardWrapper: {
     marginBottom: Spacing.sm,
