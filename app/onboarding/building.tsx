@@ -179,6 +179,7 @@ export default function BuildingScreen() {
           body: JSON.stringify({
             passports: visa.passports,
             heldVisas: visa.heldVisas,
+            residence: visa.residence,
           }),
         });
         if (!res.ok) throw new Error('Generation failed');
@@ -222,6 +223,7 @@ export default function BuildingScreen() {
           body: JSON.stringify({
             passports: visa.passports,
             heldVisas: visa.heldVisas,
+            residence: visa.residence,
           }),
         });
         if (!res.ok) throw new Error('Generation failed');

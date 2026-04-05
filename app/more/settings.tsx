@@ -29,7 +29,7 @@ export default function SettingsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { setHeldVisas, passports, heldVisas } = useVisa();
+  const { setHeldVisas, passports, heldVisas, residence } = useVisa();
   const { signOut } = useAuthActions();
   const { isAuthenticated } = useConvexAuth();
   const deleteAccount = useMutation(api.account.deleteAccount);
@@ -71,6 +71,21 @@ export default function SettingsScreen() {
             <Text style={[styles.travelRowLabel, { color: colors.foreground }]}>Passports</Text>
             <Text style={[styles.travelRowValue, { color: colors.textSecondary }]}>
               {passports.length > 0 ? passports.map(getPassportName).join(', ') : 'Not set'}
+            </Text>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        {/* Residence */}
+        <TouchableOpacity
+          style={[styles.travelRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+          onPress={() => router.push('/onboarding/residence' as import('expo-router').Href)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.travelRowContent}>
+            <Text style={[styles.travelRowLabel, { color: colors.foreground }]}>Country of Residence</Text>
+            <Text style={[styles.travelRowValue, { color: colors.textSecondary }]}>
+              {residence ? getPassportName(residence) : 'Not set'}
             </Text>
           </View>
           <ChevronRight size={16} color={colors.textMuted} />

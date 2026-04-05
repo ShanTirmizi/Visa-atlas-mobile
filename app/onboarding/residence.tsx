@@ -4,11 +4,12 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, X } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 import { passportCountries, type PassportCountry } from '@/data/passportCountries';
+import BackButton from '@/components/ui/BackButton';
 
 // ── Alpha-3 to flag emoji ────────────────────────────────────────────
 const A3_TO_A2: Record<string, string> = {
@@ -42,16 +43,13 @@ function getFlag(alpha3: string): string {
   );
 }
 
-const MAX_PASSPORTS = 3;
-
-export default function PassportPickerScreen() {
+export default function ResidencePickerScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const visa = useVisa();
 
-  const [selected, setSelected] = useState<string[]>([]);
-  const [multiMode, setMultiMode] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -61,43 +59,17 @@ export default function PassportPickerScreen() {
   }, [search]);
 
   const toggleCountry = useCallback((code: string) => {
-    setSelected((prev) => {
-      if (prev.includes(code)) {
-        return prev.filter((c) => c !== code);
-      }
-      if (multiMode) {
-        if (prev.length >= MAX_PASSPORTS) return prev;
-        return [...prev, code];
-      }
-      // Single-select mode — replace
-      return [code];
-    });
-  }, [multiMode]);
-
-  const removeChip = useCallback((code: string) => {
-    setSelected((prev) => prev.filter((c) => c !== code));
-  }, []);
-
-  const toggleMultiMode = useCallback(() => {
-    setMultiMode((prev) => {
-      if (!prev) return true;
-      // Turning off multi — keep only first selected
-      setSelected((sel) => (sel.length > 0 ? [sel[0]] : []));
-      return false;
-    });
+    setSelected((prev) => (prev === code ? null : code));
   }, []);
 
   const handleContinue = useCallback(() => {
-    visa.setPassports(selected);
-    router.push('/onboarding/residence' as import('expo-router').Href);
+    if (!selected) return;
+    visa.setResidence(selected);
+    router.push('/onboarding/visas' as import('expo-router').Href);
   }, [selected, visa, router]);
 
-  const getCountryName = useCallback((code: string) => {
-    return passportCountries.find((c) => c.code === code)?.name ?? code;
-  }, []);
-
   const renderItem = useCallback(({ item }: { item: PassportCountry }) => {
-    const isSelected = selected.includes(item.code);
+    const isSelected = selected === item.code;
     return (
       <TouchableOpacity
         onPress={() => toggleCountry(item.code)}
@@ -128,7 +100,7 @@ export default function PassportPickerScreen() {
     );
   }, [selected, colors, toggleCountry]);
 
-  const canContinue = selected.length >= 1;
+  const canContinue = selected !== null;
 
   return (
     <View
@@ -141,13 +113,18 @@ export default function PassportPickerScreen() {
         },
       ]}
     >
+      {/* Back button */}
+      <View style={styles.backWrap}>
+        <BackButton />
+      </View>
+
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.foreground }]}>
-          Where are you from?
+          Where do you live?
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          We'll show you which countries you can visit
+          This helps us find the right embassies and processing times
         </Text>
       </View>
 
@@ -171,26 +148,6 @@ export default function PassportPickerScreen() {
         />
       </View>
 
-      {/* Selected chips (multi-mode) */}
-      {multiMode && selected.length > 0 && (
-        <View style={styles.chipRow}>
-          {selected.map((code) => (
-            <View
-              key={code}
-              style={[styles.chip, { backgroundColor: colors.accentBg, borderColor: colors.accent }]}
-            >
-              <Text style={styles.chipFlag}>{getFlag(code)}</Text>
-              <Text style={[styles.chipText, { color: colors.accent }]}>
-                {getCountryName(code)}
-              </Text>
-              <TouchableOpacity onPress={() => removeChip(code)} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                <X size={14} color={colors.accent} />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
-
       {/* Country list */}
       <FlatList
         data={filtered}
@@ -204,29 +161,6 @@ export default function PassportPickerScreen() {
 
       {/* Bottom controls */}
       <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
-        {/* Multi-passport toggle */}
-        <TouchableOpacity
-          onPress={toggleMultiMode}
-          activeOpacity={0.7}
-          style={[
-            styles.multiPill,
-            {
-              backgroundColor: multiMode ? colors.accentBg : colors.card,
-              borderColor: multiMode ? colors.accent : colors.border,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.multiPillText,
-              { color: multiMode ? colors.accent : colors.textSecondary },
-            ]}
-          >
-            I have multiple passports
-          </Text>
-        </TouchableOpacity>
-
-        {/* Continue button */}
         <TouchableOpacity
           onPress={handleContinue}
           activeOpacity={0.7}
@@ -252,6 +186,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.lg,
   },
+  backWrap: {
+    marginBottom: Spacing.md,
+  },
   header: {
     marginBottom: Spacing.lg,
   },
@@ -275,28 +212,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: Radius.md,
     borderWidth: 1,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-  },
-  chipFlag: {
-    fontSize: 16,
-  },
-  chipText: {
-    fontFamily: FontFamily.semibold,
-    fontSize: FontSize.xs,
   },
   listContent: {
     paddingBottom: Spacing.sm,
@@ -328,19 +243,7 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     paddingTop: Spacing.md,
-    gap: Spacing.sm,
     borderTopWidth: 1,
-  },
-  multiPill: {
-    alignSelf: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-  },
-  multiPillText: {
-    fontFamily: FontFamily.semibold,
-    fontSize: FontSize.sm,
   },
   continueBtn: {
     alignItems: 'center',
