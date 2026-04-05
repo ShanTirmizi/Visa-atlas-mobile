@@ -4,6 +4,16 @@ import React, {
 import {
   View, Text, TouchableOpacity, TextInput, StyleSheet,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+  FadeIn,
+  FadeOut,
+} from 'react-native-reanimated';
 import {
   BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
 } from '@gorhom/bottom-sheet';
@@ -80,6 +90,47 @@ export interface TripPlannerSheetRef {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// usePlaneAnimation
+// ════════════════════════════════════════════════════════════════════════
+function usePlaneAnimation(isActive: boolean) {
+  const translateY = useSharedValue(0);
+  const rotate = useSharedValue(0);
+
+  useEffect(() => {
+    if (isActive) {
+      translateY.value = withRepeat(
+        withSequence(
+          withTiming(-6, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+          withTiming(6, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+        ),
+        -1,
+        true,
+      );
+      rotate.value = withRepeat(
+        withSequence(
+          withTiming(-5, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+          withTiming(5, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+        ),
+        -1,
+        true,
+      );
+    } else {
+      translateY.value = withTiming(0, { duration: 300 });
+      rotate.value = withTiming(0, { duration: 300 });
+    }
+  }, [isActive, translateY, rotate]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: translateY.value },
+      { rotate: `${rotate.value}deg` },
+    ],
+  }));
+
+  return animatedStyle;
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // TripPlannerSheet
 // ════════════════════════════════════════════════════════════════════════
 const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
@@ -100,6 +151,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const [tick, setTick] = useState(0);
 
     const createTrip = useMutation(api.trips.createTrip);
+    const planeStyle = usePlaneAnimation(step === 'loading');
 
     // ── Snap points change with step ────────────────────────────────
     const snapPoints = useMemo(
@@ -515,9 +567,27 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           {/* ── Loading ──────────────────────────────────────────── */}
           {step === 'loading' && (
             <View style={s.loadingContainer}>
-              <Text style={[s.loadingMsg, { color: colors.foreground }]}>
-                {LOAD_MSGS[tick % LOAD_MSGS.length]}
+              {/* Animated plane */}
+              <Animated.View style={[s.planeCircle, { backgroundColor: colors.primaryBg }, planeStyle]}>
+                <Plane size={32} color={colors.primary} />
+              </Animated.View>
+
+              {/* Country context */}
+              <Text style={[s.loadingContext, { color: colors.textSecondary }]}>
+                Planning your trip to{' '}
+                <Text style={{ fontFamily: FontFamily.serifSemibold }}>{country.name}</Text>
+                ...
               </Text>
+
+              {/* Rotating status message */}
+              <Animated.Text
+                key={tick}
+                entering={FadeIn.duration(400)}
+                exiting={FadeOut.duration(200)}
+                style={[s.loadingMsg, { color: colors.foreground }]}
+              >
+                {LOAD_MSGS[tick % LOAD_MSGS.length]}
+              </Animated.Text>
             </View>
           )}
         </BottomSheetScrollView>
@@ -720,6 +790,20 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: Spacing['5xl'],
+    },
+    planeCircle: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: Spacing.xl,
+    },
+    loadingContext: {
+      fontFamily: FontFamily.serif,
+      fontSize: FontSize.sm,
+      textAlign: 'center',
+      marginBottom: Spacing.md,
     },
     loadingMsg: {
       fontFamily: FontFamily.semibold,
