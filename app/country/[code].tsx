@@ -22,6 +22,9 @@ import {
 import { countryMeta } from '@/data/countryMeta';
 import { travelData } from '@/data/travelData';
 import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
+import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 
 // ── Alpha-3 to flag emoji ───────────────────────────────────────────────
 /* prettier-ignore */
@@ -89,6 +92,8 @@ export default function CountryDetailScreen() {
 
   // ── Trip planner sheet ref ───────────────────────────────────────────
   const tripSheetRef = useRef<TripPlannerSheetRef>(null);
+  const guideSheetRef = useRef<VisaGuideSheetRef>(null);
+  const existingGuide = useQuery(api.visaGuides.getGuideByCountry, { countryCode: code as string });
 
   const flag = country ? toFlag(country.code) : '';
   const cost$ = travel ? '$'.repeat(travel.costLevel) : '';
@@ -241,7 +246,13 @@ export default function CountryDetailScreen() {
 
           {(resolved.category === 'visa-required' || resolved.category === 'evisa') && (
             <TouchableOpacity
-              onPress={() => router.push('/(tabs)/guides')}
+              onPress={() => {
+                if (existingGuide) {
+                  router.push(`/guide/${existingGuide._id}`);
+                } else {
+                  guideSheetRef.current?.present();
+                }
+              }}
               style={[s.secondaryBtn, { borderColor: colors.accent + '40', backgroundColor: colors.accentBg }]}
               activeOpacity={0.8}
             >
@@ -285,6 +296,15 @@ export default function CountryDetailScreen() {
           resolved={resolved}
           heldVisas={heldSet}
           onTripCreated={(tripId) => router.replace(`/trip/${tripId}`)}
+        />
+      )}
+      {country && resolved && (resolved.category === 'visa-required' || resolved.category === 'evisa') && (
+        <VisaGuideSheet
+          ref={guideSheetRef}
+          countryCode={country.code}
+          countryName={country.name}
+          heldVisas={heldSet}
+          onGuideCreated={(guideId) => router.replace(`/guide/${guideId}`)}
         />
       )}
     </View>
