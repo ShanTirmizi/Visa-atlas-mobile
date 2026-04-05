@@ -207,9 +207,9 @@ export default function TripDetailScreen() {
     ],
   }));
 
-  // Backdrop opacity
+  // Backdrop opacity — uses fabProgress directly (already spring-animated)
   const backdropStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(fabProgress.value, { duration: 200 }),
+    opacity: fabProgress.value * 0.5,
     pointerEvents: fabProgress.value > 0.1 ? 'auto' as const : 'none' as const,
   }));
 
@@ -544,7 +544,7 @@ export default function TripDetailScreen() {
       <Animated.View
         style={[
           StyleSheet.absoluteFillObject,
-          { backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 50 },
+          { backgroundColor: '#000000', zIndex: 50 },
           backdropStyle,
         ]}
       >
@@ -1587,5 +1587,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
 });
