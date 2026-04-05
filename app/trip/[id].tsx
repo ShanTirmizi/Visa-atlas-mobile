@@ -70,6 +70,7 @@ import TripBookingsTimeline from '@/components/booking/TripBookingsTimeline';
 import AddBookingSheet, { type AddBookingSheetRef } from '@/components/booking/AddBookingSheet';
 import BookingDetailSheet, { type BookingDetailSheetRef, type BookingDetailData } from '@/components/booking/BookingDetailSheet';
 import SegmentedControl from '@/components/ui/SegmentedControl';
+import BackButton from '@/components/ui/BackButton';
 
 // ─── Types ──────────────────────────────────────────
 interface ItineraryDay {
@@ -386,13 +387,7 @@ export default function TripDetailScreen() {
 
           {/* Back button only */}
           <View style={styles.topActions}>
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={styles.backBtn}
-              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-            >
-              <ArrowLeft color={colors.foreground} size={20} />
-            </TouchableOpacity>
+            <BackButton />
           </View>
 
           {/* Hero content */}
@@ -1200,15 +1195,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
     zIndex: 10,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.card,
   },
   heroContent: {
     padding: Spacing.lg,

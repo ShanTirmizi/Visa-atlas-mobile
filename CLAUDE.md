@@ -20,7 +20,9 @@
 
 ## UI Conventions (follow existing patterns)
 
-- **Back button**: White square, 40x40, `borderRadius: Radius.sm`, `backgroundColor: '#FFFFFF'`, dark arrow icon. See `app/trip/[id].tsx` backBtn style. Always follow this pattern.
+- **Component reuse**: Always check `components/ui/` for existing reusable components before creating inline implementations. If a UI pattern is used in 2+ places, extract it into a shared component in `components/ui/`. Never duplicate component logic across screens. Key shared components:
+  - `BackButton` — `components/ui/BackButton.tsx` for the standard white 40x40 back navigation button. Never create inline `backBtn` styles — always use this component.
+  - `SegmentedControl` — `components/ui/SegmentedControl.tsx` for ALL tab-switching UI (e.g., My Trips/Bookings, Overview/Itinerary/Logistics, Editor/Viewer). Never build inline tab pickers — always use this component.
 - **Bottom sheets**: Use `enableDynamicSizing={true}` with `maxDynamicContentSize` set to `Dimensions.get('window').height - safeAreaInsets.top - 10`. This auto-fits content and caps just below the Dynamic Island / status bar (industry standard: Apple Maps, Uber, Airbnb). Never use fixed percentage snap points.
 - **Bottom sheet backgrounds**: Use the relevant booking type color for booking sheets, `colors.background` for generic sheets.
 - **Always check existing codebase patterns** before introducing new UI conventions. If a pattern exists (back button style, card radius, shadow), follow it exactly.

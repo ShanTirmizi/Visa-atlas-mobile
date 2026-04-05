@@ -17,9 +17,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
-import { ArrowLeft, Link, Mail } from 'lucide-react-native';
+import { Link, Mail } from 'lucide-react-native';
+import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
+import SegmentedControl from '@/components/ui/SegmentedControl';
 
 type Role = 'editor' | 'viewer';
 
@@ -99,13 +101,7 @@ export default function InviteScreen() {
           { paddingTop: insets.top + Spacing.sm, borderBottomColor: colors.borderSubtle },
         ]}
       >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-          style={styles.backBtn}
-        >
-          <ArrowLeft color={colors.foreground} size={20} />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>
           Invite Collaborators
         </Text>
@@ -124,30 +120,11 @@ export default function InviteScreen() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Invite as
           </Text>
-          <View style={[styles.rolePicker, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}>
-            {(['editor', 'viewer'] as Role[]).map((r) => {
-              const active = role === r;
-              return (
-                <TouchableOpacity
-                  key={r}
-                  onPress={() => setRole(r)}
-                  style={[
-                    styles.roleBtn,
-                    active && { backgroundColor: colors.primary },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.roleBtnText,
-                      { color: active ? '#fff' : colors.textSecondary },
-                    ]}
-                  >
-                    {r.charAt(0).toUpperCase() + r.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            tabs={['Editor', 'Viewer']}
+            activeIndex={role === 'editor' ? 0 : 1}
+            onTabPress={(i: number) => setRole(i === 0 ? 'editor' : 'viewer')}
+          />
           <Text style={[styles.roleHint, { color: colors.textSecondary }]}>
             {role === 'editor'
               ? 'Editors can add and edit content in this trip.'
@@ -227,14 +204,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerTitle: {
     fontFamily: FontFamily.semibold,
     fontSize: FontSize.base,
@@ -253,24 +222,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: Spacing.xs,
-  },
-  rolePicker: {
-    flexDirection: 'row',
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-    padding: 4,
-    gap: 4,
-  },
-  roleBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-  },
-  roleBtnText: {
-    fontFamily: FontFamily.semibold,
-    fontSize: FontSize.sm,
   },
   roleHint: {
     fontFamily: FontFamily.regular,

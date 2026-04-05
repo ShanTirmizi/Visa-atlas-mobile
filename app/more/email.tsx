@@ -9,10 +9,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Mail, RefreshCw, Unlink, ChevronRight } from 'lucide-react-native';
+import { Mail, RefreshCw, Unlink, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useEmail } from '@/contexts/email-context';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing } from '@/constants/theme';
+import BackButton from '@/components/ui/BackButton';
 
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
