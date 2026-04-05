@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Trash2, Info, LogOut, ChevronRight, Download, UserX, FileText, Shield } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Info, LogOut, ChevronRight, Download, UserX, FileText, Shield, Globe, MapPin, CreditCard } from 'lucide-react-native';
 import { useAuthActions } from '@convex-dev/auth/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery, useConvexAuth } from 'convex/react';
@@ -57,54 +57,60 @@ export default function SettingsScreen() {
       </Text>
 
       {/* Travel Documents */}
-      <View style={styles.travelSection}>
-        <Text style={[styles.travelSectionLabel, { color: colors.textSecondary }]}>
-          TRAVEL DOCUMENTS
+      <Text style={[styles.sectionTitle, { color: colors.textSecondary, fontSize: FontSize.base, marginTop: Spacing.sm, marginBottom: Spacing.sm }]}>
+        Travel Documents
+      </Text>
+
+      {/* Passports */}
+      <TouchableOpacity
+        style={[styles.settingRow, { backgroundColor: colors.primary, borderWidth: 0 }]}
+        onPress={() => router.push('/more/edit-passport' as import('expo-router').Href)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.settingInfo}>
+          <Globe color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+            Passports
+          </Text>
+        </View>
+        <Text style={{ fontFamily: FontFamily.regular, fontSize: FontSize.sm, color: colors.solidTextSub }}>
+          {passports.length > 0 ? passports.map(getPassportName).join(', ') : 'Not set'}
         </Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.travelRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-          onPress={() => router.push('/onboarding' as import('expo-router').Href)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.travelRowContent}>
-            <Text style={[styles.travelRowLabel, { color: colors.foreground }]}>Passports</Text>
-            <Text style={[styles.travelRowValue, { color: colors.textSecondary }]}>
-              {passports.length > 0 ? passports.map(getPassportName).join(', ') : 'Not set'}
-            </Text>
-          </View>
-          <ChevronRight size={16} color={colors.textMuted} />
-        </TouchableOpacity>
+      {/* Residence */}
+      <TouchableOpacity
+        style={[styles.settingRow, { backgroundColor: colors.primary, borderWidth: 0 }]}
+        onPress={() => router.push('/more/edit-residence' as import('expo-router').Href)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.settingInfo}>
+          <MapPin color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+            Country of Residence
+          </Text>
+        </View>
+        <Text style={{ fontFamily: FontFamily.regular, fontSize: FontSize.sm, color: colors.solidTextSub }}>
+          {residence ? getPassportName(residence) : 'Not set'}
+        </Text>
+      </TouchableOpacity>
 
-        {/* Residence */}
-        <TouchableOpacity
-          style={[styles.travelRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-          onPress={() => router.push('/onboarding/residence' as import('expo-router').Href)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.travelRowContent}>
-            <Text style={[styles.travelRowLabel, { color: colors.foreground }]}>Country of Residence</Text>
-            <Text style={[styles.travelRowValue, { color: colors.textSecondary }]}>
-              {residence ? getPassportName(residence) : 'Not set'}
-            </Text>
-          </View>
-          <ChevronRight size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.travelRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
-          onPress={() => router.push('/more/visas' as import('expo-router').Href)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.travelRowContent}>
-            <Text style={[styles.travelRowLabel, { color: colors.foreground }]}>Held Visas</Text>
-            <Text style={[styles.travelRowValue, { color: colors.textSecondary }]}>
-              {heldVisas.length > 0 ? `${heldVisas.length} visa${heldVisas.length !== 1 ? 's' : ''}` : 'None'}
-            </Text>
-          </View>
-          <ChevronRight size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-      </View>
+      {/* Held Visas */}
+      <TouchableOpacity
+        style={[styles.settingRow, { backgroundColor: colors.primary, borderWidth: 0 }]}
+        onPress={() => router.push('/more/visas' as import('expo-router').Href)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.settingInfo}>
+          <CreditCard color="#FFFFFF" size={20} />
+          <Text style={[styles.settingLabel, { color: '#FFFFFF' }]}>
+            Held Visas
+          </Text>
+        </View>
+        <Text style={{ fontFamily: FontFamily.regular, fontSize: FontSize.sm, color: colors.solidTextSub }}>
+          {heldVisas.length > 0 ? `${heldVisas.length} visa${heldVisas.length !== 1 ? 's' : ''}` : 'None'}
+        </Text>
+      </TouchableOpacity>
 
       {/* Clear data */}
       <TouchableOpacity
@@ -350,36 +356,5 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     marginTop: Spacing.xl,
     marginBottom: Spacing.sm,
-  },
-  travelSection: {
-    marginBottom: Spacing.lg,
-  },
-  travelSectionLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.8,
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.sm,
-  },
-  travelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: Spacing.md,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: Spacing.sm,
-  },
-  travelRowContent: {
-    flex: 1,
-    gap: 2,
-  },
-  travelRowLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.base,
-  },
-  travelRowValue: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
   },
 });
