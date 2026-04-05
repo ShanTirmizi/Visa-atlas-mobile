@@ -1,29 +1,31 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Link2 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 import {
   type BookingType,
   type BookingStatus,
   BOOKING_TYPES,
   getBookingColor,
-  formatBookingDates,
+  getTintedBackground,
+  formatRelativeDate,
+  getBookingSecondaryMeta,
+  getBookingEndMeta,
 } from '@/constants/bookings';
 
 interface BookingCardProps {
-  id: string;
   type: BookingType;
   title: string;
   startDate: string;
   endDate?: string;
   location?: string;
-  provider: string;
+  provider?: string;
   status: BookingStatus;
-  tripName?: string;
-  autoMatched?: boolean;
+  cost?: number;
+  currency?: string;
+  typeDetails?: Record<string, string>;
+  isUnlinked?: boolean;
   onPress: () => void;
-  onLinkTrip?: () => void;
 }
 
 export default function BookingCard({
@@ -34,29 +36,32 @@ export default function BookingCard({
   location,
   provider,
   status,
-  tripName,
-  autoMatched,
+  cost,
+  currency,
+  typeDetails,
+  isUnlinked,
   onPress,
-  onLinkTrip,
 }: BookingCardProps) {
-  const { colors, isDark } = useTheme();
-  const config = BOOKING_TYPES[type];
+  const { isDark } = useTheme();
   const typeColor = getBookingColor(type, isDark);
-  const Icon = config.icon;
-
-  // Card background matches the bottom sheet color for that booking type
-  const cardBg = typeColor;
+  const Icon = BOOKING_TYPES[type].icon;
 
   const isCancelled = status === 'cancelled';
   const isCompleted = status === 'completed';
 
-  const dateStr = formatBookingDates(
-    new Date(startDate),
-    endDate ? new Date(endDate) : undefined,
-  );
-  const metaParts = [dateStr];
-  if (location) metaParts.push(location);
-  const metaText = metaParts.join(' \u00B7 ');
+  const relativeDate = formatRelativeDate(startDate);
+  const secondaryMeta = getBookingSecondaryMeta(type, {
+    provider,
+    startDate,
+    endDate,
+    location,
+    typeDetails,
+  });
+  const endMeta = getBookingEndMeta(type, { cost, currency, typeDetails });
+
+  const metaText = [relativeDate, secondaryMeta].filter(Boolean).join(' \u00B7 ');
+
+  const cardBg = isUnlinked ? (isDark ? '#1C1A17' : '#FFF8F0') : getTintedBackground(type, isDark);
 
   return (
     <TouchableOpacity
@@ -64,24 +69,26 @@ export default function BookingCard({
       onPress={onPress}
       style={[
         styles.card,
-        Shadows.subtle,
         {
           backgroundColor: cardBg,
-          borderColor: 'transparent',
           opacity: isCancelled ? 0.5 : 1,
+        },
+        isUnlinked && {
+          borderWidth: 1.5,
+          borderStyle: 'dashed' as const,
+          borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#d4c4b0',
         },
       ]}
     >
-      {/* Main row */}
-      <View style={styles.mainRow}>
+      <View style={styles.row}>
         {/* Icon circle */}
         <View
           style={[
             styles.iconCircle,
-            { backgroundColor: 'rgba(255,255,255,0.2)' },
+            { backgroundColor: typeColor + '26' },
           ]}
         >
-          <Icon size={18} color="#FFFFFF" />
+          <Icon size={18} color={typeColor} />
         </View>
 
         {/* Content */}
@@ -90,50 +97,27 @@ export default function BookingCard({
             numberOfLines={1}
             style={[
               styles.title,
-              { color: '#FFFFFF' },
+              { color: isDark ? '#E6EDF3' : '#1a1a1a' },
               isCompleted && styles.titleCompleted,
             ]}
           >
             {title}
           </Text>
-          <Text numberOfLines={1} style={[styles.meta, { color: 'rgba(255,255,255,0.75)' }]}>
+          <Text
+            numberOfLines={1}
+            style={[styles.meta, { color: isDark ? '#6B7280' : '#888888' }]}
+          >
             {metaText}
           </Text>
         </View>
 
-        {/* Provider badge */}
-        <View style={[styles.providerBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-          <Text style={[styles.providerText, { color: '#FFFFFF' }]}>
-            {provider}
+        {/* End meta (flight number or cost) */}
+        {endMeta ? (
+          <Text style={[styles.endMeta, { color: isDark ? '#6B7280' : '#888888' }]}>
+            {endMeta}
           </Text>
-        </View>
+        ) : null}
       </View>
-
-      {/* Trip link area */}
-      {tripName ? (
-        <View style={styles.tripChip}>
-          <Link2 size={12} color="rgba(255,255,255,0.8)" />
-          <Text style={[styles.tripName, { color: '#FFFFFF' }]}>
-            {tripName}
-          </Text>
-          {autoMatched && (
-            <Text style={[styles.autoLabel, { color: 'rgba(255,255,255,0.6)' }]}>
-              auto
-            </Text>
-          )}
-        </View>
-      ) : onLinkTrip ? (
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={onLinkTrip}
-          style={styles.tripChip}
-        >
-          <Link2 size={12} color="rgba(255,255,255,0.6)" />
-          <Text style={[styles.linkPrompt, { color: 'rgba(255,255,255,0.6)' }]}>
-            Link to a trip
-          </Text>
-        </TouchableOpacity>
-      ) : null}
     </TouchableOpacity>
   );
 }
@@ -141,18 +125,18 @@ export default function BookingCard({
 const styles = StyleSheet.create({
   card: {
     borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 14,
   },
-  mainRow: {
+  row: {
     flexDirection: 'row',
-    gap: 10,
     alignItems: 'center',
+    gap: 12,
   },
   iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -161,7 +145,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: FontFamily.semibold,
-    fontSize: FontSize.base,
+    fontSize: 14,
   },
   titleCompleted: {
     textDecorationLine: 'line-through',
@@ -172,33 +156,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     marginTop: 2,
   },
-  providerBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
-  },
-  providerText: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  tripChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 46,
-    marginTop: Spacing.sm,
-  },
-  tripName: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: FontSize.xs,
-  },
-  autoLabel: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  linkPrompt: {
+  endMeta: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.xs,
   },
