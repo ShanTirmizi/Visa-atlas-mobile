@@ -35,7 +35,7 @@ import {
 // Providers
 import { ConvexProvider } from '@/contexts/ConvexProvider';
 import { ThemeProvider, useTheme } from '@/contexts/theme-context';
-import { VisaProvider } from '@/contexts/visa-context';
+import { VisaProvider, useVisa } from '@/contexts/visa-context';
 import { CalendarProvider } from '@/contexts/calendar-context';
 import { EmailProvider } from '@/contexts/email-context';
 import { ToastProvider } from '@/contexts/toast-context';
@@ -51,19 +51,28 @@ function ThemedApp() {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const { onboarded, loaded: visaLoaded } = useVisa();
   const segments = useSegments();
   const router = useRouter();
 
   // Auth gate: redirect based on auth state
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !visaLoaded) return;
     const inAuthGroup = segments[0] === 'sign-in' || segments[0] === 'sign-in-email';
+    const inOnboarding = segments[0] === 'onboarding';
+
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/sign-in');
     } else if (isAuthenticated && inAuthGroup) {
-      router.replace('/(tabs)');
+      if (!onboarded) {
+        router.replace('/onboarding');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } else if (isAuthenticated && !onboarded && !inOnboarding && !inAuthGroup) {
+      router.replace('/onboarding');
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, isLoading, segments, onboarded, visaLoaded]);
 
   // Show loading screen while checking auth
   if (isLoading) {
@@ -91,6 +100,7 @@ function ThemedApp() {
         }}
       >
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
         <Stack.Screen
           name="trip/[id]"
           options={{
