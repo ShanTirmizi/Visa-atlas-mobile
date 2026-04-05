@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -27,6 +28,7 @@ import { VisaMap } from '@/components/map/VisaMap';
 import SearchBar from '@/components/ui/SearchBar';
 import Chip from '@/components/ui/Chip';
 import CountryList from '@/components/country/CountryList';
+import SurpriseMeSheet, { type SurpriseMeSheetRef } from '@/components/surprise/SurpriseMeSheet';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -53,6 +55,7 @@ export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const surpriseRef = useRef<SurpriseMeSheetRef>(null);
 
   // State
   const [searchQuery, setSearchQuery] = useState('');
@@ -166,6 +169,14 @@ export default function ExploreScreen() {
           <Text style={[styles.heading, { color: colors.foreground }]}>
             Explore
           </Text>
+          <TouchableOpacity
+            onPress={() => surpriseRef.current?.present()}
+            activeOpacity={0.7}
+            style={[styles.surpriseBtn, { backgroundColor: colors.accent }]}
+          >
+            <Sparkles size={14} color="#FFFFFF" />
+            <Text style={styles.surpriseBtnText}>Surprise Me</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Search bar */}
@@ -215,6 +226,14 @@ export default function ExploreScreen() {
           onToggleFavorite={handleToggleFavorite}
         />
       </BottomSheet>
+
+      <SurpriseMeSheet
+        ref={surpriseRef}
+        heldVisas={heldVisasSet}
+        onCountrySelected={(code) => {
+          router.push(`/country/${code}`);
+        }}
+      />
     </View>
   );
 }
@@ -262,5 +281,18 @@ const styles = StyleSheet.create({
   },
   chipsContent: {
     paddingHorizontal: Spacing.lg,
+  },
+  surpriseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+  },
+  surpriseBtnText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 12,
+    color: '#FFFFFF',
   },
 });
