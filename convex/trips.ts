@@ -89,6 +89,7 @@ export const createTrip = mutation({
     companions: v.optional(v.string()),
     heroImage: v.optional(v.string()),
     dayImages: v.optional(v.string()),
+    activityImages: v.optional(v.string()),
     itinerary: v.string(),
     budgetBreakdown: v.string(),
     packingSuggestions: v.string(),

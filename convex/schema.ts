@@ -36,6 +36,7 @@ export default defineSchema({
     accommodationTips: v.string(),
     heroImage: v.optional(v.string()),
     dayImages: v.optional(v.string()),
+    activityImages: v.optional(v.string()),
     localEssentials: v.optional(v.string()),
     localGuide: v.optional(v.string()),
     carRental: v.optional(v.string()),
