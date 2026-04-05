@@ -13,4 +13,5 @@ export const endpoints = {
   gmailAuth: `${API_BASE}/api/auth/gmail`,
   gmailCallback: `${API_BASE}/api/auth/gmail/callback`,
   scanBooking: `${API_BASE}/api/scan-booking`,
+  visaMap: `${API_BASE}/api/visa-map`,
 };
