@@ -284,7 +284,7 @@ export default function CountryDetailScreen() {
           travel={travel}
           resolved={resolved}
           heldVisas={heldSet}
-          onTripCreated={(tripId) => router.push(`/trip/${tripId}`)}
+          onTripCreated={(tripId) => router.replace(`/trip/${tripId}`)}
         />
       )}
     </View>
