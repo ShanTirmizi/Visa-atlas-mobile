@@ -8,7 +8,6 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Mail, RefreshCw, Unlink, ChevronRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useEmail } from '@/contexts/email-context';
@@ -29,7 +28,6 @@ function formatRelativeTime(isoString: string): string {
 export default function EmailScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { gmailAccount, isSyncing: isEmailSyncing, syncGmail, connectGmail, disconnectGmail } = useEmail();
 
   return (
@@ -41,13 +39,7 @@ export default function EmailScreen() {
       }}
       showsVerticalScrollIndicator={false}
     >
-      <TouchableOpacity
-        style={[styles.backBtn, { backgroundColor: colors.surface }]}
-        onPress={() => router.back()}
-        hitSlop={12}
-      >
-        <ArrowLeft color={colors.foreground} size={20} />
-      </TouchableOpacity>
+      <BackButton />
 
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
         Email Sync
@@ -154,14 +146,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: Spacing.lg,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.md,
   },
   sectionTitle: {
     fontFamily: FontFamily.display,
