@@ -55,6 +55,7 @@ import {
   UserPlus,
   MessageCircle,
   MoreHorizontal,
+  X,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import {
@@ -190,9 +191,20 @@ export default function TripDetailScreen() {
     fabProgress.value = withSpring(next ? 1 : 0, { damping: 15, stiffness: 200, mass: 0.6 });
   };
 
-  // Main FAB rotation
-  const fabRotateStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${interpolate(fabProgress.value, [0, 1], [0, 45])}deg` }],
+  // Main FAB icon: ··· rotates to × with a bounce
+  const fabDotsStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(fabProgress.value, [0, 0.3], [1, 0]),
+    transform: [
+      { rotate: `${interpolate(fabProgress.value, [0, 1], [0, 90])}deg` },
+      { scale: interpolate(fabProgress.value, [0, 0.3], [1, 0.5]) },
+    ],
+  }));
+  const fabCloseStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(fabProgress.value, [0.3, 0.6], [0, 1]),
+    transform: [
+      { rotate: `${interpolate(fabProgress.value, [0, 1], [-90, 0])}deg` },
+      { scale: interpolate(fabProgress.value, [0.3, 0.7], [0.5, 1]) },
+    ],
   }));
 
   // Backdrop opacity
@@ -598,14 +610,17 @@ export default function TripDetailScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Main FAB button */}
+        {/* Main FAB button — ··· morphs to × */}
         <TouchableOpacity
           onPress={toggleFab}
           style={[styles.fabMain, { backgroundColor: colors.accent }, Shadows.card]}
           activeOpacity={0.85}
         >
-          <Animated.View style={fabRotateStyle}>
+          <Animated.View style={[{ position: 'absolute' }, fabDotsStyle]}>
             <MoreHorizontal size={26} color="#FFFFFF" />
+          </Animated.View>
+          <Animated.View style={[{ position: 'absolute' }, fabCloseStyle]}>
+            <X size={26} color="#FFFFFF" />
           </Animated.View>
         </TouchableOpacity>
       </View>
