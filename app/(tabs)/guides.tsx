@@ -44,10 +44,10 @@ const STATUS_CONFIG: Record<
   string,
   { label: string; color: string; bg: string }
 > = {
-  preparing: { label: 'Preparing', color: '#E5A832', bg: 'rgba(229, 168, 50, 0.15)' },
-  submitted: { label: 'Submitted', color: '#EB6D3A', bg: 'rgba(235, 109, 58, 0.15)' },
-  approved:  { label: 'Approved',  color: '#2EAA6E', bg: 'rgba(46, 170, 110, 0.15)' },
-  rejected:  { label: 'Rejected',  color: '#E05545', bg: 'rgba(224, 85, 69, 0.15)' },
+  preparing: { label: 'Preparing', color: '#B8861E', bg: 'rgba(229, 168, 50, 0.15)' },
+  submitted: { label: 'Submitted', color: '#D45E30', bg: 'rgba(235, 109, 58, 0.15)' },
+  approved:  { label: 'Approved',  color: '#228B57', bg: 'rgba(46, 170, 110, 0.15)' },
+  rejected:  { label: 'Rejected',  color: '#C43A2E', bg: 'rgba(224, 85, 69, 0.15)' },
 };
 
 // ---------------------------------------------------------------------------
