@@ -1,17 +1,23 @@
-import React, { useMemo, useCallback, useRef } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
-import MapView, { type Region } from 'react-native-maps';
+import React, { useMemo, useCallback, useState } from 'react';
+import { View, StyleSheet } from 'react-native';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { getVisaCategoryColor } from '@/constants/categories';
-import { type VisaCategory as DataVisaCategory, visaData, resolveCountry, type HeldVisaType } from '@/data/visaData';
-import { countryCoordinates } from '@/data/countryCoordinates';
-import { CountryMarker } from './CountryMarker';
+import { getVisaCategoryColor, type VisaCategory } from '@/constants/categories';
+import {
+  type VisaCategory as DataVisaCategory,
+  visaData,
+  resolveCountry,
+  type HeldVisaType,
+} from '@/data/visaData';
+import { getCountriesGeoJSON } from '@/data/countriesGeo';
+import CountryInfoCard from './CountryInfoCard';
 import { MapLegend } from './MapLegend';
 
 // ──────────────────────────────────────────────
 // VisaMap
-// Full-screen world map with colored markers for
-// each country, colored by their visa category.
+// Full-screen world choropleth map with country
+// fills colored by their visa category.
+// Uses MapLibre GL with ShapeSource + FillLayer.
 // ──────────────────────────────────────────────
 
 export interface VisaMapProps {
@@ -39,195 +45,203 @@ function normalizeCategoryKey(category: DataVisaCategory | string): string {
   }
 }
 
-// Initial region centered on the world (slight bias toward Asia/Europe)
-const INITIAL_REGION: Region = {
-  latitude: 20,
-  longitude: 40,
-  latitudeDelta: 120,
-  longitudeDelta: 120,
-};
+// Load GeoJSON once at module level
+const countriesGeoJSON = getCountriesGeoJSON();
 
-// Custom map styling for a muted base map (iOS uses mutedStandard; this handles Android)
-const MUTED_MAP_STYLE = [
-  {
-    elementType: 'geometry',
-    stylers: [{ saturation: -60 }, { lightness: 10 }],
-  },
-  {
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#7a7a7a' }],
-  },
-  {
-    elementType: 'labels.text.stroke',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'administrative.country',
-    elementType: 'geometry.stroke',
-    stylers: [{ color: '#aaaaaa' }, { weight: 0.5 }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'geometry.fill',
-    stylers: [{ color: '#d4e6ec' }],
-  },
-  {
-    featureType: 'landscape',
-    elementType: 'geometry.fill',
-    stylers: [{ color: '#f0ece4' }],
-  },
-  {
-    featureType: 'poi',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'transit',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'road',
-    stylers: [{ visibility: 'off' }],
-  },
-];
+// Tile style URLs
+const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 
-// Same concept for dark mode
-const DARK_MAP_STYLE = [
-  {
-    elementType: 'geometry',
-    stylers: [{ color: '#1a2e38' }],
-  },
-  {
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#6a8a98' }],
-  },
-  {
-    elementType: 'labels.text.stroke',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'administrative.country',
-    elementType: 'geometry.stroke',
-    stylers: [{ color: '#2d4a58' }, { weight: 0.5 }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'geometry.fill',
-    stylers: [{ color: '#0f1f28' }],
-  },
-  {
-    featureType: 'landscape',
-    elementType: 'geometry.fill',
-    stylers: [{ color: '#1a3340' }],
-  },
-  {
-    featureType: 'poi',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'transit',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'road',
-    stylers: [{ visibility: 'off' }],
-  },
-];
-
-interface ResolvedMarker {
+interface SelectedInfo {
   code: string;
   name: string;
-  categoryKey: string; // normalized UI key (visa_free, etc.)
-  latitude: number;
-  longitude: number;
+  categoryKey: string;
+  maxStay?: number;
+}
+
+interface CountryLookupEntry {
+  categoryKey: string;
+  name: string;
+  maxStay?: number;
 }
 
 export function VisaMap({
   activeFilters,
   heldVisas,
   onCountrySelect,
-  selectedCountry,
 }: VisaMapProps) {
   const { colors, isDark } = useTheme();
-  const mapRef = useRef<MapView>(null);
+  const [selected, setSelected] = useState<SelectedInfo | null>(null);
 
   // Cast heldVisas to the typed set
   const typedHeldVisas = heldVisas as Set<HeldVisaType>;
 
-  // Resolve all country visa categories considering held visas
-  const markers: ResolvedMarker[] = useMemo(() => {
-    const result: ResolvedMarker[] = [];
-
+  // Build lookup: code → { categoryKey, name, maxStay }
+  const countryLookup = useMemo(() => {
+    const lookup = new Map<string, CountryLookupEntry>();
     for (const country of visaData) {
-      const coords = countryCoordinates[country.code];
-      if (!coords) continue; // skip countries without coordinates
-
       const resolved = resolveCountry(country, typedHeldVisas);
       const categoryKey = normalizeCategoryKey(resolved.category);
-
-      result.push({
-        code: country.code,
-        name: country.name,
+      lookup.set(country.code, {
         categoryKey,
-        latitude: coords.lat,
-        longitude: coords.lng,
+        name: country.name,
+        maxStay: resolved.days,
       });
     }
-
-    return result;
+    return lookup;
   }, [typedHeldVisas]);
 
-  // Filter markers by active category filters
-  const visibleMarkers = useMemo(() => {
-    if (activeFilters.size === 0) return markers;
-    return markers.filter((m) => activeFilters.has(m.categoryKey));
-  }, [markers, activeFilters]);
+  // Build the fillColor expression: ['match', ['get', 'iso_a3'], code1, color1, ..., default]
+  const fillColorExpression = useMemo(() => {
+    const defaultColor = isDark ? '#1a3340' : '#e0d5c8';
+    const expr: unknown[] = ['match', ['get', 'iso_a3']];
+    for (const [code, entry] of countryLookup) {
+      const color = getVisaCategoryColor(entry.categoryKey, colors);
+      expr.push(code, color);
+    }
+    expr.push(defaultColor);
+    return expr;
+  }, [countryLookup, colors, isDark]);
 
-  const handleMarkerPress = useCallback(
-    (code: string) => {
-      onCountrySelect(code);
+  // Build the fillOpacity expression
+  const fillOpacityExpression = useMemo(() => {
+    if (activeFilters.size === 0) {
+      // No filters — all countries at 0.7
+      return 0.7;
+    }
+    // With filters — matching 0.7, non-matching 0.08
+    const expr: unknown[] = ['match', ['get', 'iso_a3']];
+    for (const [code, entry] of countryLookup) {
+      if (activeFilters.has(entry.categoryKey)) {
+        expr.push(code, 0.7);
+      } else {
+        expr.push(code, 0.08);
+      }
+    }
+    expr.push(0.08); // default for unknown countries
+    return expr;
+  }, [countryLookup, activeFilters]);
+
+  // Line width expression: 2px for selected country, 0.5 for others
+  const lineWidthExpression = useMemo(() => {
+    if (!selected) return 0.5;
+    const expr: unknown[] = ['match', ['get', 'iso_a3']];
+    expr.push(selected.code, 2);
+    expr.push(0.5);
+    return expr;
+  }, [selected]);
+
+  // Line color expression: white for selected country, subtle border for others
+  const lineColorExpression = useMemo(() => {
+    const defaultLineColor = isDark ? '#2d4a58' : '#aaaaaa';
+    if (!selected) return defaultLineColor;
+    const expr: unknown[] = ['match', ['get', 'iso_a3']];
+    expr.push(selected.code, '#FFFFFF');
+    expr.push(defaultLineColor);
+    return expr;
+  }, [selected, isDark]);
+
+  // Handle tap on a country shape
+  const handleShapePress = useCallback(
+    (event: { features: Array<{ properties?: Record<string, unknown> }> }) => {
+      const feature = event.features?.[0];
+      const iso = feature?.properties?.iso_a3 as string | undefined;
+      if (!iso) {
+        // Tapped ocean or feature without iso — dismiss selection
+        setSelected(null);
+        return;
+      }
+
+      // Same country tapped again — dismiss
+      if (selected?.code === iso) {
+        setSelected(null);
+        return;
+      }
+
+      const entry = countryLookup.get(iso);
+      if (entry) {
+        setSelected({
+          code: iso,
+          name: entry.name,
+          categoryKey: entry.categoryKey,
+          maxStay: entry.maxStay,
+        });
+      } else {
+        // Country not in visa data
+        setSelected(null);
+      }
     },
-    [onCountrySelect],
+    [selected, countryLookup],
   );
 
-  const mapStyle = isDark ? DARK_MAP_STYLE : MUTED_MAP_STYLE;
+  // Handle tap on empty map area (ocean)
+  const handleMapPress = useCallback(() => {
+    setSelected(null);
+  }, []);
+
+  const handleViewDetails = useCallback(() => {
+    if (selected) {
+      onCountrySelect(selected.code);
+    }
+  }, [selected, onCountrySelect]);
+
+  const handleDismiss = useCallback(() => {
+    setSelected(null);
+  }, []);
+
+  const mapStyle = isDark ? DARK_STYLE : LIGHT_STYLE;
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
+      <MapLibreGL.MapView
         style={styles.map}
-        initialRegion={INITIAL_REGION}
-        mapType={Platform.OS === 'ios' ? 'mutedStandard' : 'standard'}
-        customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
-        showsUserLocation={false}
-        showsPointsOfInterest={false}
-        showsTraffic={false}
-        showsBuildings={false}
-        showsIndoors={false}
+        mapStyle={mapStyle}
+        onPress={handleMapPress}
+        attributionEnabled={false}
+        logoEnabled={false}
         pitchEnabled={false}
         rotateEnabled={false}
-        toolbarEnabled={false}
-        moveOnMarkerPress={false}
       >
-        {visibleMarkers.map((marker) => {
-          const markerColor = getVisaCategoryColor(marker.categoryKey, colors);
-          return (
-            <CountryMarker
-              key={marker.code}
-              code={marker.code}
-              name={marker.name}
-              coordinate={{
-                latitude: marker.latitude,
-                longitude: marker.longitude,
-              }}
-              color={markerColor}
-              isSelected={selectedCountry === marker.code}
-              onPress={handleMarkerPress}
-              colors={colors}
-            />
-          );
-        })}
-      </MapView>
+        <MapLibreGL.Camera
+          defaultSettings={{
+            centerCoordinate: [40, 20],
+            zoomLevel: 1.5,
+          }}
+        />
+
+        <MapLibreGL.ShapeSource
+          id="countries-source"
+          shape={countriesGeoJSON}
+          onPress={handleShapePress as unknown as (event: unknown) => void}
+        >
+          <MapLibreGL.FillLayer
+            id="countries-fill"
+            style={{
+              fillColor: fillColorExpression as unknown as string,
+              fillOpacity: fillOpacityExpression as unknown as number,
+            }}
+          />
+          <MapLibreGL.LineLayer
+            id="countries-border"
+            style={{
+              lineColor: lineColorExpression as unknown as string,
+              lineWidth: lineWidthExpression as unknown as number,
+              lineOpacity: 0.8,
+            }}
+          />
+        </MapLibreGL.ShapeSource>
+      </MapLibreGL.MapView>
+
+      {selected != null && (
+        <CountryInfoCard
+          code={selected.code}
+          name={selected.name}
+          categoryKey={selected.categoryKey as VisaCategory}
+          maxStay={selected.maxStay}
+          onViewDetails={handleViewDetails}
+          onDismiss={handleDismiss}
+        />
+      )}
 
       <MapLegend />
     </View>
