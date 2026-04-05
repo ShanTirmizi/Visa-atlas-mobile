@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { ChevronRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
@@ -48,7 +48,6 @@ interface CountryInfoCardProps {
   categoryKey: VisaCategory;
   maxStay?: number;
   onViewDetails: () => void;
-  onDismiss: () => void;
 }
 
 export default function CountryInfoCard({
@@ -100,7 +99,7 @@ export default function CountryInfoCard({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 60,
+    bottom: Dimensions.get('window').height * 0.27,
     left: Spacing.lg,
     right: Spacing.lg,
     borderRadius: Radius.lg,
