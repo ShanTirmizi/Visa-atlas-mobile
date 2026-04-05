@@ -14,7 +14,7 @@ import { useAuthActions } from '@convex-dev/auth/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import * as FileSystem from 'expo-file-system';
+import { Paths, File } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
@@ -101,9 +101,9 @@ export default function SettingsScreen() {
               return;
             }
             const json = JSON.stringify(userData, null, 2);
-            const fileUri = `${FileSystem.documentDirectory}visa-atlas-export.json`;
-            await FileSystem.writeAsStringAsync(fileUri, json);
-            await Sharing.shareAsync(fileUri, {
+            const exportFile = new File(Paths.document, 'visa-atlas-export.json');
+            exportFile.write(json);
+            await Sharing.shareAsync(exportFile.uri, {
               mimeType: 'application/json',
               dialogTitle: 'Export Your Data',
             });
