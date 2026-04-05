@@ -40,3 +40,11 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# AI tool configs (machine-specific)
+.agents/
+.claude/
+.roo/
+.windsurf/
+skills/
+skills-lock.json
