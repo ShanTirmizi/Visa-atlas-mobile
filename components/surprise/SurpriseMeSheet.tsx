@@ -846,7 +846,7 @@ const makeStyles = (colors: ThemeColors) =>
       gap: Spacing.sm,
     },
     monthPill: {
-      width: '22%' as unknown as number,
+      width: '22%',
       alignItems: 'center',
       paddingVertical: 12,
       borderRadius: Radius.sm,
