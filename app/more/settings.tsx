@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Trash2, Info, LogOut, ChevronRight, Download, UserX, FileText, Shield } from 'lucide-react-native';
 import { useAuthActions } from '@convex-dev/auth/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Paths, File } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -26,8 +26,9 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { setHeldVisas } = useVisa();
   const { signOut } = useAuthActions();
+  const { isAuthenticated } = useConvexAuth();
   const deleteAccount = useMutation(api.account.deleteAccount);
-  const userData = useQuery(api.account.exportUserData);
+  const userData = useQuery(api.account.exportUserData, isAuthenticated ? {} : 'skip');
 
   return (
     <ScrollView

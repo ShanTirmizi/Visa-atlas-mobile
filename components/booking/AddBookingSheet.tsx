@@ -9,7 +9,7 @@ import React, {
 import { Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { Spacing } from '@/constants/theme';
@@ -53,9 +53,10 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     const [prefillData, setPrefillData] = useState<Partial<BookingFormData> | undefined>();
 
     // ── Convex hooks ─────────────────────────────────────────────────
+    const { isAuthenticated } = useConvexAuth();
     const createBooking = useMutation(api.bookings.createBooking);
     const linkBookingToTrip = useMutation(api.bookings.linkBookingToTrip);
-    const trips = useQuery(api.trips.listTrips);
+    const trips = useQuery(api.trips.listTrips, isAuthenticated ? {} : 'skip');
 
     // ── Reset helper ─────────────────────────────────────────────────
     const resetState = useCallback(() => {

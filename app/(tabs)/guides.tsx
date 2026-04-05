@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useMutation } from 'convex/react';
+import { useMutation, useConvexAuth } from 'convex/react';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
@@ -125,7 +125,8 @@ export default function GuidesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const guides = useOfflineQuery(api.visaGuides.listGuides, {});
+  const { isAuthenticated } = useConvexAuth();
+  const guides = useOfflineQuery(api.visaGuides.listGuides, isAuthenticated ? {} : 'skip');
   const { isOffline } = useOffline();
   const deleteGuide = useMutation(api.visaGuides.deleteGuide);
   const [deletingId, setDeletingId] = useState<string | null>(null);

@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import {
   hasCalendarPermission,
@@ -74,10 +74,11 @@ export function CalendarProvider({ children }: { children: React.ReactNode }) {
 
   // ── Convex hooks ──
 
+  const { isAuthenticated } = useConvexAuth();
   const createBooking = useMutation(api.bookings.createBooking);
   const linkBooking = useMutation(api.bookings.linkBookingToTrip);
-  const bookings = useQuery(api.bookings.listBookings);
-  const trips = useQuery(api.trips.listTrips);
+  const bookings = useQuery(api.bookings.listBookings, isAuthenticated ? {} : 'skip');
+  const trips = useQuery(api.trips.listTrips, isAuthenticated ? {} : 'skip');
 
   // ── Load persisted state on mount ──
 

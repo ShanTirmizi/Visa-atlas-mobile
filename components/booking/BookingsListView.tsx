@@ -8,7 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Plus } from 'lucide-react-native';
-import { useQuery } from 'convex/react';
+import { useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { useCalendar } from '@/contexts/calendar-context';
@@ -41,8 +41,9 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
 
   const [activeFilter, setActiveFilter] = useState<BookingType | 'all'>('all');
 
-  const bookings = useQuery(api.bookings.listBookings);
-  const trips = useQuery(api.trips.listTrips);
+  const { isAuthenticated } = useConvexAuth();
+  const bookings = useQuery(api.bookings.listBookings, isAuthenticated ? {} : 'skip');
+  const trips = useQuery(api.trips.listTrips, isAuthenticated ? {} : 'skip');
 
   const addSheetRef = useRef<AddBookingSheetRef>(null);
   const detailSheetRef = useRef<BookingDetailSheetRef>(null);

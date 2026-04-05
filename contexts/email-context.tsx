@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from 'react';
 import { Linking } from 'react-native';
-import { useAction, useQuery, useMutation } from 'convex/react';
+import { useAction, useQuery, useMutation, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { endpoints } from '@/constants/api';
 
@@ -53,9 +53,11 @@ export function EmailProvider({ children }: { children: React.ReactNode }) {
 
   // ── Convex hooks ──
 
-  const gmailAccount = useQuery(api.emailAccounts.getByProvider, {
-    provider: 'gmail',
-  });
+  const { isAuthenticated } = useConvexAuth();
+  const gmailAccount = useQuery(
+    api.emailAccounts.getByProvider,
+    isAuthenticated ? { provider: 'gmail' } : 'skip',
+  );
   const scanGmail = useAction(api.emailSync.scanGmail);
   const disconnectAccount = useMutation(api.emailAccounts.disconnect);
 

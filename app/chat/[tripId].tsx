@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useConvexAuth } from 'convex/react';
 import { Id } from '@/convex/_generated/dataModel';
 import { ArrowLeft, Send, Bot, User } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
@@ -49,11 +49,13 @@ export default function ChatScreen() {
   });
   const { isOffline } = useOffline();
 
-  const convexMessages = useQuery(api.trips.getMessages, {
-    tripId: tripId as Id<'trips'>,
-  });
+  const { isAuthenticated } = useConvexAuth();
+  const convexMessages = useQuery(
+    api.trips.getMessages,
+    isAuthenticated ? { tripId: tripId as Id<'trips'> } : 'skip',
+  );
   const addMessage = useMutation(api.trips.addMessage);
-  const currentUser = useQuery(api.trips.getCurrentUser);
+  const currentUser = useQuery(api.trips.getCurrentUser, isAuthenticated ? {} : 'skip');
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);

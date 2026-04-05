@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Calendar, Plus, ChevronDown } from 'lucide-react-native';
-import { useQuery } from 'convex/react';
+import { useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
@@ -20,7 +20,11 @@ export default function TripBookingsTimeline({ tripId, onBookingPress, onAddBook
   const { colors, isDark } = useTheme();
   const [showAll, setShowAll] = useState(false);
 
-  const bookings = useQuery(api.bookings.listBookingsByTrip, { tripId: tripId as Id<'trips'> });
+  const { isAuthenticated } = useConvexAuth();
+  const bookings = useQuery(
+    api.bookings.listBookingsByTrip,
+    isAuthenticated ? { tripId: tripId as Id<'trips'> } : 'skip',
+  );
 
   if (bookings === undefined) return null;
 

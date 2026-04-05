@@ -23,7 +23,7 @@ import { countryMeta } from '@/data/countryMeta';
 import { travelData } from '@/data/travelData';
 import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
 import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
-import { useQuery } from 'convex/react';
+import { useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 
 // ── Alpha-3 to flag emoji ───────────────────────────────────────────────
@@ -93,7 +93,11 @@ export default function CountryDetailScreen() {
   // ── Trip planner sheet ref ───────────────────────────────────────────
   const tripSheetRef = useRef<TripPlannerSheetRef>(null);
   const guideSheetRef = useRef<VisaGuideSheetRef>(null);
-  const existingGuide = useQuery(api.visaGuides.getGuideByCountry, { countryCode: code as string });
+  const { isAuthenticated } = useConvexAuth();
+  const existingGuide = useQuery(
+    api.visaGuides.getGuideByCountry,
+    isAuthenticated ? { countryCode: code as string } : 'skip',
+  );
 
   const flag = country ? toFlag(country.code) : '';
   const cost$ = travel ? '$'.repeat(travel.costLevel) : '';
