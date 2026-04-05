@@ -2,7 +2,7 @@ import React, {
   useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo,
 } from 'react';
 import {
-  View, Text, TouchableOpacity, TextInput, StyleSheet,
+  View, Text, TouchableOpacity, TextInput, StyleSheet, Dimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -18,6 +18,7 @@ import {
   BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
 } from '@gorhom/bottom-sheet';
 import { Plane } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
@@ -31,8 +32,6 @@ import type { TravelInfo } from '@/data/travelData';
 
 // ── Constants ───────────────────────────────────────────────────────────
 const DURATIONS = [3, 5, 7, 10, 14];
-const DURATION_COLORS = ['#2AAAA0', '#2EAA6E', '#EB6D3A', '#E5A832', '#D95E8A'];
-
 const VIBES = [
   { v: 'relaxed', l: 'Relaxed' },
   { v: 'balanced', l: 'Balanced' },
@@ -175,6 +174,7 @@ function TypingDots({ color }: { color: string }) {
 const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
   ({ country, meta, travel, resolved, heldVisas, onTripCreated }, ref) => {
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
     // ── Step state ──────────────────────────────────────────────────
@@ -191,12 +191,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
 
     const createTrip = useMutation(api.trips.createTrip);
     const planeStyle = usePlaneAnimation(step === 'loading');
-
-    // ── Snap points change with step ────────────────────────────────
-    const snapPoints = useMemo(
-      () => step === 'duration' ? ['85%'] : ['92%'],
-      [step],
-    );
 
     // ── Loading timer ───────────────────────────────────────────────
     useEffect(() => {
@@ -294,8 +288,8 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
-        snapPoints={snapPoints}
-        enableDynamicSizing={false}
+        enableDynamicSizing={true}
+        maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         enablePanDownToClose={step !== 'loading'}
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: colors.textMuted, width: 40 }}
@@ -320,23 +314,26 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
 
               {/* Duration presets */}
               <View style={s.durationGrid}>
-                {DURATIONS.map((d, i) => {
+                {DURATIONS.map((d) => {
                   const active = days === d;
-                  const pillColor = DURATION_COLORS[i];
                   return (
                     <TouchableOpacity
                       key={d}
-                      onPress={() => setDays(d)}
+                      onPress={() => { setDays(d); setCustomDays(''); }}
                       activeOpacity={0.7}
                       style={[
                         s.durationPill,
                         {
-                          backgroundColor: active ? pillColor : colors.card,
-                          borderColor: active ? pillColor : colors.border,
-                          ...(!active ? Shadows.subtle : Shadows.glow(pillColor, 0.3)),
+                          backgroundColor: active ? colors.accent : colors.card,
+                          borderColor: active ? colors.accent : colors.border,
                         },
                       ]}
                     >
+                      {d === 7 && !active && (
+                        <View style={[s.popularBadge, { backgroundColor: colors.accent }]}>
+                          <Text style={s.popularText}>Popular</Text>
+                        </View>
+                      )}
                       <Text style={[
                         s.durationNumber,
                         { color: active ? '#FFFFFF' : colors.foreground },
@@ -347,36 +344,62 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                         s.durationLabel,
                         { color: active ? 'rgba(255,255,255,0.85)' : colors.textMuted },
                       ]}>
-                        days
+                        DAYS
                       </Text>
                     </TouchableOpacity>
                   );
                 })}
-              </View>
 
-              {/* Custom input */}
-              <View style={[s.customRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                <Text style={[s.customLabel, { color: colors.textSecondary }]}>
-                  Or custom:
-                </Text>
-                <TextInput
-                  style={[s.customInput, {
-                    borderColor: colors.border,
-                    backgroundColor: colors.surface,
-                    color: colors.foreground,
-                  }]}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  placeholder="Days"
-                  placeholderTextColor={colors.textMuted}
-                  value={customDays}
-                  onChangeText={(t) => {
-                    setCustomDays(t);
-                    const n = parseInt(t);
-                    if (n > 0 && n <= 30) setDays(n);
-                    else if (t === '') setDays(null);
+                {/* Custom pill */}
+                <TouchableOpacity
+                  onPress={() => {
+                    setDays(null);
+                    setCustomDays('');
                   }}
-                />
+                  activeOpacity={0.7}
+                  style={[
+                    s.durationPill,
+                    {
+                      backgroundColor: customDays && days && !DURATIONS.includes(days)
+                        ? colors.accent : colors.card,
+                      borderColor: customDays && days && !DURATIONS.includes(days)
+                        ? colors.accent : colors.border,
+                    },
+                  ]}
+                >
+                  {customDays ? (
+                    <>
+                      <TextInput
+                        style={[s.durationNumber, {
+                          color: days && !DURATIONS.includes(days) ? '#FFFFFF' : colors.foreground,
+                          padding: 0,
+                          textAlign: 'center',
+                          minWidth: 30,
+                        }]}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                        value={customDays}
+                        autoFocus
+                        onChangeText={(t) => {
+                          setCustomDays(t);
+                          const n = parseInt(t);
+                          if (n > 0 && n <= 30) setDays(n);
+                          else if (t === '') setDays(null);
+                        }}
+                      />
+                      <Text style={[
+                        s.durationLabel,
+                        { color: days && !DURATIONS.includes(days) ? 'rgba(255,255,255,0.85)' : colors.textMuted },
+                      ]}>
+                        DAYS
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={[s.customPillLabel, { color: colors.textMuted }]}>
+                      Custom
+                    </Text>
+                  )}
+                </TouchableOpacity>
               </View>
 
               {/* Next button */}
@@ -387,7 +410,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                 style={[
                   s.nextBtn,
                   {
-                    backgroundColor: days ? colors.primary : colors.shimmer,
+                    backgroundColor: days ? colors.primary : colors.surfaceLight,
                     opacity: days ? 1 : 0.5,
                     ...(days ? Shadows.glow(colors.primary, 0.25) : {}),
                   },
@@ -672,6 +695,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: Spacing.lg,
       borderRadius: 20,
       borderWidth: 1.5,
+      overflow: 'visible',
     },
     durationNumber: {
       fontFamily: FontFamily.bold,
@@ -684,28 +708,23 @@ const makeStyles = (colors: ThemeColors) =>
       letterSpacing: 0.5,
       marginTop: 2,
     },
-    customRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.sm,
-      padding: Spacing.md,
-      borderRadius: 20,
-      borderWidth: 1,
-      marginBottom: Spacing.lg,
+    popularBadge: {
+      position: 'absolute',
+      top: -8,
+      right: -4,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: Radius.full,
     },
-    customLabel: {
+    popularText: {
+      fontFamily: FontFamily.condensedSemibold,
+      fontSize: 9,
+      color: '#FFFFFF',
+      letterSpacing: 0.3,
+    },
+    customPillLabel: {
       fontFamily: FontFamily.semibold,
       fontSize: FontSize.sm,
-    },
-    customInput: {
-      width: 70,
-      paddingVertical: 8,
-      paddingHorizontal: 10,
-      borderRadius: Radius.sm,
-      borderWidth: 1,
-      fontFamily: FontFamily.bold,
-      fontSize: FontSize.base,
-      textAlign: 'center',
     },
     nextBtn: {
       alignItems: 'center',
