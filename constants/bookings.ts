@@ -181,6 +181,33 @@ export const BOOKING_TYPES: Record<BookingType, BookingTypeConfig> = {
 } as const;
 
 // ──────────────────────────────────────────────
+// Tinted card backgrounds (light + dark mode)
+// ──────────────────────────────────────────────
+
+const TINTED_BACKGROUNDS_LIGHT: Record<BookingType, string> = {
+  flight: '#EBF2FF',
+  hotel: '#F3EEFF',
+  experience: '#FEF7E6',
+  car_rental: '#ECFDF5',
+  insurance: '#EEF0FF',
+  restaurant: '#FEF2F2',
+};
+
+const TINTED_BACKGROUNDS_DARK: Record<BookingType, string> = {
+  flight: 'rgba(59, 130, 246, 0.12)',
+  hotel: 'rgba(139, 92, 246, 0.12)',
+  experience: 'rgba(245, 158, 11, 0.12)',
+  car_rental: 'rgba(16, 185, 129, 0.12)',
+  insurance: 'rgba(99, 102, 241, 0.12)',
+  restaurant: 'rgba(239, 68, 68, 0.12)',
+};
+
+/** Returns a light-tinted background color for a booking type */
+export function getTintedBackground(type: BookingType, isDark: boolean): string {
+  return isDark ? TINTED_BACKGROUNDS_DARK[type] : TINTED_BACKGROUNDS_LIGHT[type];
+}
+
+// ──────────────────────────────────────────────
 // Display-ordered list of all booking types
 // ──────────────────────────────────────────────
 
@@ -251,4 +278,98 @@ export function formatBookingDates(startDate: Date, endDate?: Date): string {
 
   // Different years
   return `${startDay} ${startMonth} ${startYear} - ${endDay} ${endMonth} ${endYear}`;
+}
+
+/**
+ * Formats a date as a human-friendly relative string.
+ *   Future: "Tomorrow", "In 3 days", "In 2 weeks", "In 3 months"
+ *   Past:   "Yesterday", "2 days ago", "Last week", "3 months ago"
+ *   Today:  "Today"
+ */
+export function formatRelativeDate(dateStr: string): string {
+  const now = new Date();
+  const target = new Date(dateStr);
+
+  // Strip time — compare dates only
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+
+  const diffMs = targetStart.getTime() - todayStart.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays === -1) return 'Yesterday';
+
+  if (diffDays > 1 && diffDays <= 13) return `In ${diffDays} days`;
+  if (diffDays >= 14 && diffDays <= 27) {
+    const weeks = Math.round(diffDays / 7);
+    return `In ${weeks} weeks`;
+  }
+  if (diffDays > 27) {
+    const months = Math.round(diffDays / 30);
+    return months === 1 ? 'In 1 month' : `In ${months} months`;
+  }
+
+  if (diffDays < -1 && diffDays >= -6) return `${Math.abs(diffDays)} days ago`;
+  if (diffDays < -6 && diffDays >= -13) return 'Last week';
+  if (diffDays < -13 && diffDays >= -27) {
+    const weeks = Math.round(Math.abs(diffDays) / 7);
+    return `${weeks} weeks ago`;
+  }
+  if (diffDays < -27) {
+    const months = Math.round(Math.abs(diffDays) / 30);
+    return months === 1 ? '1 month ago' : `${months} months ago`;
+  }
+
+  return formatBookingDates(target);
+}
+
+/**
+ * Returns the secondary meta text for a booking card.
+ *   Flight: provider name (e.g. "Emirates")
+ *   Hotel: "N nights"
+ *   Experience: duration if available, else location
+ *   Others: location
+ */
+export function getBookingSecondaryMeta(
+  type: BookingType,
+  opts: { provider?: string; startDate: string; endDate?: string; location?: string; typeDetails?: Record<string, string> },
+): string {
+  switch (type) {
+    case 'flight':
+      return opts.provider || '';
+    case 'hotel': {
+      if (opts.startDate && opts.endDate) {
+        const start = new Date(opts.startDate);
+        const end = new Date(opts.endDate);
+        const nights = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        return nights > 0 ? `${nights} night${nights !== 1 ? 's' : ''}` : '';
+      }
+      return opts.location || '';
+    }
+    case 'experience':
+      return opts.typeDetails?.duration || opts.location || '';
+    default:
+      return opts.location || '';
+  }
+}
+
+/**
+ * Returns the right-aligned metadata for a booking card.
+ *   Flight: flight number
+ *   Hotel/Experience/Car/Insurance/Restaurant: formatted cost
+ */
+export function getBookingEndMeta(
+  type: BookingType,
+  opts: { cost?: number; currency?: string; typeDetails?: Record<string, string> },
+): string {
+  if (type === 'flight') {
+    return opts.typeDetails?.flightNumber || '';
+  }
+  if (opts.cost != null && opts.cost > 0) {
+    const symbol = opts.currency === 'EUR' ? '\u20AC' : opts.currency === 'GBP' ? '\u00A3' : '$';
+    return `${symbol}${opts.cost.toLocaleString()}`;
+  }
+  return '';
 }
