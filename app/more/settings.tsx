@@ -18,13 +18,18 @@ import { Paths, File } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
+import { passportCountries } from '@/data/passportCountries';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+
+function getPassportName(code: string): string {
+  return passportCountries.find(c => c.code === code)?.name || code;
+}
 
 export default function SettingsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { setHeldVisas } = useVisa();
+  const { setHeldVisas, passports, heldVisas } = useVisa();
   const { signOut } = useAuthActions();
   const { isAuthenticated } = useConvexAuth();
   const deleteAccount = useMutation(api.account.deleteAccount);
@@ -50,6 +55,41 @@ export default function SettingsScreen() {
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
         Settings
       </Text>
+
+      {/* Travel Documents */}
+      <View style={styles.travelSection}>
+        <Text style={[styles.travelSectionLabel, { color: colors.textSecondary }]}>
+          TRAVEL DOCUMENTS
+        </Text>
+
+        <TouchableOpacity
+          style={[styles.travelRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+          onPress={() => router.push('/onboarding' as any)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.travelRowContent}>
+            <Text style={[styles.travelRowLabel, { color: colors.foreground }]}>Passports</Text>
+            <Text style={[styles.travelRowValue, { color: colors.textSecondary }]}>
+              {passports.length > 0 ? passports.map(getPassportName).join(', ') : 'Not set'}
+            </Text>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.travelRow, { backgroundColor: colors.card, borderColor: colors.borderSubtle }]}
+          onPress={() => router.push('/more/visas' as any)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.travelRowContent}>
+            <Text style={[styles.travelRowLabel, { color: colors.foreground }]}>Held Visas</Text>
+            <Text style={[styles.travelRowValue, { color: colors.textSecondary }]}>
+              {heldVisas.length > 0 ? `${heldVisas.length} visa${heldVisas.length !== 1 ? 's' : ''}` : 'None'}
+            </Text>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
 
       {/* Clear data */}
       <TouchableOpacity
@@ -295,5 +335,36 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     marginTop: Spacing.xl,
     marginBottom: Spacing.sm,
+  },
+  travelSection: {
+    marginBottom: Spacing.lg,
+  },
+  travelSectionLabel: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: FontSize.xs,
+    letterSpacing: 0.8,
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  travelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  travelRowContent: {
+    flex: 1,
+    gap: 2,
+  },
+  travelRowLabel: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: FontSize.base,
+  },
+  travelRowValue: {
+    fontFamily: FontFamily.serif,
+    fontSize: FontSize.sm,
   },
 });
