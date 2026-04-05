@@ -62,7 +62,7 @@ export default function ExploreScreen() {
   const [sheetIndex, setSheetIndex] = useState(0);
 
   // Context
-  const { heldVisas, favorites, visited, toggleFavorite } = useVisa();
+  const { heldVisas, favorites, visited, toggleFavorite, residence, passports } = useVisa();
   const dynamicVisaData = useVisaData();
 
   // Convert held visas to the typed set used by resolveCountry
@@ -77,8 +77,9 @@ export default function ExploreScreen() {
 
     return dynamicVisaData
       .filter((country: CountryVisa) => {
-        // Skip home country
-        if (country.code === 'IND') return false;
+        // Skip home countries (residence + passport countries)
+        if (country.code === residence) return false;
+        if (passports.includes(country.code)) return false;
 
         // Search filter
         if (query && !country.name.toLowerCase().includes(query)) {
