@@ -7,7 +7,7 @@ import React, {
   useMemo,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { visaData, type CountryVisa } from '@/data/visaData';
+import { type CountryVisa } from '@/data/visaData';
 
 // ──────────────────────────────────────────────
 // Storage keys
@@ -361,7 +361,8 @@ export function useVisa(): VisaContextValue {
  */
 export function useVisaData(): CountryVisa[] {
   const { visaMap, passports, residence } = useVisa();
-  const base = visaMap ?? visaData;
+  // Onboarding is mandatory — visaMap is always populated
+  const base = visaMap ?? [];
 
   // Mark residence and passport countries as "home" (visa-free)
   const homeCodes = new Set<string>([

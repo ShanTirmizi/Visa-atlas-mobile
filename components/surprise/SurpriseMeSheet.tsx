@@ -26,7 +26,8 @@ import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
 import { endpoints } from '@/constants/api';
-import { visaData, resolveCountry, type HeldVisaType } from '@/data/visaData';
+import { resolveCountry, type HeldVisaType } from '@/data/visaData';
+import { useVisaData } from '@/contexts/visa-context';
 import { travelData } from '@/data/travelData';
 import { getFlightHours } from '@/utils/flightTime';
 import {
@@ -214,6 +215,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
   ({ heldVisas, onCountrySelected }, ref) => {
     const { colors } = useTheme();
     const { residence } = useVisa();
+    const dynamicVisaData = useVisaData();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
@@ -323,7 +325,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
     // ── Derived data for reveal step ────────────────────────────────
     const revealData = useMemo(() => {
       if (!result) return null;
-      const country = visaData.find((c) => c.code === result.code);
+      const country = dynamicVisaData.find((c) => c.code === result.code);
       if (!country) return null;
       const resolved = resolveCountry(country, heldVisas);
       const catKey = normalizeCategoryKey(resolved.category);

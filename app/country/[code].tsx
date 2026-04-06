@@ -16,7 +16,7 @@ import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
 import {
-  visaData, resolveCountry, categoryLabels, availableVisas,
+  resolveCountry, categoryLabels, availableVisas,
   type HeldVisaType, type VisaCategory,
 } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
