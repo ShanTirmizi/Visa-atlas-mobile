@@ -18,7 +18,8 @@
       "bundleIdentifier": "com.tirmazilabs.visaatlas",
       "buildNumber": "2",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Visa Atlas uses your location to show nearby embassies and consulates on the map."
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
