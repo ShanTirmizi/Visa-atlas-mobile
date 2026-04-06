@@ -43,6 +43,7 @@ import { OfflineProvider } from '@/contexts/offline-context';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { FontFamily, FontSize } from '@/constants/theme';
 import type { ThemeColors } from '@/constants/theme';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -92,49 +93,51 @@ function ThemedApp() {
     <View style={styles.container}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <OfflineIndicator />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-          animation: 'fade',
-        }}
-      >
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
-        <Stack.Screen
-          name="trip/[id]"
-          options={{
-            animation: 'slide_from_right',
+      <ErrorBoundary>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background },
+            animation: 'fade',
           }}
-        />
-        <Stack.Screen
-          name="guide/[id]"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="country/[code]"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="chat/[tripId]"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen name="more/visas" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/favorites" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/visited" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/settings" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/edit-passport" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/edit-residence" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/calendar" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/email" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/privacy-policy" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="more/terms" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
-        <Stack.Screen name="sign-in-email" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="email-connected" options={{ animation: 'none' }} />
-        <Stack.Screen name="invite/[code]" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        <Stack.Screen name="trip/invite" options={{ animation: 'slide_from_right' }} />
-      </Stack>
+        >
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
+          <Stack.Screen
+            name="trip/[id]"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="guide/[id]"
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="country/[code]"
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="chat/[tripId]"
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen name="more/visas" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/favorites" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/visited" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/settings" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/edit-passport" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/edit-residence" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/calendar" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/email" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/privacy-policy" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/terms" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+          <Stack.Screen name="sign-in-email" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="email-connected" options={{ animation: 'none' }} />
+          <Stack.Screen name="invite/[code]" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <Stack.Screen name="trip/invite" options={{ animation: 'slide_from_right' }} />
+        </Stack>
+      </ErrorBoundary>
     </View>
   );
 }
@@ -169,6 +172,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
       <ConvexProvider>
         <OfflineProvider>
           <ThemeProvider>
@@ -188,6 +192,7 @@ export default function RootLayout() {
           </ThemeProvider>
         </OfflineProvider>
       </ConvexProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }
