@@ -149,10 +149,8 @@ export function VisaMap({
   const handleShapePress = useCallback(
     (event: { features: Array<{ properties?: Record<string, unknown> }> }) => {
       shapeJustPressed.current = true;
-      console.log('[VisaMap] ShapeSource onPress', JSON.stringify(event.features?.[0]?.properties));
       const feature = event.features?.[0];
       const iso = feature?.properties?.iso_a3 as string | undefined;
-      console.log('[VisaMap] iso_a3:', iso, 'current selected:', selected?.code);
       if (!iso) {
         // Tapped ocean or feature without iso — dismiss selection
         setSelected(null);
@@ -186,13 +184,10 @@ export function VisaMap({
 
   // Handle tap on empty map area (ocean)
   const handleMapPress = useCallback(() => {
-    // If a shape was just pressed, skip — the shape handler already set selection
     if (shapeJustPressed.current) {
-      console.log('[VisaMap] MapView onPress skipped (shape just pressed)');
       shapeJustPressed.current = false;
       return;
     }
-    console.log('[VisaMap] MapView onPress — dismissing selection');
     setSelected(null);
   }, []);
 

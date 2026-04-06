@@ -11,7 +11,7 @@ import {
   AlertTriangle, Info,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { useVisa } from '@/contexts/visa-context';
+import { useVisa, useVisaData } from '@/contexts/visa-context';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
@@ -83,8 +83,9 @@ export default function CountryDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { heldVisas, isFavorite, toggleFavorite, isVisited, toggleVisited, residence } = useVisa();
+  const dynamicVisaData = useVisaData();
 
-  const country = useMemo(() => visaData.find((c) => c.code === code) ?? null, [code]);
+  const country = useMemo(() => dynamicVisaData.find((c) => c.code === code) ?? null, [code, dynamicVisaData]);
   const meta = country ? countryMeta[country.code] : null;
   const travel = country ? travelData[country.code] : null;
   const heldSet = useMemo(() => new Set(heldVisas as HeldVisaType[]), [heldVisas]);
