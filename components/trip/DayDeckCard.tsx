@@ -53,7 +53,7 @@ function DayDeckCard({
         <>
           <View style={styles.topRow}>
             <View style={styles.dayBadge}>
-              <Text style={styles.dayBadgeText}>{`DAY ${dayNumber}`}</Text>
+              <Text style={[styles.dayBadgeText, { color: colors.textOnLight }]}>{`DAY ${dayNumber}`}</Text>
             </View>
             {date ? (
               <View style={styles.datePill}>
@@ -83,6 +83,9 @@ function DayDeckCard({
 
 export default React.memo(DayDeckCard);
 
+// Photo-overlay rgba values below are an intentional exception per the
+// itinerary-deck spec — dark scrim + translucent badge/pill are required
+// for text legibility on any hero image (Airbnb-style pattern).
 const styles = StyleSheet.create({
   card: {
     flex: 1,
@@ -92,7 +95,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.25,
     shadowRadius: 24,
-    elevation: 10,
+    elevation: 8,
   },
   image: {
     borderRadius: Radius.xl,
@@ -124,7 +127,6 @@ const styles = StyleSheet.create({
   dayBadgeText: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.xs,
-    color: '#1A1A1A',
     letterSpacing: 0.6,
   },
   datePill: {

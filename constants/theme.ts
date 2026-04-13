@@ -92,6 +92,10 @@ export const LightColors = {
   solidOverlay: 'rgba(255,255,255,0.20)',
   solidOverlayMd: 'rgba(255,255,255,0.25)',
   solidBorder: 'rgba(255,255,255,0.15)',
+
+  // Dark text for elements that always sit on a white/near-white background
+  // regardless of the app's light/dark mode (e.g. photo-overlay badges).
+  textOnLight: '#1A1A1A',
 } as const;
 
 // ──────────────────────────────────────────────
@@ -184,6 +188,10 @@ export const DarkColors = {
   solidOverlay: 'rgba(255,255,255,0.20)',
   solidOverlayMd: 'rgba(255,255,255,0.25)',
   solidBorder: 'rgba(255,255,255,0.15)',
+
+  // Dark text for elements that always sit on a white/near-white background
+  // regardless of the app's light/dark mode (e.g. photo-overlay badges).
+  textOnLight: '#1A1A1A',
 } as const;
 
 // ──────────────────────────────────────────────
