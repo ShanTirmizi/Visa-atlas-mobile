@@ -34,7 +34,7 @@ interface DayDeckProps {
   tripId: string;
   days: DayDeckDay[];
   dayImages: DayImage[];
-  tripStartDate?: number;
+  tripStartDate?: string;
   destination?: string;
 }
 
@@ -44,9 +44,12 @@ const CARD_HEIGHT = 440;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.28;
 const VELOCITY_THRESHOLD = 600;
 
-function formatDayDate(startDate: number | undefined, dayOffset: number): string | undefined {
+function formatDayDate(startDate: string | undefined, dayOffset: number): string | undefined {
   if (!startDate) return undefined;
-  const d = new Date(startDate);
+  // startDate is YYYY-MM-DD — append T00:00:00 so Date() interprets it as local time,
+  // not UTC. Matches the pattern in app/trip/[id]/index.tsx.
+  const d = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return undefined;
   d.setDate(d.getDate() + dayOffset);
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }

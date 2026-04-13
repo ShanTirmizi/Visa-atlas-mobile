@@ -42,7 +42,7 @@ interface DayDetailScreenProps {
   afternoonImage: ActivityImage;
   eveningImage: ActivityImage;
   destination?: string;
-  tripStartDate?: number;
+  tripStartDate?: string;
   onBack: () => void;
   onShare: () => void;
   onNavigateDay: (newIndex: number) => void;
@@ -53,9 +53,10 @@ const HERO_HEIGHT = 340;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.22;
 const VELOCITY_THRESHOLD = 550;
 
-function formatDate(start: number | undefined, offset: number): string | undefined {
+function formatDate(start: string | undefined, offset: number): string | undefined {
   if (!start) return undefined;
-  const d = new Date(start);
+  const d = new Date(`${start}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return undefined;
   d.setDate(d.getDate() + offset);
   return d
     .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
