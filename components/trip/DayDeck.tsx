@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, Dimensions, Text } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
   runOnJS,
   interpolate,
   Extrapolation,
@@ -73,28 +74,37 @@ function DayDeck({ tripId, days, dayImages, tripStartDate, destination }: DayDec
     router.push(`/trip/${tripId}/day/${activeIndex}`);
   }, [tripId, activeIndex]);
 
-  const panGesture = Gesture.Pan()
-    .activeOffsetX([-12, 12])
-    .onUpdate((e) => {
-      translationX.value = e.translationX;
-    })
-    .onEnd((e) => {
-      const past = Math.abs(e.translationX) > SWIPE_THRESHOLD;
-      const fast = Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
-      if ((past || fast) && numDays > 1) {
-        const dir: 1 | -1 = e.translationX < 0 ? 1 : -1;
-        runOnJS(advance)(dir);
-      }
-      translationX.value = withSpring(0, { damping: 18, stiffness: 170 });
-    });
+  const composedGesture = useMemo(() => {
+    const panGesture = Gesture.Pan()
+      .activeOffsetX([-12, 12])
+      .onUpdate((e) => {
+        translationX.value = e.translationX;
+      })
+      .onEnd((e) => {
+        const past = Math.abs(e.translationX) > SWIPE_THRESHOLD;
+        const fast = Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
+        if ((past || fast) && numDays > 1) {
+          const dir: 1 | -1 = e.translationX < 0 ? 1 : -1;
+          const flyTo = dir === 1 ? -SCREEN_WIDTH : SCREEN_WIDTH;
+          translationX.value = withTiming(flyTo, { duration: 220 }, (finished) => {
+            if (finished) {
+              runOnJS(advance)(dir);
+              translationX.value = 0;
+            }
+          });
+        } else {
+          translationX.value = withSpring(0, { damping: 18, stiffness: 170 });
+        }
+      });
 
-  const tapGesture = Gesture.Tap()
-    .maxDistance(10)
-    .onEnd((_e, success) => {
-      if (success) runOnJS(openDay)();
-    });
+    const tapGesture = Gesture.Tap()
+      .maxDistance(10)
+      .onEnd((_e, success) => {
+        if (success) runOnJS(openDay)();
+      });
 
-  const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
+    return Gesture.Exclusive(panGesture, tapGesture);
+  }, [numDays, advance, openDay, translationX]);
 
   const frontAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
