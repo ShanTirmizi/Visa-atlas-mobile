@@ -257,14 +257,17 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
 
-        // ── Fetch images (hero + per-activity) ─────────────────────
+        // ── Fetch images (hero + per-day + per-activity) ─────────────────────
         let heroImageJson: string | undefined;
+        let dayImagesJson: string | undefined;
         let activityImagesJson: string | undefined;
         try {
           type ItineraryDay = {
             morningPlace?: string;
             afternoonPlace?: string;
             eveningPlace?: string;
+            title?: string;
+            heroSubject?: string;
           };
           const itineraryDays: ItineraryDay[] = data.itinerary
             ? (JSON.parse(data.itinerary) as ItineraryDay[])
@@ -275,6 +278,18 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             d.eveningPlace ? { name: 'evening', place: d.eveningPlace } : null,
           ]).filter(Boolean);
 
+          // Build per-day hero subjects with graceful fallback for trips where
+          // the LLM didn't emit heroSubject.
+          const dayHeroSubjects = itineraryDays.map(
+            (d) =>
+              d.heroSubject ??
+              d.morningPlace ??
+              d.afternoonPlace ??
+              d.eveningPlace ??
+              d.title ??
+              '',
+          );
+
           const imgRes = await fetch(endpoints.tripImages, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -282,12 +297,18 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               countryName: data.countryName,
               capital: data.capital,
               activities,
+              dayHeroSubjects,
             }),
           });
           if (imgRes.ok) {
-            const imgData = await imgRes.json() as { hero: unknown; activities: unknown[] };
+            const imgData = await imgRes.json() as {
+              hero: unknown;
+              activities: unknown[];
+              dayImages?: unknown[];
+            };
             if (imgData.hero) heroImageJson = JSON.stringify(imgData.hero);
             if (imgData.activities?.length) activityImagesJson = JSON.stringify(imgData.activities);
+            if (imgData.dayImages?.length) dayImagesJson = JSON.stringify(imgData.dayImages);
           }
         } catch {
           // Images are non-critical — proceed without them
@@ -298,6 +319,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           status: 'planned' as const,
           companions: party !== 'solo' ? JSON.stringify({ party }) : undefined,
           heroImage: heroImageJson,
+          dayImages: dayImagesJson,
           activityImages: activityImagesJson,
         });
         setTimeout(() => {

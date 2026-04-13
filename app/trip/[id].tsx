@@ -85,6 +85,7 @@ interface ItineraryDay {
   evening: string;
   eveningPlace?: string;
   tip: string;
+  heroSubject?: string;
 }
 interface BudgetBreakdown {
   accommodation: string;
