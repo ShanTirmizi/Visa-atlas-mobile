@@ -72,7 +72,7 @@ import BookingDetailSheet, { type BookingDetailSheetRef, type BookingDetailData 
 import SegmentedControl from '@/components/ui/SegmentedControl';
 import BackButton from '@/components/ui/BackButton';
 import ActivityCard from '@/components/trip/ActivityCard';
-import DayHeader from '@/components/trip/DayHeader';
+import DayDeck from '@/components/trip/DayDeck';
 
 // ─── Types ──────────────────────────────────────────
 interface ItineraryDay {
@@ -553,10 +553,12 @@ export default function TripDetailScreen() {
             />
           )}
           {activeTab === 'itinerary' && (
-            <ItineraryContent
-              itinerary={itinerary}
-              activityImages={activityImages}
-              colors={colors}
+            <DayDeck
+              tripId={String(trip._id)}
+              days={itinerary}
+              dayImages={dayImages}
+              tripStartDate={trip.startDate}
+              destination={trip.countryName}
             />
           )}
           {activeTab === 'logistics' && (
@@ -761,72 +763,6 @@ function StatItem({ label, value, color, colors }: { label: string; value: strin
     <View style={[styles.statItem, { backgroundColor: color }]}>
       <Text style={[styles.statLabel, { color: 'rgba(255,255,255,0.70)' }]}>{label}</Text>
       <Text style={[styles.statValue, { color: '#FFFFFF' }]} numberOfLines={2}>{value}</Text>
-    </View>
-  );
-}
-
-// =====================================================================
-// ITINERARY TAB
-// =====================================================================
-function ItineraryContent({
-  itinerary,
-  activityImages,
-  colors,
-}: {
-  itinerary: ItineraryDay[];
-  activityImages: Array<{ url: string; thumb: string; credit: string; source: string } | null>;
-  colors: ThemeColors;
-}) {
-  if (itinerary.length === 0) {
-    return (
-      <View style={styles.emptyTab}>
-        <Calendar color={colors.textMuted} size={32} />
-        <Text style={[styles.emptyTabText, { color: colors.textMuted }]}>
-          No itinerary available
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ gap: Spacing.sm }}>
-      {itinerary.map((day, dayIdx) => {
-        const morningImg = activityImages[dayIdx * 3];
-        const afternoonImg = activityImages[dayIdx * 3 + 1];
-        const eveningImg = activityImages[dayIdx * 3 + 2];
-
-        return (
-          <React.Fragment key={day.day}>
-            <DayHeader dayNumber={day.day} title={day.title} />
-
-            <ActivityCard
-              timeSlot="morning"
-              description={day.morning}
-              placeName={day.morningPlace}
-              imageUrl={morningImg?.url}
-            />
-            <ActivityCard
-              timeSlot="afternoon"
-              description={day.afternoon}
-              placeName={day.afternoonPlace}
-              imageUrl={afternoonImg?.url}
-            />
-            <ActivityCard
-              timeSlot="evening"
-              description={day.evening}
-              placeName={day.eveningPlace}
-              imageUrl={eveningImg?.url}
-            />
-
-            {day.tip ? (
-              <View style={[styles.tipCard, { backgroundColor: colors.surfaceLight }]}>
-                <Lightbulb color={colors.textMuted} size={13} />
-                <Text style={[styles.tipCardText, { color: colors.textSecondary }]}>{day.tip}</Text>
-              </View>
-            ) : null}
-          </React.Fragment>
-        );
-      })}
     </View>
   );
 }
