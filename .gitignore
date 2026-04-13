@@ -49,3 +49,4 @@ yarn-error.*
 skills/
 skills-lock.json
 .superpowers/
+.worktrees/
