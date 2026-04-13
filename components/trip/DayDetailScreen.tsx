@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   Dimensions,
-  Pressable,
   ImageBackground,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +14,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import ActivityCard from '@/components/trip/ActivityCard';
+import CircleIconButton from '@/components/ui/CircleIconButton';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 
@@ -143,20 +143,18 @@ function DayDetailScreen({
             )}
 
             <View style={[styles.topBar, { top: insets.top + 8 }]}>
-              <Pressable
+              <CircleIconButton
+                icon={ChevronLeft}
                 accessibilityLabel="Go back"
                 onPress={onBack}
-                style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
-              >
-                <ChevronLeft size={22} color={colors.textOnLight} />
-              </Pressable>
-              <Pressable
+                iconSize={22}
+              />
+              <CircleIconButton
+                icon={Share2}
                 accessibilityLabel="Share day"
                 onPress={onShare}
-                style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
-              >
-                <Share2 size={18} color={colors.textOnLight} />
-              </Pressable>
+                iconSize={18}
+              />
             </View>
 
             <View style={styles.heroOverlay}>
@@ -237,19 +235,6 @@ const styles = StyleSheet.create({
     right: Spacing.lg,
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  navBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
   heroOverlay: {
     position: 'absolute',
