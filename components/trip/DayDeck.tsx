@@ -8,6 +8,8 @@ import Animated, {
   runOnJS,
   interpolate,
   Extrapolation,
+  Easing,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
@@ -34,20 +36,33 @@ interface DayDeckProps {
   tripId: string;
   days: DayDeckDay[];
   dayImages: DayImage[];
+  tripHeroImage?: DayImage;
   tripStartDate?: string;
   destination?: string;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.72;
-const CARD_HEIGHT = 440;
-const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.28;
+const CARD_WIDTH = Math.min(SCREEN_WIDTH * 0.74, 320);
+const CARD_HEIGHT = Math.min(Math.round(CARD_WIDTH * 1.44), 500);
+// Horizontal stride between adjacent card slots in the fan — the drag distance
+// that corresponds to "one slot" of motion. Tuned so peek cards are visible but
+// the front card clearly dominates.
+const CARD_STRIDE = CARD_WIDTH * 0.56;
+
+const SWIPE_THRESHOLD = CARD_STRIDE * 0.45;
 const VELOCITY_THRESHOLD = 600;
+
+// Render a 7-card window: 3 behind on each side plus the front card.
+// Keeping the window wider than the visible area means cards never pop into
+// existence when the user drags — there's always a card ready to take each slot.
+const SLOT_RANGE = [-3, -2, -1, 0, 1, 2, 3] as const;
+
+// Apple-style ease-out curve — quick initial acceleration, gentle settle.
+const COMMIT_EASING = Easing.bezier(0.22, 1, 0.36, 1);
 
 function formatDayDate(startDate: string | undefined, dayOffset: number): string | undefined {
   if (!startDate) return undefined;
-  // startDate is YYYY-MM-DD — append T00:00:00 so Date() interprets it as local time,
-  // not UTC. Matches the pattern in app/trip/[id]/index.tsx.
+  // startDate is YYYY-MM-DD — append T00:00:00 so Date() parses it as local time.
   const d = new Date(`${startDate}T00:00:00`);
   if (Number.isNaN(d.getTime())) return undefined;
   d.setDate(d.getDate() + dayOffset);
@@ -58,10 +73,72 @@ function pickPlace(day: DayDeckDay): string | undefined {
   return day.morningPlace ?? day.afternoonPlace ?? day.eveningPlace;
 }
 
-function DayDeck({ tripId, days, dayImages, tripStartDate, destination }: DayDeckProps) {
+function wrap(i: number, n: number): number {
+  return ((i % n) + n) % n;
+}
+
+interface DeckSlotProps {
+  slot: number;
+  day: DayDeckDay;
+  image: DayImage;
+  date?: string;
+  place?: string;
+  dragX: SharedValue<number>;
+  isActive: boolean;
+}
+
+function DeckSlot({ slot, day, image, date, place, dragX, isActive }: DeckSlotProps) {
+  const animatedStyle = useAnimatedStyle(() => {
+    // Fractional offset from center: negative = left of active, positive = right.
+    // As the user drags right (dragX positive), every slot's effective offset
+    // decreases, so the whole deck shifts right in lockstep with the finger.
+    const offset = slot - dragX.value / CARD_STRIDE;
+    const abs = Math.abs(offset);
+
+    const translateX = offset * CARD_STRIDE;
+    // Scale falls off smoothly with distance — front card is full size, each
+    // slot out loses 6%. Clamped so far-off cards don't invert.
+    const scale = interpolate(abs, [0, 3], [1, 0.8], Extrapolation.CLAMP);
+    // Fan rotation: cards tilt outward from the center, symmetric around 0.
+    const rotate = interpolate(offset, [-3, 0, 3], [-10, 0, 10], Extrapolation.CLAMP);
+    // Opacity fades with distance — the front card is fully opaque, slot ±3
+    // is nearly transparent so wrap-around transitions are invisible.
+    const opacity = interpolate(abs, [0, 1, 2, 3], [1, 0.92, 0.65, 0], Extrapolation.CLAMP);
+    // Higher zIndex on cards closer to center so the fan layers correctly
+    // whether you swipe left or right.
+    const zIndex = Math.round(100 - abs * 10);
+
+    return {
+      transform: [{ translateX }, { scale }, { rotateZ: `${rotate}deg` }],
+      opacity,
+      zIndex,
+    };
+  });
+
+  return (
+    <Animated.View style={[styles.cardSlot, animatedStyle]} pointerEvents={isActive ? 'auto' : 'none'}>
+      <DayDeckCard
+        dayNumber={day.day}
+        title={day.title}
+        place={place}
+        date={date}
+        image={image}
+      />
+    </Animated.View>
+  );
+}
+
+function DayDeck({
+  tripId,
+  days,
+  dayImages,
+  tripHeroImage,
+  tripStartDate,
+  destination,
+}: DayDeckProps) {
   const { colors } = useTheme();
   const [activeIndex, setActiveIndex] = useState(0);
-  const translationX = useSharedValue(0);
+  const dragX = useSharedValue(0);
 
   const numDays = days.length;
 
@@ -78,50 +155,53 @@ function DayDeck({ tripId, days, dayImages, tripStartDate, destination }: DayDec
   }, [tripId, activeIndex]);
 
   const composedGesture = useMemo(() => {
-    const panGesture = Gesture.Pan()
-      .activeOffsetX([-12, 12])
+    const pan = Gesture.Pan()
+      .activeOffsetX([-14, 14])
+      .failOffsetY([-20, 20])
       .onUpdate((e) => {
-        translationX.value = e.translationX;
+        dragX.value = e.translationX;
       })
       .onEnd((e) => {
         const past = Math.abs(e.translationX) > SWIPE_THRESHOLD;
         const fast = Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
+
         if ((past || fast) && numDays > 1) {
+          // Commit: slide the deck one full stride in the swipe direction with
+          // Apple-style cubic easing. When the slide finishes we advance the
+          // active index and reset dragX to 0 *synchronously* — because the new
+          // active index places cards exactly where they visually are right now,
+          // the reset is invisible (no pop, no jump, no relayout flicker).
           const dir: 1 | -1 = e.translationX < 0 ? 1 : -1;
-          const flyTo = dir === 1 ? -SCREEN_WIDTH : SCREEN_WIDTH;
-          translationX.value = withTiming(flyTo, { duration: 220 }, (finished) => {
-            if (finished) {
-              runOnJS(advance)(dir);
-              translationX.value = 0;
-            }
-          });
+          const target = -dir * CARD_STRIDE;
+          dragX.value = withTiming(
+            target,
+            { duration: 320, easing: COMMIT_EASING },
+            (finished) => {
+              if (finished) {
+                runOnJS(advance)(dir);
+                dragX.value = 0;
+              }
+            },
+          );
         } else {
-          translationX.value = withSpring(0, { damping: 18, stiffness: 170 });
+          // Incomplete swipe — a gentle spring back to rest. Slightly heavier
+          // mass than default so it doesn't bounce aggressively.
+          dragX.value = withSpring(0, {
+            damping: 22,
+            stiffness: 180,
+            mass: 0.9,
+          });
         }
       });
 
-    const tapGesture = Gesture.Tap()
-      .maxDistance(10)
+    const tap = Gesture.Tap()
+      .maxDistance(14)
       .onEnd((_e, success) => {
         if (success) runOnJS(openDay)();
       });
 
-    return Gesture.Exclusive(panGesture, tapGesture);
-  }, [numDays, advance, openDay, translationX]);
-
-  const frontAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translationX.value },
-      {
-        rotateZ: `${interpolate(
-          translationX.value,
-          [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
-          [-8, 0, 8],
-          Extrapolation.CLAMP,
-        )}deg`,
-      },
-    ],
-  }));
+    return Gesture.Exclusive(pan, tap);
+  }, [numDays, advance, openDay, dragX]);
 
   if (numDays === 0) {
     return (
@@ -131,11 +211,7 @@ function DayDeck({ tripId, days, dayImages, tripStartDate, destination }: DayDec
     );
   }
 
-  const idx0 = activeIndex;
-  const idx1 = (activeIndex + 1) % numDays;
-  const idx2 = (activeIndex + 2) % numDays;
-
-  const showStack = numDays > 1;
+  const renderedSlots = numDays === 1 ? ([0] as const) : SLOT_RANGE;
 
   return (
     <View style={styles.container}>
@@ -146,43 +222,32 @@ function DayDeck({ tripId, days, dayImages, tripStartDate, destination }: DayDec
         </Text>
       </View>
 
-      <View style={styles.deckArea}>
-        {showStack && (
-          <View style={[styles.cardSlot, styles.slot2]} pointerEvents="none">
-            <DayDeckCard
-              dayNumber={days[idx2].day}
-              title={days[idx2].title}
-              image={dayImages[idx2] ?? null}
-            />
-          </View>
-        )}
-        {showStack && (
-          <View style={[styles.cardSlot, styles.slot1]} pointerEvents="none">
-            <DayDeckCard
-              dayNumber={days[idx1].day}
-              title={days[idx1].title}
-              image={dayImages[idx1] ?? null}
-            />
-          </View>
-        )}
-        <GestureDetector gesture={composedGesture}>
-          <Animated.View style={[styles.cardSlot, styles.slotFront, frontAnimatedStyle]}>
-            <DayDeckCard
-              dayNumber={days[idx0].day}
-              title={days[idx0].title}
-              place={pickPlace(days[idx0]) ?? destination}
-              date={formatDayDate(tripStartDate, idx0)}
-              image={dayImages[idx0] ?? null}
-              showContent
-            />
-          </Animated.View>
-        </GestureDetector>
-      </View>
+      <GestureDetector gesture={composedGesture}>
+        <View style={styles.deckArea}>
+          {renderedSlots.map((slot) => {
+            const dayIdx = wrap(activeIndex + slot, numDays);
+            const day = days[dayIdx];
+            const image = dayImages[dayIdx] ?? tripHeroImage ?? null;
+            return (
+              <DeckSlot
+                key={`${dayIdx}-${slot}`}
+                slot={slot}
+                day={day}
+                image={image}
+                place={pickPlace(day) ?? destination}
+                date={formatDayDate(tripStartDate, dayIdx)}
+                dragX={dragX}
+                isActive={slot === 0}
+              />
+            );
+          })}
+        </View>
+      </GestureDetector>
 
       <DayDeckDots count={numDays} activeIndex={activeIndex} />
 
       <Text style={[styles.hint, { color: colors.textMuted }]}>
-        ← swipe to flick through days →
+        swipe to flick through days · tap to open
       </Text>
     </View>
   );
@@ -190,13 +255,11 @@ function DayDeck({ tripId, days, dayImages, tripStartDate, destination }: DayDec
 
 export default React.memo(DayDeck);
 
-const FRONT_LEFT = (SCREEN_WIDTH - CARD_WIDTH) / 2;
-
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 32,
+    paddingTop: 14,
+    paddingBottom: 28,
   },
   counter: {
     flexDirection: 'row',
@@ -217,33 +280,21 @@ const styles = StyleSheet.create({
   },
   deckArea: {
     width: SCREEN_WIDTH,
-    height: CARD_HEIGHT + 40,
+    height: CARD_HEIGHT + 48,
+    alignItems: 'center',
   },
   cardSlot: {
     position: 'absolute',
+    top: 16,
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-  },
-  slot2: {
-    left: FRONT_LEFT + 52,
-    top: 22,
-    transform: [{ rotate: '6deg' }, { scale: 0.88 }],
-    opacity: 0.85,
-  },
-  slot1: {
-    left: FRONT_LEFT + 26,
-    top: 10,
-    transform: [{ rotate: '3deg' }, { scale: 0.94 }],
-    opacity: 0.95,
-  },
-  slotFront: {
-    left: FRONT_LEFT,
-    top: 0,
+    // horizontally centered via alignItems on deckArea; translateX animates from 0
+    left: (SCREEN_WIDTH - CARD_WIDTH) / 2,
   },
   hint: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.xs,
-    marginTop: 12,
+    marginTop: 18,
     letterSpacing: 0.4,
   },
   empty: {

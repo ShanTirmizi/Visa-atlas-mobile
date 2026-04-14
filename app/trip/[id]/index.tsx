@@ -557,6 +557,7 @@ export default function TripDetailScreen() {
               tripId={String(trip._id)}
               days={itinerary}
               dayImages={dayImages}
+              tripHeroImage={heroImage}
               tripStartDate={trip.startDate}
               destination={trip.countryName}
             />

@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ImageBackground } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin } from 'lucide-react-native';
+import { MapPin, ArrowUpRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 
 export type DayImage = { url: string; thumb?: string; credit?: string; creditUrl?: string } | null;
 
@@ -13,149 +12,122 @@ export interface DayDeckCardProps {
   place?: string;
   date?: string;
   image: DayImage;
-  showContent?: boolean;
 }
 
-function DayDeckCard({
-  dayNumber,
-  title,
-  place,
-  date,
-  image,
-  showContent = false,
-}: DayDeckCardProps) {
+function DayDeckCard({ dayNumber, title, place, date, image }: DayDeckCardProps) {
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surfaceLight }]}>
-      {image?.url ? (
-        <ImageBackground
-          source={{ uri: image.url }}
-          style={StyleSheet.absoluteFill}
-          imageStyle={styles.image}
-          resizeMode="cover"
-        >
-          <LinearGradient
-            colors={['rgba(0,0,0,0.25)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.8)']}
-            locations={[0, 0.25, 0.5, 1]}
+    <View style={[styles.card, Shadows.cardRaised, { backgroundColor: colors.card }]}>
+      {/* ── Photo region (top ~62%) ───────────────────────────────── */}
+      <View style={[styles.photoRegion, { backgroundColor: colors.surfaceLight }]}>
+        {image?.url ? (
+          <ImageBackground
+            source={{ uri: image.url }}
             style={StyleSheet.absoluteFill}
+            resizeMode="cover"
           />
-        </ImageBackground>
-      ) : (
-        <View style={[StyleSheet.absoluteFill, styles.placeholder]}>
-          <Text style={[styles.placeholderDay, { color: colors.textMuted }]}>
+        ) : null}
+
+        {/* DAY N badge — near-opaque white pill, always legible on any photo.
+            The rgba value below is the plan-sanctioned photo-overlay exception. */}
+        <View style={styles.dayBadge}>
+          <Text style={[styles.dayBadgeText, { color: colors.textOnLight }]}>
             {`DAY ${dayNumber}`}
           </Text>
         </View>
-      )}
+      </View>
 
-      {showContent && (
-        <>
-          <View style={styles.topRow}>
-            <View style={styles.dayBadge}>
-              <Text style={[styles.dayBadgeText, { color: colors.textOnLight }]}>{`DAY ${dayNumber}`}</Text>
-            </View>
-            {date ? (
-              <View style={styles.datePill}>
-                <Text style={styles.datePillText}>{date.toUpperCase()}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          <View style={styles.bottom}>
-            <Text style={styles.title} numberOfLines={2}>
-              {title}
+      {/* ── Content region (bottom ~38%) ──────────────────────────── */}
+      <View style={styles.content}>
+        <View style={styles.textBlock}>
+          {date ? (
+            <Text style={[styles.dateLabel, { color: colors.textMuted }]}>
+              {date.toUpperCase()}
             </Text>
-            {place ? (
-              <View style={styles.placeRow}>
-                <MapPin size={12} color="#FFFFFF" />
-                <Text style={styles.placeText} numberOfLines={1}>
-                  {place}
-                </Text>
-              </View>
-            ) : null}
+          ) : null}
+          <Text
+            style={[styles.title, { color: colors.foreground }]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
+            {title}
+          </Text>
+          {place ? (
+            <View style={styles.placeRow}>
+              <MapPin size={12} color={colors.textMuted} />
+              <Text
+                style={[styles.placeText, { color: colors.textMuted }]}
+                numberOfLines={1}
+              >
+                {place}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* "See day" pill — purely visual; DayDeck's Tap gesture handles the tap */}
+        <View style={styles.buttonRow}>
+          <View style={[styles.seeDayButton, { backgroundColor: colors.foreground }]}>
+            <Text style={[styles.seeDayText, { color: colors.background }]}>See day</Text>
+            <View style={[styles.seeDayIcon, { backgroundColor: colors.background }]}>
+              <ArrowUpRight size={12} color={colors.foreground} />
+            </View>
           </View>
-        </>
-      )}
+        </View>
+      </View>
     </View>
   );
 }
 
 export default React.memo(DayDeckCard);
 
-// Photo-overlay rgba values below are an intentional exception per the
-// itinerary-deck spec — dark scrim + translucent badge/pill are required
-// for text legibility on any hero image (Airbnb-style pattern).
 const styles = StyleSheet.create({
   card: {
     flex: 1,
     borderRadius: Radius.xl,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 8,
   },
-  image: {
-    borderRadius: Radius.xl,
+  photoRegion: {
+    flex: 62,
+    position: 'relative',
   },
-  placeholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderDay: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 48,
-    letterSpacing: 2,
-  },
-  topRow: {
+  dayBadge: {
     position: 'absolute',
     top: Spacing.md,
     left: Spacing.md,
-    right: Spacing.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  dayBadge: {
     backgroundColor: 'rgba(255,255,255,0.96)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
   },
   dayBadgeText: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.xs,
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
   },
-  datePill: {
-    backgroundColor: 'rgba(0,0,0,0.38)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+  content: {
+    flex: 38,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+    justifyContent: 'space-between',
   },
-  datePillText: {
+  textBlock: {
+    gap: 2,
+  },
+  dateLabel: {
     fontFamily: FontFamily.condensedSemibold,
     fontSize: FontSize.xs,
-    color: '#FFFFFF',
-    letterSpacing: 0.6,
-  },
-  bottom: {
-    position: 'absolute',
-    left: Spacing.md,
-    right: Spacing.md,
-    bottom: Spacing.md,
+    letterSpacing: 0.7,
+    marginBottom: 2,
   },
   title: {
     fontFamily: FontFamily.condensedSemibold,
-    fontSize: 26,
-    color: '#FFFFFF',
+    fontSize: 22,
+    lineHeight: 26,
     letterSpacing: -0.3,
-    lineHeight: 30,
-    textShadowColor: 'rgba(0,0,0,0.45)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 10,
   },
   placeRow: {
     flexDirection: 'row',
@@ -166,7 +138,32 @@ const styles = StyleSheet.create({
   placeText: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.sm,
-    color: '#FFFFFF',
-    opacity: 0.95,
+    flexShrink: 1,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
+  seeDayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 16,
+    paddingRight: 6,
+    paddingVertical: 6,
+    borderRadius: 24,
+  },
+  seeDayText: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: FontSize.sm,
+    letterSpacing: 0.3,
+  },
+  seeDayIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
