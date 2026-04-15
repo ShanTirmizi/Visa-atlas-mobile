@@ -38,7 +38,7 @@ function DayDeckCard({ dayNumber, title, place, date, image }: DayDeckCardProps)
         </View>
       </View>
 
-      {/* ── Content region (bottom ~38%) ──────────────────────────── */}
+      {/* ── Content region (bottom ~26%) ──────────────────────────── */}
       <View style={styles.content}>
         <View style={styles.textBlock}>
           {date ? (
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   photoRegion: {
-    flex: 62,
+    flex: 74,
     position: 'relative',
   },
   dayBadge: {
@@ -108,25 +108,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
   },
   content: {
-    flex: 38,
+    flex: 26,
     paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    paddingTop: 10,
+    paddingBottom: 10,
     justifyContent: 'space-between',
   },
   textBlock: {
-    gap: 2,
+    gap: 1,
   },
   dateLabel: {
     fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
+    fontSize: 10,
     letterSpacing: 0.7,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   title: {
     fontFamily: FontFamily.condensedSemibold,
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 19,
+    lineHeight: 22,
     letterSpacing: -0.3,
   },
   placeRow: {
