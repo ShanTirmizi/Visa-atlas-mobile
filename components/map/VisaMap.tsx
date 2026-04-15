@@ -50,6 +50,65 @@ function normalizeCategoryKey(category: DataVisaCategory | string): string {
 // Load GeoJSON once at module level
 const countriesGeoJSON = getCountriesGeoJSON();
 
+// ── Point-in-polygon ─────────────────────────────────────────────────
+// MapLibre's ShapeSource.onPress returns every feature inside its hitbox,
+// not just the one whose geometry actually contains the tap. For neighbors
+// like South Korea and Japan (Japan being a multi-polygon with a huge
+// bounding-box footprint across the Korea Strait), the first returned
+// feature can easily be the wrong country. We re-run point-in-polygon on
+// the actual tap coordinate to pick the feature that *really* contains it.
+
+type Ring = number[][];
+type Polygon = Ring[];
+type MultiPolygon = Polygon[];
+
+function pointInRing(lng: number, lat: number, ring: Ring): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersects =
+      yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInPolygon(lng: number, lat: number, polygon: Polygon): boolean {
+  if (polygon.length === 0) return false;
+  // Must be inside the outer ring
+  if (!pointInRing(lng, lat, polygon[0])) return false;
+  // ...and NOT inside any hole
+  for (let i = 1; i < polygon.length; i++) {
+    if (pointInRing(lng, lat, polygon[i])) return false;
+  }
+  return true;
+}
+
+function pointInMultiPolygon(lng: number, lat: number, mp: MultiPolygon): boolean {
+  for (const poly of mp) {
+    if (pointInPolygon(lng, lat, poly)) return true;
+  }
+  return false;
+}
+
+type FeatureGeometry = { type: string; coordinates: unknown };
+type FeatureLike = { geometry?: FeatureGeometry; properties?: Record<string, unknown> };
+
+function featureContainsPoint(lng: number, lat: number, feature: FeatureLike): boolean {
+  const geom = feature.geometry;
+  if (!geom) return false;
+  if (geom.type === 'Polygon') {
+    return pointInPolygon(lng, lat, geom.coordinates as Polygon);
+  }
+  if (geom.type === 'MultiPolygon') {
+    return pointInMultiPolygon(lng, lat, geom.coordinates as MultiPolygon);
+  }
+  return false;
+}
+
 // Tile style URLs
 const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
@@ -147,9 +206,31 @@ export function VisaMap({
 
   // Handle tap on a country shape
   const handleShapePress = useCallback(
-    (event: { features: Array<{ properties?: Record<string, unknown> }> }) => {
+    (event: {
+      features: FeatureLike[];
+      coordinates?: { latitude: number; longitude: number };
+    }) => {
       shapeJustPressed.current = true;
-      const feature = event.features?.[0];
+      const features = event.features ?? [];
+      if (features.length === 0) {
+        setSelected(null);
+        return;
+      }
+
+      // MapLibre returns every feature within its hitbox — we need to pick
+      // the one whose polygon ACTUALLY contains the tap coordinate, not
+      // just features[0]. Without this, tapping near the Korea/Japan border
+      // returns Japan first (its multi-polygon footprint extends westward)
+      // even when the finger is on South Korea.
+      const coords = event.coordinates;
+      let feature: FeatureLike | undefined;
+      if (coords && typeof coords.longitude === 'number' && typeof coords.latitude === 'number') {
+        feature = features.find((f) => featureContainsPoint(coords.longitude, coords.latitude, f));
+      }
+      // Fallback: if we somehow didn't get coordinates, or none of the
+      // candidates contain the point, use the first feature.
+      if (!feature) feature = features[0];
+
       const iso = feature?.properties?.iso_a3 as string | undefined;
       if (!iso) {
         // Tapped ocean or feature without iso — dismiss selection
