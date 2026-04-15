@@ -42,40 +42,47 @@ interface DayDeckProps {
 }
 
 // ── Sizing ────────────────────────────────────────────────────────────
-// Slightly larger front card, tighter stride. Peeks are subtle slivers on
-// each side — the user wanted "poking out from the side," not a carousel.
+// Front card dominates (77% of screen width) with only thin slivers of
+// neighbors visible. This is how Apple Wallet and Hinge read premium —
+// the active card is unambiguously the focal point.
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.68), 310);
+const CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.77), 340);
 const CARD_HEIGHT = Math.round(CARD_WIDTH * 1.3);
-const CARD_STRIDE = Math.round(CARD_WIDTH * 0.32);
+// Stride ~11% of card width ≈ 30px peek on each side. Readable as "there's
+// another card behind this one" without competing with the front card.
+const CARD_STRIDE = Math.round(CARD_WIDTH * 0.11);
+// Vertical offset for back cards — creates a "stack" feel where each
+// receding card sits a few pixels lower, like a real physical deck.
+const STACK_DROP = 5;
 
-const SWIPE_THRESHOLD = CARD_STRIDE * 0.8;
-const VELOCITY_THRESHOLD = 650;
+const SWIPE_THRESHOLD = CARD_STRIDE * 1.4;
+const VELOCITY_THRESHOLD = 600;
 
-// Spring config for the commit motion — slight overshoot, then settle. This
-// is what gives the deck its "throw" feel versus a flat carousel slide.
+// Commit spring — low damping = expressive overshoot. The front card
+// visibly "throws" past its target and settles. This is where the physical
+// feel comes from. Higher mass + lower stiffness = more premium weight.
 const COMMIT_SPRING = {
-  damping: 14,
-  stiffness: 140,
-  mass: 0.85,
+  damping: 13,
+  stiffness: 130,
+  mass: 1.0,
   overshootClamping: false,
   restDisplacementThreshold: 0.2,
   restSpeedThreshold: 2,
 } as const;
 
-// Lighter spring for the snap-back (incomplete swipe).
+// Lighter spring for snap-back when the user releases mid-drag.
 const SNAPBACK_SPRING = {
   damping: 22,
   stiffness: 200,
   mass: 0.9,
 } as const;
 
-// Tilt constants for the interactive "card grip" feel during drag.
-// TILT_PER_PX controls how much the front card rotates as you drag it —
-// 0.08°/px means 100px drag = 8° tilt, feels physical without being extreme.
-const TILT_PER_PX = 0.08;
-// Peak rotation applied during the commit flourish before settling back.
-const COMMIT_PEAK_TILT_DEG = 14;
+// Tilt — the live rotation applied to the front card as you drag. 0.1°/px
+// gives a firmer "grip" feel than the previous 0.08.
+const TILT_PER_PX = 0.1;
+// Dramatic peak rotation during the commit flourish, in the same direction
+// as the swipe so the card looks flung.
+const COMMIT_PEAK_TILT_DEG = 18;
 
 function formatDayDate(startDate: string | undefined, dayOffset: number): string | undefined {
   if (!startDate) return undefined;
@@ -141,22 +148,28 @@ function DeckCardItem({
     }
 
     const translateX = visualOffset * CARD_STRIDE;
-    // More dramatic scale curve: back cards are clearly smaller, and the
-    // transition from 0.78 → 1.0 gives the new front card a visible "grow
-    // into place" as it comes forward.
-    const scale = interpolate(abs, [0, 1, 2], [1, 0.87, 0.72], Extrapolation.CLAMP);
-    // Slot-based rotation fan — symmetric around center.
+    // Vertical drop — back cards sit a few pixels lower than the front,
+    // stacking like a real deck of cards. Scales with distance so the
+    // effect is strongest for slot ±2 (deepest back cards).
+    const translateY = abs * STACK_DROP;
+    // Scale curve: steep falloff. Front card is 1.0, slot ±1 is 0.86 (14%
+    // smaller — clearly receded), slot ±2 is 0.74. The 14% jump between
+    // front and first-back is what creates the "go behind it" feeling
+    // during commits: the front card visibly shrinks as it moves out.
+    const scale = interpolate(abs, [0, 1, 2], [1, 0.86, 0.74], Extrapolation.CLAMP);
+    // Very subtle fan — just enough to suggest depth without looking
+    // playing-card-ish. 3° at ±1, 5° at ±2.
     const slotRotate = interpolate(
       visualOffset,
       [-2, -1, 0, 1, 2],
-      [-10, -6, 0, 6, 10],
+      [-5, -3, 0, 3, 5],
       Extrapolation.CLAMP,
     );
-    // Bolder opacity falloff — back cards are visibly faded, emphasizing
-    // the depth stack and making the front card the clear focal point.
-    const opacity = interpolate(abs, [0, 1, 2], [1, 0.78, 0.15], Extrapolation.CLAMP);
-    // Higher zIndex closer to center — front card always draws on top even
-    // when the fan rotation would otherwise confuse layer order.
+    // Aggressive opacity falloff: front 1.0, slot ±1 drops to 0.68 (cards
+    // are clearly "behind"), slot ±2 is nearly invisible at 0.2. The big
+    // opacity swing during commit is another "goes behind it" signal.
+    const opacity = interpolate(abs, [0, 1, 2], [1, 0.68, 0.2], Extrapolation.CLAMP);
+    // Higher zIndex closer to center so the front card always draws on top.
     const zIndex = Math.round(100 - abs * 10);
 
     // Tinder-style interactive tilt: only applied to whichever card IS
@@ -169,6 +182,7 @@ function DeckCardItem({
     return {
       transform: [
         { translateX },
+        { translateY },
         { scale },
         { rotateZ: `${slotRotate + extraTilt}deg` },
       ],
