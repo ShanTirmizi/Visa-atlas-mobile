@@ -4,11 +4,11 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withSequence,
   withTiming,
   runOnJS,
   interpolate,
   Extrapolation,
-  Easing,
   type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -42,23 +42,40 @@ interface DayDeckProps {
 }
 
 // ── Sizing ────────────────────────────────────────────────────────────
-// Smaller front card so there's breathing room and the peeks look intentional.
-// 0.62 of screen width is the sweet spot for a "premium deck" feel — big
-// enough to read, small enough to show siblings.
+// Slightly larger front card, tighter stride. Peeks are subtle slivers on
+// each side — the user wanted "poking out from the side," not a carousel.
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.64), 300);
-const CARD_HEIGHT = Math.round(CARD_WIDTH * 1.32);
+const CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.68), 310);
+const CARD_HEIGHT = Math.round(CARD_WIDTH * 1.3);
+const CARD_STRIDE = Math.round(CARD_WIDTH * 0.32);
 
-// Horizontal stride between adjacent slots. With stride ≈ 40% of card width
-// the next card peeks out by roughly 30% behind the front card on each side.
-const CARD_STRIDE = Math.round(CARD_WIDTH * 0.42);
-
-const SWIPE_THRESHOLD = CARD_STRIDE * 0.55;
+const SWIPE_THRESHOLD = CARD_STRIDE * 0.8;
 const VELOCITY_THRESHOLD = 650;
 
-// Apple-style "emphasized decelerate" cubic bezier — fast initial motion,
-// gentle landing. This is the curve UIKit uses for most system transitions.
-const COMMIT_EASING = Easing.bezier(0.22, 1, 0.36, 1);
+// Spring config for the commit motion — slight overshoot, then settle. This
+// is what gives the deck its "throw" feel versus a flat carousel slide.
+const COMMIT_SPRING = {
+  damping: 14,
+  stiffness: 140,
+  mass: 0.85,
+  overshootClamping: false,
+  restDisplacementThreshold: 0.2,
+  restSpeedThreshold: 2,
+} as const;
+
+// Lighter spring for the snap-back (incomplete swipe).
+const SNAPBACK_SPRING = {
+  damping: 22,
+  stiffness: 200,
+  mass: 0.9,
+} as const;
+
+// Tilt constants for the interactive "card grip" feel during drag.
+// TILT_PER_PX controls how much the front card rotates as you drag it —
+// 0.08°/px means 100px drag = 8° tilt, feels physical without being extreme.
+const TILT_PER_PX = 0.08;
+// Peak rotation applied during the commit flourish before settling back.
+const COMMIT_PEAK_TILT_DEG = 14;
 
 function formatDayDate(startDate: string | undefined, dayOffset: number): string | undefined {
   if (!startDate) return undefined;
@@ -74,8 +91,8 @@ function pickPlace(day: DayDeckDay): string | undefined {
 }
 
 // ── DeckCardItem ──────────────────────────────────────────────────────
-// One per day. Stable React key = dayIdx, never remounts. Everything that
-// changes during a swipe is inside the worklet.
+// One per day. Stable React key = dayIdx, never remounts. Every visual
+// change during a swipe happens inside the worklet with no JS round-trip.
 interface DeckCardItemProps {
   dayIdx: number;
   numDays: number;
@@ -85,6 +102,7 @@ interface DeckCardItemProps {
   place?: string;
   activeIndex: SharedValue<number>;
   dragX: SharedValue<number>;
+  tilt: SharedValue<number>;
 }
 
 function DeckCardItem({
@@ -96,54 +114,63 @@ function DeckCardItem({
   place,
   activeIndex,
   dragX,
+  tilt,
 }: DeckCardItemProps) {
   const animatedStyle = useAnimatedStyle(() => {
-    // Wrap-aware signed distance from the active card.
-    // For numDays=10 and activeIndex=9 looking at dayIdx=0:
-    //   raw = 0 - 9 = -9, but 0 is visually "one after" 9, so slot should be +1.
-    //   We shift by numDays when the raw distance crosses the half-point.
+    // Wrap-aware signed distance from the active card. For a 10-day trip at
+    // activeIndex=9 looking at dayIdx=0, slot becomes +1 (visually one step
+    // after day 9), not -9.
     let slot = dayIdx - activeIndex.value;
     const half = numDays / 2;
     if (slot > half) slot -= numDays;
     if (slot <= -half) slot += numDays;
 
-    // Visual offset: slot plus the fraction of a stride the finger has dragged.
-    // Drag right (dragX > 0) → visualOffset decreases for cards with positive
-    // slot and increases for cards with negative slot — i.e., the whole deck
-    // shifts right as one piece, exactly following the finger.
+    // Visual offset combines the static slot with the fractional drag. When
+    // the user drags right by a full stride, every card's visual offset
+    // decreases by 1 in sync — the whole deck shifts as one piece.
     const visualOffset = slot + dragX.value / CARD_STRIDE;
     const abs = Math.abs(visualOffset);
 
-    // Off-screen cards: fully transparent, minimal transform cost.
-    if (abs > 2.6) {
+    // Anything past slot ±2.5 is completely hidden so the wrap-around is invisible.
+    if (abs > 2.5) {
       return {
         opacity: 0,
-        transform: [{ translateX: 0 }, { scale: 0.9 }, { rotateZ: '0deg' }],
+        transform: [{ translateX: 0 }, { scale: 0.7 }, { rotateZ: '0deg' }],
         zIndex: 0,
       };
     }
 
     const translateX = visualOffset * CARD_STRIDE;
-    // Scale: 1.0 at center, 0.9 at ±1, 0.78 at ±2.
-    const scale = interpolate(abs, [0, 1, 2], [1, 0.9, 0.78], Extrapolation.CLAMP);
-    // Rotation: symmetric fan, ±6° at ±1, ±9° at ±2.
-    const rotate = interpolate(
+    // More dramatic scale curve: back cards are clearly smaller, and the
+    // transition from 0.78 → 1.0 gives the new front card a visible "grow
+    // into place" as it comes forward.
+    const scale = interpolate(abs, [0, 1, 2], [1, 0.87, 0.72], Extrapolation.CLAMP);
+    // Slot-based rotation fan — symmetric around center.
+    const slotRotate = interpolate(
       visualOffset,
       [-2, -1, 0, 1, 2],
-      [-9, -6, 0, 6, 9],
+      [-10, -6, 0, 6, 10],
       Extrapolation.CLAMP,
     );
-    // Opacity: 1 at center, 0.85 at ±1, 0 at ±2 (invisible beyond 2 slots).
-    const opacity = interpolate(abs, [0, 1, 1.9], [1, 0.85, 0], Extrapolation.CLAMP);
-    // zIndex: higher when closer to center, so the front card always draws
-    // on top regardless of render order.
+    // Bolder opacity falloff — back cards are visibly faded, emphasizing
+    // the depth stack and making the front card the clear focal point.
+    const opacity = interpolate(abs, [0, 1, 2], [1, 0.78, 0.15], Extrapolation.CLAMP);
+    // Higher zIndex closer to center — front card always draws on top even
+    // when the fan rotation would otherwise confuse layer order.
     const zIndex = Math.round(100 - abs * 10);
+
+    // Tinder-style interactive tilt: only applied to whichever card IS
+    // currently the front. During drag, tilt grows with finger; on commit,
+    // it animates to a dramatic peak and then back to 0. After reset, the
+    // new front card has tilt=0 and gets its rotation purely from slotRotate.
+    const isFront = dayIdx === activeIndex.value;
+    const extraTilt = isFront ? tilt.value : 0;
 
     return {
       transform: [
         { translateX },
         { scale },
-        { rotateZ: `${rotate}deg` },
+        { rotateZ: `${slotRotate + extraTilt}deg` },
       ],
       opacity,
       zIndex,
@@ -176,15 +203,13 @@ function DayDeck({
 }: DayDeckProps) {
   const { colors } = useTheme();
 
-  // activeIndex lives in TWO places by design:
-  //  - A shared value for the worklet (atomic UI-thread updates, no race)
-  //  - React state for UI children that need it (dots, counter)
-  // Both are updated in the commit callback: the shared value synchronously
-  // (same frame as the dragX reset, so the transforms don't flicker) and the
-  // React state via runOnJS (for the dots/counter to re-render).
+  // activeIndex lives in TWO places by design: a shared value for the
+  // worklet (atomic UI-thread updates), and React state for children that
+  // need to re-render (dots, counter).
   const [activeIndexJS, setActiveIndexJS] = useState(0);
   const activeIndex = useSharedValue(0);
   const dragX = useSharedValue(0);
+  const tilt = useSharedValue(0);
 
   const numDays = days.length;
 
@@ -202,40 +227,48 @@ function DayDeck({
       .failOffsetY([-20, 20])
       .onUpdate((e) => {
         dragX.value = e.translationX;
+        // Live Tinder tilt — the front card rotates as you drag it, giving
+        // the tactile sense of gripping and tipping a physical card.
+        tilt.value = e.translationX * TILT_PER_PX;
       })
       .onEnd((e) => {
         const past = Math.abs(e.translationX) > SWIPE_THRESHOLD;
         const fast = Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
 
         if ((past || fast) && numDays > 1) {
-          // dir: +1 = next day (user swiped left), -1 = prev day (swiped right)
+          // dir: +1 = next day (swiped left), -1 = prev day (swiped right)
           const dir: 1 | -1 = e.translationX < 0 ? 1 : -1;
-          // Target position: continue the drag in the same direction by one
-          // stride. For a left swipe (dir=+1, translationX<0), target is negative.
-          // For a right swipe (dir=-1, translationX>0), target is positive.
           const target = -dir * CARD_STRIDE;
-          dragX.value = withTiming(
-            target,
-            { duration: 320, easing: COMMIT_EASING },
-            (finished) => {
-              if (finished) {
-                // Atomic update: shared value first (UI thread, same frame),
-                // then dragX reset (no-op visually because the new slot math
-                // places cards exactly where they already are).
-                const newIdx = (activeIndex.value + dir + numDays) % numDays;
-                activeIndex.value = newIdx;
-                dragX.value = 0;
-                runOnJS(setActiveIndexJS)(newIdx);
-                runOnJS(fireHaptic)();
-              }
-            },
+
+          // Commit flourish: tilt ramps to a dramatic peak for ~140ms, then
+          // settles back to 0 over the remaining ~200ms. By the end, tilt=0
+          // so the reset math stays clean — any tilt left over at reset would
+          // snap to the new front card and cause a visible pop.
+          tilt.value = withSequence(
+            withTiming(-dir * COMMIT_PEAK_TILT_DEG, { duration: 140 }),
+            withTiming(0, { duration: 200 }),
           );
-        } else {
-          dragX.value = withSpring(0, {
-            damping: 22,
-            stiffness: 180,
-            mass: 0.9,
+
+          // Back-card shift: cards slide one stride via a slightly-springy
+          // curve with controlled overshoot. This is what gives the deck the
+          // "throw" feel rather than feeling like a linear carousel slide.
+          dragX.value = withSpring(target, COMMIT_SPRING, (finished) => {
+            if (finished) {
+              // Atomic advance: shared value + dragX reset, same frame, same
+              // thread. The new front card's slot math places it at the exact
+              // position where the old front card visually is, so no pop.
+              const newIdx = (activeIndex.value + dir + numDays) % numDays;
+              activeIndex.value = newIdx;
+              dragX.value = 0;
+              tilt.value = 0;
+              runOnJS(setActiveIndexJS)(newIdx);
+              runOnJS(fireHaptic)();
+            }
           });
+        } else {
+          // Incomplete — spring everything back.
+          dragX.value = withSpring(0, SNAPBACK_SPRING);
+          tilt.value = withSpring(0, SNAPBACK_SPRING);
         }
       });
 
@@ -246,7 +279,7 @@ function DayDeck({
       });
 
     return Gesture.Exclusive(pan, tap);
-  }, [numDays, fireHaptic, openDay, activeIndex, dragX]);
+  }, [numDays, fireHaptic, openDay, activeIndex, dragX, tilt]);
 
   if (numDays === 0) {
     return (
@@ -278,6 +311,7 @@ function DayDeck({
               date={formatDayDate(tripStartDate, dayIdx)}
               activeIndex={activeIndex}
               dragX={dragX}
+              tilt={tilt}
             />
           ))}
         </View>
