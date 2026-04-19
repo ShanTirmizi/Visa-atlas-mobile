@@ -9,10 +9,9 @@ export default function TabLayout() {
       screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen name="trips" />
+      <Tabs.Screen name="explore" />
       <Tabs.Screen name="compare" />
-      <Tabs.Screen name="index" />
       <Tabs.Screen name="guides" />
-      <Tabs.Screen name="more" />
     </Tabs>
   );
 }

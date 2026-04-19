@@ -19,7 +19,7 @@ export default function EmailConnectedScreen() {
   useEffect(() => {
     // Navigate to More tab (which shows Email Sync section)
     // The EmailProvider will auto-detect the new account via Convex
-    router.replace('/(tabs)/more');
+    router.replace('/(tabs)/trips');
   }, []);
 
   return null;
