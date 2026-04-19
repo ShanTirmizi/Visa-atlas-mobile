@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "jest"
   },
   "dependencies": {
     "@auth/core": "^0.37.0",
@@ -59,9 +60,15 @@
     "world-atlas": "^2.0.2"
   },
   "devDependencies": {
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.1.0",
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
+    "jest": "^30.3.0",
+    "jest-expo": "^55.0.16",
+    "ts-jest": "^29.4.9",
     "typescript": "~5.9.2"
   },
   "private": true
