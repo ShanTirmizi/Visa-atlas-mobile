@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -15,15 +15,14 @@ import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
-import { BookOpen, Trash2, FileText, ChevronRight } from 'lucide-react-native';
+import { Search, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import {
-  FontFamily,
-  FontSize,
-  Spacing,
-  Radius,
-  Shadows,
-} from '@/constants/theme';
+import { Shadows } from '@/constants/theme';
+import { Type } from '@/constants/typography';
+import { CircleBtn } from '@/components/ui/CircleBtn';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { GuideHero, type GuideHeroData } from '@/components/guides/GuideHero';
+import { GuideRow, type GuideRowData } from '@/components/guides/GuideRow';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,18 +36,25 @@ interface ChecklistItem {
 }
 
 // ---------------------------------------------------------------------------
-// Status config
+// Static demo data (used when no Convex guides exist yet)
 // ---------------------------------------------------------------------------
 
-const STATUS_CONFIG: Record<
-  string,
-  { label: string; color: string; bg: string }
-> = {
-  preparing: { label: 'Preparing', color: '#B8861E', bg: 'rgba(229, 168, 50, 0.15)' },
-  submitted: { label: 'Submitted', color: '#D45E30', bg: 'rgba(235, 109, 58, 0.15)' },
-  approved:  { label: 'Approved',  color: '#228B57', bg: 'rgba(46, 170, 110, 0.15)' },
-  rejected:  { label: 'Rejected',  color: '#C43A2E', bg: 'rgba(224, 85, 69, 0.15)' },
+const DEMO_GUIDES: GuideRowData[] = [
+  { title: 'The quiet side of Kyoto, at 6 AM',  author: 'Mei Tanaka',  readMin: 12, category: 'Essay',       tone: 'mountain' },
+  { title: 'Japan in 7 days',                     author: 'Visa Atlas',  readMin: 8,  category: 'Itinerary',   tone: 'sunset'   },
+  { title: 'How to get a Japan e-visa',           author: 'Visa Atlas',  readMin: 6,  category: 'How-to',      tone: 'ocean'    },
+  { title: 'Tokyo for food lovers',               author: 'Visa Atlas',  readMin: 10, category: 'Destinations',tone: 'warm'     },
+];
+
+const DEMO_HERO: GuideHeroData = {
+  title: 'The quiet side of Kyoto, at 6 AM',
+  author: 'Mei Tanaka',
+  readMin: 12,
+  tone: 'mountain',
+  category: 'Essay',
 };
+
+const FILTER_TABS = ['Featured', 'Visas', 'Destinations', 'How-to'] as const;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -95,35 +101,25 @@ function countryCodeToFlag(code: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Skeleton card
+// Status config (for user visa guides)
 // ---------------------------------------------------------------------------
 
-function SkeletonCard({ colors }: { colors: any }) {
-  return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card, borderColor: colors.borderSubtle },
-      ]}
-    >
-      <View style={[styles.skeletonBar, { backgroundColor: colors.shimmer }]} />
-      <View style={styles.cardBody}>
-        <View style={[styles.skeletonLine, { width: '60%', backgroundColor: colors.shimmer }]} />
-        <View style={[styles.skeletonLine, { width: '40%', backgroundColor: colors.shimmer, marginTop: 8 }]} />
-        <View style={[styles.skeletonLine, { width: '80%', backgroundColor: colors.shimmer, marginTop: 16 }]} />
-      </View>
-    </View>
-  );
-}
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  preparing: { label: 'Preparing', color: '#B8861E' },
+  submitted: { label: 'Submitted', color: '#D45E30' },
+  approved:  { label: 'Approved',  color: '#228B57' },
+  rejected:  { label: 'Rejected',  color: '#C43A2E' },
+};
 
 // ---------------------------------------------------------------------------
-// Component
+// Main Screen
 // ---------------------------------------------------------------------------
 
 export default function GuidesScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<string>('Featured');
 
   const { isAuthenticated } = useConvexAuth();
   const guides = useOfflineQuery(api.visaGuides.listGuides, isAuthenticated ? {} : 'skip');
@@ -151,166 +147,165 @@ export default function GuidesScreen() {
         ],
       );
     },
-    [deleteGuide],
+    [deleteGuide, isOffline],
   );
 
-  const renderGuide = useCallback(
-    ({ item: guide }: { item: any }) => {
-      const status = STATUS_CONFIG[guide.status] || STATUS_CONFIG.preparing;
-      const progress = getChecklistProgress(guide.checklist);
-      const pct = progress.total > 0
-        ? Math.round((progress.checked / progress.total) * 100)
-        : 0;
-      const isDeleting = deletingId === guide._id;
-      const flag = countryCodeToFlag(guide.countryCode);
-
-      return (
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => router.push(`/guide/${guide._id}`)}
-          style={[
-            styles.card,
-            {
-              backgroundColor: status.color,
-              borderWidth: 0,
-              opacity: isDeleting ? 0.5 : 1,
-            },
-          ]}
-        >
-          {/* Status accent bar */}
-          <View style={[styles.accentBar, { backgroundColor: 'rgba(255,255,255,0.25)' }]} />
-
-          <View style={styles.cardBody}>
-            {/* Top row */}
-            <View style={styles.cardTopRow}>
-              <View style={styles.cardTitleWrap}>
-                <Text style={[styles.cardCountry, { color: '#FFFFFF' }]}>
-                  {flag} {guide.countryName}
-                </Text>
-                <Text style={[styles.cardVisaType, { color: 'rgba(255,255,255,0.70)' }]}>
-                  {guide.visaType}
-                </Text>
-              </View>
-
-              {/* Status badge */}
-              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
-                <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
-                  {status.label}
-                </Text>
-              </View>
-            </View>
-
-            {/* Progress */}
-            {progress.total > 0 && (
-              <View style={styles.progressWrap}>
-                <View style={styles.progressLabelRow}>
-                  <Text style={[styles.progressLabel, { color: 'rgba(255,255,255,0.70)' }]}>
-                    {progress.checked}/{progress.total} documents
-                  </Text>
-                  <Text
-                    style={[
-                      styles.progressPct,
-                      { color: '#FFFFFF' },
-                    ]}
-                  >
-                    {pct}%
-                  </Text>
-                </View>
-                <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${pct}%`,
-                        backgroundColor: '#FFFFFF',
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Footer */}
-            <View style={styles.cardFooter}>
-              <TouchableOpacity
-                onPress={() => handleDelete(guide._id as Id<'visaGuides'>, guide.countryName)}
-                disabled={isDeleting}
-                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                style={[styles.deleteBtn, { borderColor: 'rgba(255,255,255,0.25)' }]}
-              >
-                {isDeleting ? (
-                  <ActivityIndicator size={14} color={'#FFFFFF'} />
-                ) : (
-                  <Trash2 color="rgba(255,255,255,0.70)" size={15} strokeWidth={1.5} />
-                )}
-              </TouchableOpacity>
-              <ChevronRight color="rgba(255,255,255,0.70)" size={18} strokeWidth={1.5} />
-            </View>
-          </View>
-        </TouchableOpacity>
-      );
-    },
-    [colors, deletingId, handleDelete, router],
-  );
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md },
-      ]}
-    >
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <BookOpen color={colors.primary} size={24} strokeWidth={1.5} />
-        <Text style={[styles.heading, { color: colors.foreground }]}>
-          Visa Guides
-        </Text>
-      </View>
-      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-        {guides === undefined
-          ? 'Loading...'
-          : guides.length > 0
-            ? `${guides.length} guide${guides.length !== 1 ? 's' : ''} saved`
-            : 'Your visa application guides will appear here'}
-      </Text>
-
-      {/* Loading */}
-      {guides === undefined && (
-        <View style={styles.listContent}>
-          {[1, 2, 3].map((i) => (
-            <SkeletonCard key={i} colors={colors} />
-          ))}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 100 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={[Type.body13, { color: colors.inkMute }]}>Editorial</Text>
+            <Text style={[Type.display24, { color: colors.ink, marginTop: 2 }]}>Guides</Text>
+          </View>
+          <CircleBtn
+            size={38}
+            onPress={() => {}}
+            accessibilityLabel="Search guides"
+          >
+            <Search size={18} color={colors.ink} strokeWidth={2} />
+          </CircleBtn>
         </View>
-      )}
 
-      {/* Empty state */}
-      {guides && guides.length === 0 && (
-        <View style={styles.emptyWrap}>
-          <FileText color={colors.textMuted} size={52} strokeWidth={1} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-            No visa guides yet
-          </Text>
-          <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>
-            Start by exploring a country and creating a visa guide.
-          </Text>
+        {/* ── Filter chips ─────────────────────────────────────────────────── */}
+        <View style={styles.filterRow}>
+          <SegmentedControl
+            options={[...FILTER_TABS]}
+            value={activeTab}
+            onChange={setActiveTab}
+            variant="pill"
+          />
         </View>
-      )}
 
-      {/* Guide list */}
-      {guides && guides.length > 0 && (
-        <FlatList
-          data={guides}
-          keyExtractor={(g) => g._id}
-          renderItem={renderGuide}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+        {/* ── GuideHero (featured) ─────────────────────────────────────────── */}
+        {(activeTab === 'Featured') && (
+          <View style={styles.heroSection}>
+            <GuideHero
+              guide={DEMO_HERO}
+              onPress={() => {}}
+            />
+          </View>
+        )}
+
+        {/* ── Editorial guide rows (static demo) ───────────────────────────── */}
+        {(activeTab === 'Featured') && (
+          <View style={styles.rowsSection}>
+            {DEMO_GUIDES.slice(1).map((guide, i) => (
+              <GuideRow key={i} guide={guide} onPress={() => {}} />
+            ))}
+          </View>
+        )}
+
+        {/* ── Filtered editorial rows ───────────────────────────────────────── */}
+        {activeTab !== 'Featured' && (
+          <View style={styles.rowsSection}>
+            {DEMO_GUIDES.filter((g) => {
+              if (activeTab === 'Visas') return g.category === 'How-to';
+              if (activeTab === 'Destinations') return g.category === 'Destinations' || g.category === 'Essay' || g.category === 'Itinerary';
+              if (activeTab === 'How-to') return g.category === 'How-to';
+              return true;
+            }).map((guide, i) => (
+              <GuideRow key={i} guide={guide} onPress={() => {}} />
+            ))}
+          </View>
+        )}
+
+        {/* ── Your Visa Guides (Convex-backed) ────────────────────────────── */}
+        {guides !== undefined && guides.length > 0 && (
+          <View style={styles.visaGuidesSection}>
+            <Text style={[Type.title15, { color: colors.ink, marginBottom: 12 }]}>
+              Your Visa Applications
+            </Text>
+            <View style={{ gap: 10 }}>
+              {guides.map((guide) => {
+                const status = STATUS_CONFIG[guide.status] ?? STATUS_CONFIG.preparing;
+                const progress = getChecklistProgress(guide.checklist);
+                const pct = progress.total > 0
+                  ? Math.round((progress.checked / progress.total) * 100)
+                  : 0;
+                const isDeleting = deletingId === guide._id;
+                const flag = countryCodeToFlag(guide.countryCode);
+
+                return (
+                  <TouchableOpacity
+                    key={guide._id}
+                    activeOpacity={0.7}
+                    onPress={() => router.push(`/guide/${guide._id}`)}
+                    style={[
+                      styles.visaGuideCard,
+                      {
+                        backgroundColor: status.color,
+                        opacity: isDeleting ? 0.5 : 1,
+                      },
+                    ]}
+                  >
+                    <View style={styles.visaGuideBody}>
+                      <View style={styles.visaGuideTop}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.visaGuideCountry}>
+                            {flag} {guide.countryName}
+                          </Text>
+                          <Text style={styles.visaGuideType}>
+                            {guide.visaType}
+                          </Text>
+                        </View>
+                        <View style={styles.visaStatusBadge}>
+                          <Text style={styles.visaStatusText}>{status.label}</Text>
+                        </View>
+                      </View>
+                      {progress.total > 0 && (
+                        <View style={{ marginTop: 10 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <Text style={styles.visaProgressLabel}>
+                              {progress.checked}/{progress.total} documents
+                            </Text>
+                            <Text style={styles.visaProgressPct}>{pct}%</Text>
+                          </View>
+                          <View style={styles.visaProgressTrack}>
+                            <View
+                              style={[styles.visaProgressFill, { width: `${pct}%` }]}
+                            />
+                          </View>
+                        </View>
+                      )}
+                      <View style={styles.visaGuideFooter}>
+                        <TouchableOpacity
+                          onPress={() => handleDelete(guide._id as Id<'visaGuides'>, guide.countryName)}
+                          disabled={isDeleting}
+                          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                          style={styles.deleteBtn}
+                        >
+                          {isDeleting ? (
+                            <ActivityIndicator size={14} color="#FFFFFF" />
+                          ) : (
+                            <Trash2 color="rgba(255,255,255,0.70)" size={15} strokeWidth={1.5} />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Loading */}
+        {guides === undefined && (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="small" color={colors.inkMute} />
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -322,147 +317,124 @@ export default function GuidesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
   },
-  headerRow: {
+  scroll: {},
+
+  // Header
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
+    paddingHorizontal: 22,
+    marginBottom: 0,
   },
-  heading: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize['3xl'],
-  },
-  subtitle: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
-    marginBottom: Spacing.lg,
-  },
-  listContent: {
-    paddingBottom: 100,
-    gap: Spacing.md,
+  headerLeft: {
+    flexDirection: 'column',
   },
 
-  // Card
-  card: {
+  // Filter chips
+  filterRow: {
+    paddingHorizontal: 22,
+    paddingTop: 10,
+  },
+
+  // Hero
+  heroSection: {
+    paddingTop: 8,
+    paddingHorizontal: 18,
+  },
+
+  // Rows
+  rowsSection: {
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    gap: 10,
+  },
+
+  // Visa guides section
+  visaGuidesSection: {
+    paddingHorizontal: 18,
+    paddingTop: 24,
+  },
+  visaGuideCard: {
     borderRadius: 20,
-    borderWidth: 0,
     overflow: 'hidden',
     ...Shadows.card,
   },
-  accentBar: {
-    height: 5,
+  visaGuideBody: {
+    padding: 14,
   },
-  cardBody: {
-    padding: Spacing.md,
-  },
-  cardTopRow: {
+  visaGuideTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: Spacing.sm,
   },
-  cardTitleWrap: {
-    flex: 1,
-    marginRight: Spacing.sm,
+  visaGuideCountry: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 18,
+    color: '#FFFFFF',
+    lineHeight: 24,
   },
-  cardCountry: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize.xl,
-    lineHeight: 28,
-  },
-  cardVisaType: {
-    fontFamily: FontFamily.condensed,
-    fontSize: FontSize.xs,
-    marginTop: 2,
+  visaGuideType: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.70)',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginTop: 2,
   },
-
-  // Badge
-  badge: {
+  visaStatusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: Radius.full,
+    borderRadius: 9999,
+    backgroundColor: 'rgba(255,255,255,0.20)',
   },
-  badgeText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
+  visaStatusText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    color: '#FFFFFF',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
-
-  // Progress
-  progressWrap: {
-    marginBottom: Spacing.md,
+  visaProgressLabel: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.70)',
   },
-  progressLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
+  visaProgressPct: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+    color: '#FFFFFF',
   },
-  progressLabel: {
-    fontFamily: FontFamily.condensed,
-    fontSize: FontSize.xs,
-  },
-  progressPct: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-  },
-  progressTrack: {
+  visaProgressTrack: {
     height: 4,
     borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.20)',
     overflow: 'hidden',
   },
-  progressFill: {
+  visaProgressFill: {
     height: '100%',
+    backgroundColor: '#FFFFFF',
     borderRadius: 2,
   },
-
-  // Footer
-  cardFooter: {
+  visaGuideFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 10,
   },
   deleteBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.xs,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
-  // Skeleton
-  skeletonBar: {
-    height: 4,
-  },
-  skeletonLine: {
-    height: 14,
-    borderRadius: 4,
-  },
-
-  // Empty
-  emptyWrap: {
-    flex: 1,
-    justifyContent: 'center',
+  // Loading
+  loadingWrap: {
+    paddingTop: 40,
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: 80,
-  },
-  emptyTitle: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize['2xl'],
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  emptyBody: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
-    textAlign: 'center',
-    lineHeight: 22,
   },
 });
