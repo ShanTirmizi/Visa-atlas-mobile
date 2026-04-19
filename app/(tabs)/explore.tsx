@@ -1,240 +1,221 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
-import { Sparkles } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import BottomSheet from '@gorhom/bottom-sheet';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa, useVisaData } from '@/contexts/visa-context';
-import {
-  FontFamily,
-  FontSize,
-  Spacing,
-  Radius,
-} from '@/constants/theme';
-import {
-  VISA_CATEGORIES,
-  getVisaCategoryColor,
-  type VisaCategoryConfig,
-} from '@/constants/categories';
-import {
-  resolveCountry,
-  type CountryVisa,
-  type HeldVisaType,
-  type VisaCategory as DataVisaCategory,
-} from '@/data/visaData';
+import { resolveCountry, type HeldVisaType, type CountryVisa } from '@/data/visaData';
+import { countryMeta } from '@/data/countryMeta';
+import { cityTemperatures } from '@/data/temperatureData';
 import { VisaMap } from '@/components/map/VisaMap';
-import SearchBar from '@/components/ui/SearchBar';
-import Chip from '@/components/ui/Chip';
-import CountryList from '@/components/country/CountryList';
-import SurpriseMeSheet, { type SurpriseMeSheetRef } from '@/components/surprise/SurpriseMeSheet';
+import { ExploreSheet, type CountryBrief } from '@/components/explore/ExploreSheet';
+import type { Cat } from '@/components/ui/Badge';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+// ──────────────────────────────────────────────
+// ISO-3 → ISO-2 lookup (for flag rendering)
+// ──────────────────────────────────────────────
+const ALPHA3_TO_ALPHA2: Record<string, string> = {
+  AFG: 'AF', ALB: 'AL', DZA: 'DZ', AND: 'AD', AGO: 'AO',
+  ATG: 'AG', ARG: 'AR', ARM: 'AM', AUS: 'AU', AUT: 'AT',
+  AZE: 'AZ', BHS: 'BS', BHR: 'BH', BGD: 'BD', BRB: 'BB',
+  BLR: 'BY', BEL: 'BE', BLZ: 'BZ', BEN: 'BJ', BTN: 'BT',
+  BOL: 'BO', BIH: 'BA', BWA: 'BW', BRA: 'BR', BRN: 'BN',
+  BGR: 'BG', BFA: 'BF', BDI: 'BI', KHM: 'KH', CMR: 'CM',
+  CAN: 'CA', CPV: 'CV', CAF: 'CF', TCD: 'TD', CHL: 'CL',
+  CHN: 'CN', COL: 'CO', COM: 'KM', COG: 'CG', COD: 'CD',
+  CRI: 'CR', CIV: 'CI', HRV: 'HR', CUB: 'CU', CYP: 'CY',
+  CZE: 'CZ', DNK: 'DK', DJI: 'DJ', DMA: 'DM', DOM: 'DO',
+  ECU: 'EC', EGY: 'EG', SLV: 'SV', GNQ: 'GQ', ERI: 'ER',
+  EST: 'EE', SWZ: 'SZ', ETH: 'ET', FJI: 'FJ', FIN: 'FI',
+  FRA: 'FR', GAB: 'GA', GMB: 'GM', GEO: 'GE', DEU: 'DE',
+  GHA: 'GH', GRC: 'GR', GRD: 'GD', GTM: 'GT', GIN: 'GN',
+  GNB: 'GW', GUY: 'GY', HTI: 'HT', HND: 'HN', HUN: 'HU',
+  ISL: 'IS', IND: 'IN', IDN: 'ID', IRN: 'IR', IRQ: 'IQ',
+  IRL: 'IE', ISR: 'IL', ITA: 'IT', JAM: 'JM', JPN: 'JP',
+  JOR: 'JO', KAZ: 'KZ', KEN: 'KE', KIR: 'KI', PRK: 'KP',
+  KOR: 'KR', KWT: 'KW', KGZ: 'KG', LAO: 'LA', LVA: 'LV',
+  LBN: 'LB', LSO: 'LS', LBR: 'LR', LBY: 'LY', LIE: 'LI',
+  LTU: 'LT', LUX: 'LU', MDG: 'MG', MWI: 'MW', MYS: 'MY',
+  MDV: 'MV', MLI: 'ML', MLT: 'MT', MHL: 'MH', MRT: 'MR',
+  MUS: 'MU', MEX: 'MX', FSM: 'FM', MDA: 'MD', MCO: 'MC',
+  MNG: 'MN', MNE: 'ME', MAR: 'MA', MOZ: 'MZ', MMR: 'MM',
+  NAM: 'NA', NRU: 'NR', NPL: 'NP', NLD: 'NL', NZL: 'NZ',
+  NIC: 'NI', NER: 'NE', NGA: 'NG', MKD: 'MK', NOR: 'NO',
+  OMN: 'OM', PAK: 'PK', PLW: 'PW', PAN: 'PA', PNG: 'PG',
+  PRY: 'PY', PER: 'PE', PHL: 'PH', POL: 'PL', PRT: 'PT',
+  QAT: 'QA', ROU: 'RO', RUS: 'RU', RWA: 'RW', KNA: 'KN',
+  LCA: 'LC', VCT: 'VC', WSM: 'WS', SMR: 'SM', STP: 'ST',
+  SAU: 'SA', SEN: 'SN', SRB: 'RS', SYC: 'SC', SLE: 'SL',
+  SGP: 'SG', SVK: 'SK', SVN: 'SI', SLB: 'SB', SOM: 'SO',
+  ZAF: 'ZA', ESP: 'ES', LKA: 'LK', SDN: 'SD', SUR: 'SR',
+  SWE: 'SE', CHE: 'CH', SYR: 'SY', TWN: 'TW', TJK: 'TJ',
+  TZA: 'TZ', THA: 'TH', TLS: 'TL', TGO: 'TG', TON: 'TO',
+  TTO: 'TT', TUN: 'TN', TUR: 'TR', TKM: 'TM', TUV: 'TV',
+  UGA: 'UG', UKR: 'UA', ARE: 'AE', GBR: 'GB', USA: 'US',
+  URY: 'UY', UZB: 'UZ', VUT: 'VU', VEN: 'VE', VNM: 'VN',
+  YEM: 'YE', ZMB: 'ZM', ZWE: 'ZW', PSE: 'PS', XKX: 'XK',
+};
 
-// Map data-layer category (visa-free) to UI category key (visa_free)
-function normalizeCategoryKey(category: DataVisaCategory | string): string {
+// Map data-layer VisaCategory → Badge Cat
+function toBadgeCat(category: string): Cat {
   switch (category) {
     case 'visa-free':
+    case 'home':
+      return 'free';
+    case 'visa-on-arrival':
+      return 'arrival';
+    case 'evisa':
+      return 'evisa';
+    case 'visa-required':
+    default:
+      return 'required';
+  }
+}
+
+// Map data-layer category string → VisaMap filter key (for passing activeFilters)
+function normalizeCategoryKey(category: string): string {
+  switch (category) {
+    case 'visa-free':
+    case 'home':
       return 'visa_free';
     case 'visa-on-arrival':
       return 'visa_on_arrival';
     case 'evisa':
       return 'e_visa';
     case 'visa-required':
-      return 'visa_required';
-    case 'home':
-      return 'visa_free';
     default:
       return 'visa_required';
   }
 }
 
+// Build temperature label from countryMeta capital + temperatureData
+function buildTemperatureLabel(countryCode: string): string | undefined {
+  const meta = countryMeta[countryCode];
+  if (!meta) return undefined;
+  const temps = cityTemperatures[meta.capital];
+  if (!temps) return undefined;
+  const month = new Date().getMonth(); // 0-indexed
+  const temp = temps[month];
+  return `${temp}° ${meta.capital}`;
+}
+
+// Build stay stats for StatStrip
+function buildStats(country: CountryVisa, heldVisas: Set<HeldVisaType>): Array<{ label: string; value: string }> {
+  const resolved = resolveCountry(country, heldVisas);
+  const meta = countryMeta[country.code];
+  const stats: Array<{ label: string; value: string }> = [];
+
+  if (resolved.days != null) {
+    stats.push({ label: 'Stay', value: `${resolved.days}d` });
+  } else if (resolved.category === 'visa-free' || resolved.category === 'home') {
+    stats.push({ label: 'Stay', value: '∞' });
+  }
+
+  if (meta) {
+    stats.push({ label: 'Currency', value: meta.currencyCode });
+    stats.push({ label: 'TZ', value: meta.timezone });
+  }
+
+  return stats.slice(0, 3);
+}
+
+// Convert CountryVisa to CountryBrief
+function toBrief(country: CountryVisa, heldVisas: Set<HeldVisaType>): CountryBrief {
+  const resolved = resolveCountry(country, heldVisas);
+  const meta = countryMeta[country.code];
+  const iso2 = ALPHA3_TO_ALPHA2[country.code] ?? country.code.slice(0, 2);
+
+  return {
+    code: country.code,
+    iso2,
+    name: country.name,
+    region: meta?.region ?? 'World',
+    temperature: buildTemperatureLabel(country.code),
+    visaCategory: toBadgeCat(resolved.category),
+    stats: buildStats(country, heldVisas),
+    saved: false,
+  };
+}
+
 export default function ExploreScreen() {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const bottomSheetRef = useRef<BottomSheet>(null);
-  const surpriseRef = useRef<SurpriseMeSheetRef>(null);
 
-  // State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
-  const [sheetIndex, setSheetIndex] = useState(0);
-
-  // Context
-  const { heldVisas, favorites, visited, toggleFavorite, residence, passports } = useVisa();
+  const { heldVisas, favorites, passports, residence } = useVisa();
   const dynamicVisaData = useVisaData();
 
-  // Convert held visas to the typed set used by resolveCountry
   const heldVisasSet = useMemo(
     () => new Set(heldVisas as HeldVisaType[]),
     [heldVisas],
   );
 
-  // Filter and sort countries
-  const filteredCountries = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim();
-
+  // Build CountryBrief list — exclude home/passport countries, sort alpha
+  const countries = useMemo<CountryBrief[]>(() => {
     return dynamicVisaData
-      .filter((country: CountryVisa) => {
-        // Skip home countries (residence + passport countries)
-        if (country.code === residence) return false;
-        if (passports.includes(country.code)) return false;
-
-        // Search filter
-        if (query && !country.name.toLowerCase().includes(query)) {
-          return false;
-        }
-
-        // Category filter
-        if (activeFilters.size > 0) {
-          const resolved = resolveCountry(country, heldVisasSet);
-          const uiKey = normalizeCategoryKey(resolved.category);
-          if (!activeFilters.has(uiKey)) {
-            return false;
-          }
-        }
-
+      .filter((c: CountryVisa) => {
+        if (c.code === residence) return false;
+        if (passports.includes(c.code)) return false;
         return true;
       })
-      .sort((a: CountryVisa, b: CountryVisa) => a.name.localeCompare(b.name));
-  }, [searchQuery, activeFilters, heldVisasSet, dynamicVisaData]);
+      .sort((a: CountryVisa, b: CountryVisa) => a.name.localeCompare(b.name))
+      .map((c: CountryVisa) => {
+        const brief = toBrief(c, heldVisasSet);
+        return { ...brief, saved: favorites.includes(c.code) };
+      });
+  }, [dynamicVisaData, heldVisasSet, favorites, passports, residence]);
 
-  // Also build the set for the map (same active filters)
-  const mapActiveFilters = activeFilters;
+  // Default selected: Japan (JPN) or first available
+  const defaultCode = useMemo(() => {
+    if (countries.find((c) => c.code === 'JPN')) return 'JPN';
+    return countries[0]?.code ?? '';
+  }, [countries]);
 
-  // Handlers
-  const handleCountrySelect = useCallback(
+  const [selectedCode, setSelectedCode] = useState<string>(defaultCode);
+
+  // When map taps a country (ISO-3), update selected
+  const handleMapCountrySelect = useCallback((code: string) => {
+    setSelectedCode(code);
+  }, []);
+
+  // When sheet selects a country, update selected
+  const handleSheetSelectCountry = useCallback((code: string) => {
+    setSelectedCode(code);
+  }, []);
+
+  // "View details" from featured card
+  const handleViewDetails = useCallback(
     (code: string) => {
       router.push(`/country/${code}`);
     },
     [router],
   );
 
-  const handleToggleFavorite = useCallback(
-    (code: string) => {
-      toggleFavorite(code);
-    },
-    [toggleFavorite],
-  );
-
-  const handleToggleFilter = useCallback((filterKey: string) => {
-    setActiveFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(filterKey)) {
-        next.delete(filterKey);
-      } else {
-        next.add(filterKey);
-      }
-      return next;
-    });
+  // Toggle save — stub (saving is out of scope for Phase 2)
+  const handleToggleSave = useCallback((code: string) => {
+    console.log('[ExploreSheet] toggleSave:', code);
   }, []);
 
-  const handleClearFilters = useCallback(() => {
-    setActiveFilters(new Set());
-  }, []);
-
-  // Bottom sheet snap points
-  const snapPoints = useMemo(() => ['25%', '60%', '90%'], []);
+  // Pass empty activeFilters to map (map coloring is always all-countries in this view)
+  const emptyFilters = useMemo(() => new Set<string>(), []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Map fills the background */}
-      <View style={[styles.mapContainer, { paddingTop: insets.top }]}>
-        <VisaMap
-          activeFilters={mapActiveFilters}
-          heldVisas={new Set(heldVisas)}
-          onCountrySelect={handleCountrySelect}
-          sheetCollapsed={sheetIndex === 0}
-          countries={dynamicVisaData}
-        />
-      </View>
+      {/* Map fills the entire background */}
+      <VisaMap
+        activeFilters={emptyFilters}
+        heldVisas={new Set(heldVisas)}
+        onCountrySelect={handleMapCountrySelect}
+        selectedCountry={selectedCode}
+        sheetCollapsed={false}
+        countries={dynamicVisaData}
+      />
 
-      {/* Bottom sheet with search, filters, and country list */}
-      <BottomSheet
-        ref={bottomSheetRef}
-        index={0}
-        snapPoints={snapPoints}
-        backgroundStyle={[
-          styles.sheetBackground,
-          { backgroundColor: colors.background },
-        ]}
-        handleIndicatorStyle={[
-          styles.handleIndicator,
-          { backgroundColor: colors.textMuted },
-        ]}
-        enablePanDownToClose={false}
-        onChange={setSheetIndex}
-      >
-        {/* Sheet header */}
-        <View style={styles.sheetHeader}>
-          <Text style={[styles.heading, { color: colors.foreground }]}>
-            Explore
-          </Text>
-          <TouchableOpacity
-            onPress={() => surpriseRef.current?.present()}
-            activeOpacity={0.7}
-            style={[styles.surpriseBtn, { backgroundColor: colors.accent }]}
-          >
-            <Sparkles size={14} color="#FFFFFF" />
-            <Text style={styles.surpriseBtnText}>Surprise Me</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Search bar */}
-        <View style={styles.searchContainer}>
-          <SearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search countries..."
-          />
-        </View>
-
-        {/* Filter chips */}
-        <View style={styles.chipsContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsContent}
-          >
-            {/* "All" chip */}
-            <Chip
-              label="All"
-              color={colors.primary}
-              active={activeFilters.size === 0}
-              onPress={handleClearFilters}
-            />
-
-            {/* Category chips */}
-            {VISA_CATEGORIES.map((cat: VisaCategoryConfig) => (
-              <Chip
-                key={cat.key}
-                label={cat.shortLabel}
-                color={getVisaCategoryColor(cat.key, colors)}
-                active={activeFilters.has(cat.key)}
-                onPress={() => handleToggleFilter(cat.key)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Country list */}
-        <CountryList
-          countries={filteredCountries}
-          heldVisas={heldVisasSet}
-          favorites={favorites}
-          visited={visited}
-          onCountrySelect={handleCountrySelect}
-          onToggleFavorite={handleToggleFavorite}
-        />
-      </BottomSheet>
-
-      <SurpriseMeSheet
-        ref={surpriseRef}
-        heldVisas={heldVisasSet}
-        onCountrySelected={(code) => {
-          router.push(`/country/${code}`);
-        }}
+      {/* Persistent bottom sheet overlay */}
+      <ExploreSheet
+        countries={countries}
+        selectedCode={selectedCode}
+        onSelectCountry={handleSheetSelectCountry}
+        onViewDetails={handleViewDetails}
+        onToggleSave={handleToggleSave}
       />
     </View>
   );
@@ -243,58 +224,5 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  mapContainer: {
-    flex: 1,
-  },
-  sheetBackground: {
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  handleIndicator: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    opacity: 0.4,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xs,
-    paddingBottom: Spacing.sm,
-  },
-  heading: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize['2xl'],
-  },
-  searchContainer: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
-  },
-  chipsContainer: {
-    paddingBottom: Spacing.sm,
-  },
-  chipsContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  surpriseBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: Radius.full,
-  },
-  surpriseBtnText: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 12,
-    color: '#FFFFFF',
   },
 });
