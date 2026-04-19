@@ -27,6 +27,7 @@ module.exports = {
       ],
       moduleNameMapper: {
         '^@/(.*)$': '<rootDir>/$1',
+        '^expo-image$': '<rootDir>/__mocks__/expo-image.js',
       },
       setupFilesAfterEach: ['@testing-library/jest-native/extend-expect'],
     },

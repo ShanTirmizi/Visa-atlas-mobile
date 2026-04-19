@@ -29,6 +29,7 @@
     "country-flag-icons": "^1.6.16",
     "expo": "~54.0.33",
     "expo-auth-session": "~7.0.10",
+    "expo-blur": "~15.0.8",
     "expo-calendar": "~15.0.8",
     "expo-constants": "~18.0.13",
     "expo-crypto": "~15.0.8",
@@ -67,7 +68,8 @@
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
     "jest": "^30.3.0",
-    "jest-expo": "^55.0.16",
+    "jest-expo": "^54.0.17",
+    "react-test-renderer": "^19.1.0",
     "ts-jest": "^29.4.9",
     "typescript": "~5.9.2"
   },
