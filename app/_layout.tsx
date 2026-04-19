@@ -133,7 +133,7 @@ function ThemedApp() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontsError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -142,13 +142,27 @@ export default function RootLayout() {
     JetBrainsMono_500Medium,
   });
 
+  // Diagnostic: log state + force-hide splash after 4s even if fonts hang,
+  // so we can see what's actually rendering behind the native splash.
+  const [forceReady, setForceReady] = React.useState(false);
+  useEffect(() => {
+    console.log('[RootLayout] mount, fontsLoaded=', fontsLoaded, 'fontsError=', fontsError);
+    const t = setTimeout(() => {
+      console.log('[RootLayout] 4s timeout, forcing splash hide');
+      setForceReady(true);
+      SplashScreen.hideAsync().catch(() => {});
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     if (fontsLoaded) {
-      SplashScreen.hideAsync();
+      console.log('[RootLayout] fonts loaded, hiding splash');
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !forceReady) {
     return null;
   }
 
