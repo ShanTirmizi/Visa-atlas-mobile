@@ -232,6 +232,8 @@ function DayDeck({
       </Text>
 
       {/* ── Bottom CTA ────────────────────────────────────────────── */}
+      {/* Per spec: absolute bottom 30, left/right 22. In a scroll context we
+          approximate with marginTop so it flows naturally below the hint. */}
       <View style={styles.ctaRow}>
         <PillButton
           label={`Open Day ${activeIdx + 1}`}
@@ -287,10 +289,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   ctaRow: {
-    position: 'absolute',
-    bottom: 30,
-    left: 22,
-    right: 22,
+    // Spec: absolute bottom 30, left/right 22. In a scroll-view context we
+    // keep it in flow so it doesn't overlap the hint — the parent scroll
+    // surface provides the bottom breathing room via container paddingBottom.
+    alignSelf: 'stretch',
+    marginHorizontal: 22,
+    marginTop: 18,
   },
   empty: {
     paddingVertical: 60,
