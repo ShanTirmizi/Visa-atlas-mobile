@@ -509,9 +509,9 @@ export default function TripDetailScreen() {
         {/* ─── TAB BAR ─── */}
         <View style={{ paddingHorizontal: Spacing.lg }}>
           <SegmentedControl
-            tabs={tabs.map((t) => t.label.toUpperCase())}
-            activeIndex={tabs.findIndex((t) => t.key === activeTab)}
-            onTabPress={(index) => setActiveTab(tabs[index].key)}
+            options={tabs.map((t) => t.key)}
+            value={activeTab}
+            onChange={(v) => setActiveTab(v as Tab)}
           />
         </View>
 

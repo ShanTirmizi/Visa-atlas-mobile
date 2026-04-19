@@ -402,9 +402,9 @@ export default function TripsScreen() {
         {renderHeader()}
 
         <SegmentedControl
-          tabs={['My Trips', 'Bookings']}
-          activeIndex={activeTab === 'trips' ? 0 : 1}
-          onTabPress={(i: number) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+          options={['trips', 'bookings']}
+          value={activeTab}
+          onChange={setActiveTab}
         />
 
         {activeTab === 'trips' ? (
@@ -427,9 +427,9 @@ export default function TripsScreen() {
         {renderHeader()}
 
         <SegmentedControl
-          tabs={['My Trips', 'Bookings']}
-          activeIndex={activeTab === 'trips' ? 0 : 1}
-          onTabPress={(i: number) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+          options={['trips', 'bookings']}
+          value={activeTab}
+          onChange={setActiveTab}
         />
 
         {activeTab === 'trips' ? (
@@ -455,9 +455,9 @@ export default function TripsScreen() {
       {renderHeader(trips.length)}
 
       <SegmentedControl
-        tabs={['My Trips', 'Bookings']}
-        activeIndex={activeTab === 'trips' ? 0 : 1}
-        onTabPress={(i: number) => setActiveTab(i === 0 ? 'trips' : 'bookings')}
+        options={['trips', 'bookings']}
+        value={activeTab}
+        onChange={setActiveTab}
       />
 
       <Animated.View

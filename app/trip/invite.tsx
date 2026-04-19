@@ -121,9 +121,9 @@ export default function InviteScreen() {
             Invite as
           </Text>
           <SegmentedControl
-            tabs={['Editor', 'Viewer']}
-            activeIndex={role === 'editor' ? 0 : 1}
-            onTabPress={(i: number) => setRole(i === 0 ? 'editor' : 'viewer')}
+            options={['editor', 'viewer']}
+            value={role}
+            onChange={(v) => setRole(v as Role)}
           />
           <Text style={[styles.roleHint, { color: colors.textSecondary }]}>
             {role === 'editor'
