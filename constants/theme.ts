@@ -1,222 +1,130 @@
-// Visa Atlas — Design System with Light/Dark Mode
-// Aligned with HabitQuest brand DNA for cohesive identity
+// Visa Atlas — Mono Design System
+// Monochrome widget aesthetic. Photography and visa-category pills are the only chroma.
 
 // ──────────────────────────────────────────────
-// Light Theme — "Warm Travel"
-// Shares HabitQuest's warm peach foundation
-// with travel-specific teal/green accents
+// Mono palette — ship direction
 // ──────────────────────────────────────────────
 export const LightColors = {
-  // Backgrounds — warm peach (matches HabitQuest)
-  background: '#F5D9C0',
+  // Backgrounds
+  background: '#F2F2F0',
+  backgroundDeep: '#E8E8E6',
   surface: '#FFFFFF',
   card: '#FFFFFF',
-  surfaceLight: '#F9E8D6',
+  surfaceMuted: '#EDEDEB',
 
-  // Primary — bold teal (HabitQuest categoryLife family)
-  primary: '#2AAAA0',
-  primaryDim: '#229088',
-  primaryGlow: 'rgba(42, 170, 160, 0.25)',
-  primaryBg: 'rgba(42, 170, 160, 0.12)',
+  // Ink scale (text, strokes, primary fills)
+  ink: '#0E0E0E',
+  inkSoft: '#2A2A2A',
+  inkMute: '#6B6B6B',
+  inkFaint: '#9E9E9E',
 
-  // Secondary — emerald green (HabitQuest secondary)
-  secondary: '#2EAA6E',
-  secondaryDim: '#25905C',
-  secondaryGlow: 'rgba(46, 170, 110, 0.20)',
-  secondaryBg: 'rgba(46, 170, 110, 0.12)',
+  // Hairlines
+  line: 'rgba(0,0,0,0.06)',
+  lineSoft: 'rgba(0,0,0,0.04)',
 
-  // Accent — hero orange (HabitQuest primary)
-  accent: '#EB6D3A',
-  accentDim: '#D45E30',
-  accentGlow: 'rgba(235, 109, 58, 0.25)',
-  accentBg: 'rgba(235, 109, 58, 0.12)',
+  // Primary / accent — both resolve to ink in Mono
+  primary: '#0E0E0E',
+  primaryDim: '#2A2A2A',
+  primaryGlow: 'rgba(0,0,0,0.08)',
+  primaryBg: 'rgba(0,0,0,0.05)',
 
-  // Danger — warm red (HabitQuest danger)
-  danger: '#E05545',
-  dangerDim: '#C43A2E',
-  dangerBg: 'rgba(224, 85, 69, 0.12)',
+  secondary: '#0E0E0E',
+  secondaryDim: '#2A2A2A',
+  secondaryGlow: 'rgba(0,0,0,0.06)',
+  secondaryBg: 'rgba(0,0,0,0.05)',
 
-  // Warning — golden amber (HabitQuest accent)
-  warning: '#E5A832',
-  warningBg: 'rgba(229, 168, 50, 0.12)',
+  accent: '#0E0E0E',
+  accentDim: '#2A2A2A',
+  accentGlow: 'rgba(0,0,0,0.06)',
+  accentBg: 'rgba(0,0,0,0.05)',
 
-  // Text — warm browns (matching HabitQuest)
-  foreground: '#1C1816',
-  textSecondary: '#6B6058',
-  textMuted: '#A09890',
+  gold: '#8A6B1E',
+  goldSoft: 'rgba(138,107,30,0.12)',
 
-  // Visa category colors — vibrant & fun
-  visaFree: '#2EAA6E',
-  visaOnArrival: '#E5A832',
-  evisa: '#EB6D3A',
-  visaRequired: '#D95E8A',
+  // Semantic
+  danger: '#A83A5E',
+  dangerDim: '#8A2E4C',
+  dangerBg: 'rgba(168,58,94,0.12)',
+  warning: '#B8862B',
+  warningBg: 'rgba(184,134,43,0.14)',
+  success: '#2E8B63',
+  info: '#0E0E0E',
 
-  // Visa category backgrounds
-  visaFreeBg: 'rgba(46, 170, 110, 0.14)',
-  visaOnArrivalBg: 'rgba(229, 168, 50, 0.14)',
-  evisaBg: 'rgba(235, 109, 58, 0.14)',
-  visaRequiredBg: 'rgba(217, 94, 138, 0.14)',
+  // Visa categories (load-bearing colour — only chroma in the UI)
+  visaFree: '#2E8B63',
+  visaFreeBg: 'rgba(46,139,99,0.12)',
+  visaOnArrival: '#B8862B',
+  visaOnArrivalBg: 'rgba(184,134,43,0.14)',
+  evisa: '#C2562A',
+  evisaBg: 'rgba(194,86,42,0.12)',
+  visaRequired: '#A83A5E',
+  visaRequiredBg: 'rgba(168,58,94,0.12)',
 
-  // Visa category card colors (punchy, saturated — like HabitQuest category cards)
-  visaFreeCard: '#2AB872',
-  visaOnArrivalCard: '#E29628',
-  evisaCard: '#D45E30',
-  visaRequiredCard: '#D44E82',
+  // Visa category "card" tokens — retained for existing call sites that render
+  // full-bleed solid-category cards; in Mono these match the pill colours.
+  visaFreeCard: '#2E8B63',
+  visaOnArrivalCard: '#B8862B',
+  evisaCard: '#C2562A',
+  visaRequiredCard: '#A83A5E',
   categoryCardText: '#FFFFFF',
-  categoryCardTextSub: 'rgba(255, 255, 255, 0.80)',
+  categoryCardTextSub: 'rgba(255,255,255,0.80)',
 
-  // Status
-  success: '#2EAA6E',
-  info: '#2AAAA0',
+  // Text tokens (legacy names preserved)
+  foreground: '#0E0E0E',
+  textSecondary: '#2A2A2A',
+  textMuted: '#6B6B6B',
 
-  // Borders — subtle, shadows do the heavy lifting in light mode
-  border: 'rgba(0, 0, 0, 0.04)',
-  borderSubtle: 'rgba(0, 0, 0, 0.03)',
-  borderStrong: 'rgba(0, 0, 0, 0.08)',
+  // Borders
+  border: 'rgba(0,0,0,0.06)',
+  borderSubtle: 'rgba(0,0,0,0.04)',
+  borderStrong: 'rgba(0,0,0,0.10)',
 
-  // Glass — for floating elements
-  glass: 'rgba(255, 255, 255, 0.98)',
-  glassBorder: 'rgba(0, 0, 0, 0.03)',
+  // Glass (floating overlays on photography)
+  glass: 'rgba(255,255,255,0.22)',
+  glassBorder: 'rgba(255,255,255,0.28)',
 
   // Misc
-  overlay: 'rgba(0, 0, 0, 0.30)',
-  shimmer: 'rgba(0, 0, 0, 0.04)',
+  overlay: 'rgba(0,0,0,0.30)',
+  shimmer: 'rgba(0,0,0,0.04)',
 
-  // Button text on primary bg
+  // Button text on primary (ink) bg
   primaryButtonText: '#FFFFFF',
 
-  // Solid card tokens — for white text on solid-colored card backgrounds
+  // Solid-card tokens (white text over coloured / photo bg)
   solidText: '#FFFFFF',
-  solidTextSub: 'rgba(255,255,255,0.70)',
+  solidTextSub: 'rgba(255,255,255,0.80)',
   solidTextMuted: 'rgba(255,255,255,0.60)',
   solidOverlay: 'rgba(255,255,255,0.20)',
   solidOverlayMd: 'rgba(255,255,255,0.25)',
   solidBorder: 'rgba(255,255,255,0.15)',
 
-  // Dark text for elements that always sit on a white/near-white background
-  // regardless of the app's light/dark mode (e.g. photo-overlay badges).
-  textOnLight: '#1A1A1A',
+  // Dark text on light photo overlays (legacy, preserved)
+  textOnLight: '#0E0E0E',
 } as const;
 
-// ──────────────────────────────────────────────
-// Dark Theme — "Midnight" (matches HabitQuest dark)
-// Deep midnight blue with neon accents
-// ──────────────────────────────────────────────
-export const DarkColors = {
-  // Backgrounds — midnight (HabitQuest dark)
-  background: '#060810',
-  surface: '#0D1117',
-  card: '#161B22',
-  surfaceLight: '#1C2333',
+// DarkColors kept as a structural mirror so ThemeProvider still compiles.
+// Dark mode is out of scope for this redesign; these values are placeholders
+// that should never ship to users (ThemeProvider defaults to light).
+export const DarkColors = { ...LightColors } as const;
 
-  // Primary — neon cyan (HabitQuest dark secondary)
-  primary: '#00E5CC',
-  primaryDim: '#00B8A3',
-  primaryGlow: 'rgba(0, 229, 204, 0.35)',
-  primaryBg: 'rgba(0, 229, 204, 0.10)',
-
-  // Secondary — neon green
-  secondary: '#00E676',
-  secondaryDim: '#00C864',
-  secondaryGlow: 'rgba(0, 230, 118, 0.30)',
-  secondaryBg: 'rgba(0, 230, 118, 0.10)',
-
-  // Accent — electric orange (HabitQuest dark primary)
-  accent: '#FF6B2C',
-  accentDim: '#CC5520',
-  accentGlow: 'rgba(255, 107, 44, 0.40)',
-  accentBg: 'rgba(255, 107, 44, 0.12)',
-
-  // Danger — neon red
-  danger: '#FF5252',
-  dangerDim: '#D44040',
-  dangerBg: 'rgba(255, 82, 82, 0.15)',
-
-  // Warning — bright gold (HabitQuest dark accent)
-  warning: '#FFB800',
-  warningBg: 'rgba(255, 184, 0, 0.10)',
-
-  // Text — off-whites
-  foreground: '#E6EDF3',
-  textSecondary: '#8B949E',
-  textMuted: '#6B7280',
-
-  // Visa category colors — neon
-  visaFree: '#00E676',
-  visaOnArrival: '#FFD740',
-  evisa: '#FF6B2C',
-  visaRequired: '#FF5252',
-
-  // Visa category backgrounds
-  visaFreeBg: 'rgba(0, 230, 118, 0.12)',
-  visaOnArrivalBg: 'rgba(255, 215, 64, 0.12)',
-  evisaBg: 'rgba(255, 107, 44, 0.12)',
-  visaRequiredBg: 'rgba(255, 82, 82, 0.12)',
-
-  // Visa category card colors (neon glow)
-  visaFreeCard: '#00C864',
-  visaOnArrivalCard: '#D4A800',
-  evisaCard: '#CC5520',
-  visaRequiredCard: '#D44040',
-  categoryCardText: '#FFFFFF',
-  categoryCardTextSub: 'rgba(255, 255, 255, 0.70)',
-
-  // Status
-  success: '#00E676',
-  info: '#00E5CC',
-
-  // Borders — subtle light edges
-  border: 'rgba(255, 255, 255, 0.08)',
-  borderSubtle: 'rgba(255, 255, 255, 0.04)',
-  borderStrong: 'rgba(255, 255, 255, 0.15)',
-
-  // Glass
-  glass: 'rgba(13, 17, 23, 0.95)',
-  glassBorder: 'rgba(255, 255, 255, 0.06)',
-
-  // Misc
-  overlay: 'rgba(0, 0, 0, 0.65)',
-  shimmer: 'rgba(255, 255, 255, 0.04)',
-
-  // Button text on primary bg
-  primaryButtonText: '#060810',
-
-  // Solid card tokens — for white text on solid-colored card backgrounds
-  solidText: '#FFFFFF',
-  solidTextSub: 'rgba(255,255,255,0.70)',
-  solidTextMuted: 'rgba(255,255,255,0.60)',
-  solidOverlay: 'rgba(255,255,255,0.20)',
-  solidOverlayMd: 'rgba(255,255,255,0.25)',
-  solidBorder: 'rgba(255,255,255,0.15)',
-
-  // Dark text for elements that always sit on a white/near-white background
-  // regardless of the app's light/dark mode (e.g. photo-overlay badges).
-  textOnLight: '#1A1A1A',
-} as const;
-
-// ──────────────────────────────────────────────
-// Types
-// ──────────────────────────────────────────────
-/** Widened so both palettes satisfy the same shape */
 export type ThemeColors = { [K in keyof typeof LightColors]: string };
 export type ThemeMode = 'light' | 'dark';
 
-// Default export (light) — warm is the default
 export const Colors = LightColors;
 
 // ──────────────────────────────────────────────
-// Visa category color helpers
+// Visa category helpers
 // ──────────────────────────────────────────────
 export function getVisaCategoryColor(
   category: string,
   colors: ThemeColors,
 ): string {
   const c = (category || '').toLowerCase().replace(/[-_ ]/g, '');
-  if (c.includes('free')) return colors.visaFreeCard;
-  if (c.includes('arrival')) return colors.visaOnArrivalCard;
-  if (c.includes('evisa') || c === 'evisa') return colors.evisaCard;
-  if (c.includes('required')) return colors.visaRequiredCard;
-  return colors.primary;
+  if (c.includes('free')) return colors.visaFree;
+  if (c.includes('arrival')) return colors.visaOnArrival;
+  if (c.includes('evisa') || c === 'evisa') return colors.evisa;
+  if (c.includes('required')) return colors.visaRequired;
+  return colors.ink;
 }
 
 export function getVisaCategoryBgColor(
@@ -232,31 +140,31 @@ export function getVisaCategoryBgColor(
 }
 
 // ──────────────────────────────────────────────
-// Font Family — Shared brand identity with HabitQuest
-// Sora for UI, Bebas Neue for travel display headers
+// Font Family — Inter (UI + display) + JetBrains Mono (kickers)
 // ──────────────────────────────────────────────
 export const FontFamily = {
-  // Display — bold travel poster headers
-  display: 'BebasNeue_400Regular',
-  // Base UI — Sora geometric (shared with HabitQuest)
-  regular: 'Sora_400Regular',
-  medium: 'Sora_500Medium',
-  semibold: 'Sora_600SemiBold',
-  bold: 'Sora_700Bold',
-  // Keep serif for long-form content (itinerary descriptions)
-  serif: 'Lora_400Regular',
-  serifMedium: 'Lora_500Medium',
-  serifSemibold: 'Lora_600SemiBold',
-  serifBold: 'Lora_700Bold',
-  // Condensed for badges, labels, uppercase text
-  condensed: 'BarlowCondensed_400Regular',
-  condensedMedium: 'BarlowCondensed_500Medium',
-  condensedSemibold: 'BarlowCondensed_600SemiBold',
-  condensedBold: 'BarlowCondensed_700Bold',
+  // Display and UI both resolve to Inter per spec (no separate display face).
+  display: 'Inter_700Bold',
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  // Mono — kickers, timestamps, step counters
+  mono: 'JetBrainsMono_400Regular',
+  monoMedium: 'JetBrainsMono_500Medium',
+  // Legacy keys kept pointing at Inter so downstream code keeps compiling.
+  serif: 'Inter_400Regular',
+  serifMedium: 'Inter_500Medium',
+  serifSemibold: 'Inter_600SemiBold',
+  serifBold: 'Inter_700Bold',
+  condensed: 'Inter_400Regular',
+  condensedMedium: 'Inter_500Medium',
+  condensedSemibold: 'Inter_600SemiBold',
+  condensedBold: 'Inter_700Bold',
 } as const;
 
 // ──────────────────────────────────────────────
-// Spacing (shared with HabitQuest)
+// Spacing (spec-aligned; same numeric scale retained for compat)
 // ──────────────────────────────────────────────
 export const Spacing = {
   xs: 4,
@@ -271,7 +179,7 @@ export const Spacing = {
 } as const;
 
 // ──────────────────────────────────────────────
-// Font Sizes (shared with HabitQuest)
+// Font sizes (spec-aligned)
 // ──────────────────────────────────────────────
 export const FontSize = {
   xs: 11,
@@ -279,66 +187,93 @@ export const FontSize = {
   base: 15,
   lg: 18,
   xl: 22,
-  '2xl': 28,
-  '3xl': 36,
-  '4xl': 48,
-  '5xl': 64,
+  '2xl': 26,
+  '3xl': 32,
+  '4xl': 40,
+  '5xl': 56,
 } as const;
 
 // ──────────────────────────────────────────────
-// Border Radius (shared with HabitQuest)
+// Border radius (spec: 20/22/26/28/999)
 // ──────────────────────────────────────────────
 export const Radius = {
-  xs: 6,
-  sm: 10,
-  md: 14,
-  lg: 18,
-  xl: 24,
-  '2xl': 32,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 22,
+  '2xl': 28,
   full: 9999,
 } as const;
 
-// Bento grid radius (shared with HabitQuest)
-export const BentoRadius = 20;
-export const BentoGap = 14;
+export const BentoRadius = 22;
+export const BentoGap = 10;
 
 // ──────────────────────────────────────────────
-// Shadow presets (warm tones — shared with HabitQuest)
+// Shadows (spec-aligned, black-tone)
 // ──────────────────────────────────────────────
 export const Shadows = {
-  card: {
-    shadowColor: '#8B8178',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 3,
-  },
+  // Large hero cards — "0 14px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.06)"
   cardRaised: {
-    shadowColor: '#8B8178',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    elevation: 6,
-  },
-  glow: (color: string, intensity = 0.25) => ({
-    shadowColor: color,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: intensity,
-    shadowRadius: 16,
-    elevation: 5,
-  }),
-  neonGlow: (color: string) => ({
-    shadowColor: color,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.30,
-    shadowRadius: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.12,
+    shadowRadius: 30,
     elevation: 8,
-  }),
+  },
+  // Medium cards — "0 12px 26px rgba(0,0,0,0.10)"
+  card: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.10,
+    shadowRadius: 26,
+    elevation: 5,
+  },
+  // Subtle — 2px lift
   subtle: {
-    shadowColor: '#8B8178',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 1,
   },
+  // CircleBtn glass pill — "0 4px 14px rgba(0,0,0,0.10)"
+  circle: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  // DarkOrb FAB — "0 10px 24px rgba(0,0,0,0.22)"
+  orb: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  // Floating tab bar — "0 14px 40px rgba(0,0,0,0.28)"
+  tabBar: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.28,
+    shadowRadius: 40,
+    elevation: 12,
+  },
+  // Preserved signatures for compat
+  glow: (_color: string, _intensity = 0.25) => ({
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 5,
+  }),
+  neonGlow: (_color: string) => ({
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 8,
+  }),
 } as const;
