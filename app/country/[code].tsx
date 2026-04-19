@@ -274,13 +274,14 @@ export default function CountryDetailScreen() {
 
             <CircleBtn
               onPress={() => setSaved((s) => !s)}
-              solid={false}
+              solid
               accessibilityLabel={saved ? 'Remove from saved' : 'Save country'}
             >
               <Heart
                 size={16}
-                color="#FFFFFF"
-                fill={saved ? '#FFFFFF' : 'none'}
+                color={saved ? '#E53E5A' : '#0E0E0E'}
+                fill={saved ? '#E53E5A' : 'none'}
+                strokeWidth={2.25}
               />
             </CircleBtn>
           </View>

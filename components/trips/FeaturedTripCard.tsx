@@ -185,11 +185,11 @@ export function FeaturedTripCard({
           {countryName}
         </GlassPill>
         <CircleBtn
-          size={34}
-          solid={false}
+          size={36}
+          solid
           accessibilityLabel="Save trip"
         >
-          <Heart size={15} color="#FFFFFF" strokeWidth={2} />
+          <Heart size={16} color="#0E0E0E" strokeWidth={2.25} />
         </CircleBtn>
       </View>
 
