@@ -1,10 +1,10 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Pressable,
+  View, Text, ScrollView, StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Heart, Plus } from 'lucide-react-native';
+import { ArrowLeft, Heart, Sparkles, PlusCircle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa, useVisaData } from '@/contexts/visa-context';
 import { Type } from '@/constants/typography';
@@ -12,18 +12,18 @@ import {
   Shadows, Spacing, Radius, type ThemeColors,
 } from '@/constants/theme';
 import {
-  resolveCountry, categoryLabels,
+  resolveCountry,
   type HeldVisaType, type VisaCategory,
 } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
 import { travelData } from '@/data/travelData';
+import { localInfo } from '@/data/localInfo';
 import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
 import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
 import { useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 
 import { CircleBtn } from '@/components/ui/CircleBtn';
-import { DarkOrb } from '@/components/ui/DarkOrb';
 import { Photo } from '@/components/ui/Photo';
 import { Flag } from '@/components/ui/Flag';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -55,12 +55,11 @@ const A3: Record<string, string> = {
   UGA:'UG',UKR:'UA',ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VUT:'VU',VEN:'VE',VNM:'VN',
   YEM:'YE',ZMB:'ZM',ZWE:'ZW',PSE:'PS',XKX:'XK',
 };
-
 function toAlpha2(alpha3: string): string {
   return A3[alpha3.toUpperCase()] ?? '';
 }
 
-// ── Visa title from category ────────────────────────────────────────────
+// ── Copy helpers ────────────────────────────────────────────────────────
 function visaTitle(cat: VisaCategory): string {
   const map: Record<VisaCategory, string> = {
     'visa-free': 'Visa-free entry',
@@ -71,13 +70,11 @@ function visaTitle(cat: VisaCategory): string {
   };
   return map[cat] ?? 'Visa required';
 }
-
-// ── Visa body copy from category ────────────────────────────────────────
 function visaBody(cat: VisaCategory, days?: number): string {
   if (cat === 'visa-free') {
     return days
       ? `No visa needed. Enjoy up to ${days} days per visit — just show up with your passport.`
-      : 'No visa needed — just show up with your passport. Duration depends on officer discretion.';
+      : 'No visa needed — just show up with your passport.';
   }
   if (cat === 'visa-on-arrival') {
     return days
@@ -93,7 +90,6 @@ function visaBody(cat: VisaCategory, days?: number): string {
   return 'Check the embassy website for up-to-date visa requirements before booking.';
 }
 
-// ── Best months names ───────────────────────────────────────────────────
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function bestTimeLabel(months?: number[]): string {
   if (!months || months.length === 0) return '—';
@@ -103,7 +99,6 @@ function bestTimeLabel(months?: number[]): string {
   return first === last ? first : `${first} – ${last}`;
 }
 
-// ── Category color helpers ──────────────────────────────────────────────
 function catFgColor(cat: VisaCategory, c: ThemeColors): string {
   const m: Partial<Record<VisaCategory, string>> = {
     'visa-free': c.visaFree,
@@ -114,19 +109,8 @@ function catFgColor(cat: VisaCategory, c: ThemeColors): string {
   };
   return m[cat] ?? c.inkMute;
 }
-function catBgColor(cat: VisaCategory, c: ThemeColors): string {
-  const m: Partial<Record<VisaCategory, string>> = {
-    'visa-free': c.visaFreeBg,
-    'visa-on-arrival': c.visaOnArrivalBg,
-    evisa: c.evisaBg,
-    'visa-required': c.visaRequiredBg,
-  };
-  return m[cat] ?? c.shimmer;
-}
 
-// ── Hero height constant ────────────────────────────────────────────────
-const HERO_HEIGHT = 340;
-const SHEET_OVERLAP = 30;
+const HERO_PHOTO_HEIGHT = 240;
 
 // ════════════════════════════════════════════════════════════════════════
 // Main Screen
@@ -137,7 +121,7 @@ export default function CountryDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { heldVisas, isFavorite, toggleFavorite } = useVisa();
+  const { heldVisas } = useVisa();
   const dynamicVisaData = useVisaData();
 
   const [tab, setTab] = useState<'Overview' | 'Visa' | 'Tips'>('Overview');
@@ -151,6 +135,7 @@ export default function CountryDetailScreen() {
   const travel = country ? travelData[country.code] ?? null : null;
   const heldSet = useMemo(() => new Set(heldVisas as HeldVisaType[]), [heldVisas]);
   const resolved = country ? resolveCountry(country, heldSet) : null;
+  const local = country ? localInfo[country.code] ?? null : null;
 
   const tripSheetRef = useRef<TripPlannerSheetRef>(null);
   const guideSheetRef = useRef<VisaGuideSheetRef>(null);
@@ -162,33 +147,10 @@ export default function CountryDetailScreen() {
 
   const flagCode = country ? toAlpha2(country.code) : '';
 
-  // ── Sub-row fields ────────────────────────────────────────────────────
-  const subRowParts: string[] = [];
-  if (meta) {
-    if (meta.currency && meta.currencyCode) {
-      subRowParts.push(`${meta.currencyCode} · ${meta.currency}`);
-    }
-    if (meta.timezone) {
-      subRowParts.push(meta.timezone);
-    }
-  }
-  const subRow = subRowParts.join(' · ') || (meta?.region ?? '');
-
-  // ── Quick-facts stats ─────────────────────────────────────────────────
-  const stats = [
-    {
-      label: 'Best time',
-      value: travel ? bestTimeLabel(travel.bestMonths) : '—',
-    },
-    {
-      label: 'Budget',
-      value: travel?.dailyBudget ?? '—',
-    },
-    {
-      label: 'Safety',
-      value: '—',   // not in data — flagged in report
-    },
-  ];
+  // Photos: countries don't currently carry photoUri in the data layer.
+  // When that wiring lands, feed it into the hero. For now we always use
+  // the no-photo layout.
+  const photoUri: string | undefined = undefined;
 
   // ── Not found ────────────────────────────────────────────────────────
   if (!country || !resolved) {
@@ -209,211 +171,171 @@ export default function CountryDetailScreen() {
   }
 
   const catColor = catFgColor(resolved.category, colors);
-  const catBg = catBgColor(resolved.category, colors);
+
+  const stats = [
+    { label: 'Best time', value: travel ? bestTimeLabel(travel.bestMonths) : '—' },
+    { label: 'Budget',    value: travel?.dailyBudget ?? '—' },
+    { label: 'Safety',    value: '—' },
+  ];
+
+  const subRow = [
+    meta?.currency && meta.currencyCode ? `${meta.currencyCode} · ${meta.currency}` : null,
+    meta?.timezone ?? null,
+    meta?.region ?? null,
+  ].filter(Boolean).join('  ·  ');
+
+  const visaCat = resolved.category;
+  const needsApplication = visaCat === 'visa-required' || visaCat === 'evisa';
+
+  const onStartApplication = () => {
+    if (existingGuide) {
+      router.push(`/guide/${existingGuide._id}` as never);
+    } else {
+      guideSheetRef.current?.present();
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces>
-
-        {/* ── HERO ─────────────────────────────────────────────────── */}
-        <View style={{ height: HERO_HEIGHT }}>
-          {/* Full-bleed photo */}
-          <Photo
-            tone="sunset"
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      {/* ── Header (always on paper, ink buttons) ─────────────────── */}
+      <View
+        style={{
+          paddingTop: insets.top + 8,
+          paddingHorizontal: Spacing.lg,
+          paddingBottom: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: colors.background,
+        }}
+      >
+        <CircleBtn solid onPress={() => router.back()} accessibilityLabel="Back">
+          <ArrowLeft size={18} color={colors.ink} strokeWidth={2.25} />
+        </CircleBtn>
+        <Text style={[Type.title15, { color: colors.ink }]} numberOfLines={1}>
+          {country.name}
+        </Text>
+        <CircleBtn
+          solid
+          onPress={() => setSaved((s) => !s)}
+          accessibilityLabel={saved ? 'Unsave' : 'Save'}
+        >
+          <Heart
+            size={16}
+            color={saved ? '#E53E5A' : colors.ink}
+            fill={saved ? '#E53E5A' : 'none'}
+            strokeWidth={2.25}
           />
+        </CircleBtn>
+      </View>
 
-          {/* Dark scrim for text legibility (not a decorative gradient) */}
-          <View
-            style={{
-              position: 'absolute',
-              top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.30)',
-            }}
-          />
-
-          {/* Bottom-weighted scrim — ensures name text is always readable */}
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0, left: 0, right: 0,
-              height: 160,
-              // LinearGradient is not allowed per no-gradients rule, so we use
-              // two stacked semi-transparent views to approximate the dark ramp.
-              backgroundColor: 'rgba(0,0,0,0.35)',
-            }}
-          />
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 0, left: 0, right: 0,
-              height: 80,
-              backgroundColor: 'rgba(0,0,0,0.25)',
-            }}
-          />
-
-          {/* Top nav row: back (left) + heart (right) */}
-          <View
-            style={{
-              position: 'absolute',
-              top: insets.top + 12,
-              left: Spacing.lg,
-              right: Spacing.lg,
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <CircleBtn
-              onPress={() => router.back()}
-              solid={false}
-              accessibilityLabel="Back"
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+      >
+        {/* ── Hero ────────────────────────────────────────────────── */}
+        {photoUri ? (
+          <View style={{ height: HERO_PHOTO_HEIGHT, marginHorizontal: Spacing.lg, marginBottom: 18, borderRadius: 24, overflow: 'hidden' }}>
+            <Photo uri={photoUri} style={StyleSheet.absoluteFillObject} />
+            {/* Bottom-weighted darken for legibility */}
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 140,
+                backgroundColor: 'rgba(0,0,0,0.45)',
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                left: 18,
+                right: 18,
+                bottom: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+              }}
             >
-              <ArrowLeft size={18} color="#FFFFFF" />
-            </CircleBtn>
-
-            <CircleBtn
-              onPress={() => setSaved((s) => !s)}
-              solid
-              accessibilityLabel={saved ? 'Remove from saved' : 'Save country'}
-            >
-              <Heart
-                size={16}
-                color={saved ? '#E53E5A' : '#0E0E0E'}
-                fill={saved ? '#E53E5A' : 'none'}
-                strokeWidth={2.25}
-              />
-            </CircleBtn>
-          </View>
-
-          {/* Hero bottom: flag + country name + sub-row */}
-          <View
-            style={{
-              position: 'absolute',
-              bottom: SHEET_OVERLAP + 20,
-              left: Spacing.lg,
-              right: Spacing.lg,
-            }}
-          >
-            {/* Flag + name row */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              {flagCode ? (
-                <Flag code={flagCode} size={28} />
-              ) : null}
-              <Text
-                style={[Type.display40, { color: '#FFFFFF' }]}
-                numberOfLines={2}
-              >
+              {flagCode ? <Flag code={flagCode} size={24} /> : null}
+              <Text style={[Type.display26, { color: '#FFFFFF' }]} numberOfLines={1}>
                 {country.name}
               </Text>
             </View>
-
-            {/* Sub-row: currency + timezone */}
-            {subRow ? (
-              <Text style={[Type.meta10_5, { color: 'rgba(255,255,255,0.72)', letterSpacing: 0.5 }]}>
-                {subRow}
-              </Text>
-            ) : null}
           </View>
-        </View>
-
-        {/* ── OVERLAP SHEET ───────────────────────────────────────── */}
-        <View
-          style={{
-            marginTop: -SHEET_OVERLAP,
-            backgroundColor: colors.background,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            paddingTop: 10,
-            paddingHorizontal: Spacing.lg,
-            paddingBottom: insets.bottom + 100, // room for FAB
-          }}
-        >
-          {/* Grab handle */}
+        ) : (
+          // Flag-forward header block — no photo, no ugly placeholder
           <View
             style={{
-              width: 36,
-              height: 4,
-              borderRadius: 999,
-              backgroundColor: colors.line,
-              alignSelf: 'center',
-              marginBottom: 18,
+              paddingHorizontal: Spacing.lg,
+              paddingTop: 6,
+              paddingBottom: 22,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 14,
             }}
-          />
+          >
+            {flagCode ? <Flag code={flagCode} size={72} /> : null}
+            <View style={{ flex: 1 }}>
+              <Text style={[Type.display32, { color: colors.ink }]} numberOfLines={1}>
+                {country.name}
+              </Text>
+              {subRow ? (
+                <Text style={[Type.meta11, { color: colors.inkMute, marginTop: 6 }]} numberOfLines={2}>
+                  {subRow}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        )}
 
-          {/* Tabs */}
+        {/* ── Tabs ────────────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: Spacing.lg }}>
           <SegmentedControl
             options={['Overview', 'Visa', 'Tips']}
             value={tab}
             onChange={(v: string) => setTab(v as 'Overview' | 'Visa' | 'Tips')}
             variant="underline"
           />
+        </View>
 
-          {/* ── OVERVIEW TAB ──────────────────────────────────────── */}
+        {/* ── Tab content ─────────────────────────────────────────── */}
+        <View style={{ paddingHorizontal: Spacing.lg, paddingTop: 4 }}>
           {tab === 'Overview' && (
             <OverviewTab
               colors={colors}
-              country={country}
-              resolved={resolved}
               catColor={catColor}
-              catBg={catBg}
+              resolved={resolved}
               stats={stats}
-              onStartVisa={() => router.push('/more/visas' as never)}
-              onDetails={() => {
-                if (resolved.category === 'visa-required' || resolved.category === 'evisa') {
-                  if (existingGuide) {
-                    router.push(`/guide/${existingGuide._id}` as never);
-                  } else {
-                    guideSheetRef.current?.present();
-                  }
-                } else {
-                  console.log('details stub');
-                }
-              }}
-              showStartVisa={resolved.category === 'visa-required' || resolved.category === 'evisa'}
+              onPlanTrip={() => tripSheetRef.current?.present()}
             />
           )}
 
-          {/* ── VISA TAB stub ─────────────────────────────────────── */}
           {tab === 'Visa' && (
-            <View style={{ paddingTop: 8 }}>
-              <SectionKicker style={{ marginBottom: 8 }}>Visa details</SectionKicker>
-              <Text style={[Type.body14, { color: colors.inkMute }]}>
-                Coming soon — full visa application guide, document checklist and embassy links.
-              </Text>
-            </View>
+            <VisaTab
+              colors={colors}
+              catColor={catColor}
+              category={visaCat}
+              days={resolved.days}
+              needsApplication={needsApplication}
+              hasGuide={!!existingGuide}
+              onStartApplication={onStartApplication}
+            />
           )}
 
-          {/* ── TIPS TAB stub ─────────────────────────────────────── */}
           {tab === 'Tips' && (
-            <View style={{ paddingTop: 8 }}>
-              <SectionKicker style={{ marginBottom: 8 }}>Travel tips</SectionKicker>
-              <Text style={[Type.body14, { color: colors.inkMute }]}>
-                Coming soon — local tips, safety advice and cultural notes.
-              </Text>
-            </View>
+            <TipsTab
+              colors={colors}
+              countryName={country.name}
+              local={local}
+            />
           )}
         </View>
       </ScrollView>
 
-      {/* ── FAB — DarkOrb 56 ────────────────────────────────────── */}
-      <DarkOrb
-        size={56}
-        onPress={() => {
-          tripSheetRef.current?.present();
-        }}
-        accessibilityLabel="Add to trip"
-        style={{
-          position: 'absolute',
-          right: 22,
-          bottom: insets.bottom + 96,
-          ...Shadows.orb,
-        }}
-      >
-        <Plus size={24} color="#FFFFFF" />
-      </DarkOrb>
-
-      {/* ── Bottom sheets (preserved from old screen) ─────────────── */}
+      {/* ── Preserved sheets ───────────────────────────────────────── */}
       {country && resolved && (
         <TripPlannerSheet
           ref={tripSheetRef}
@@ -425,7 +347,7 @@ export default function CountryDetailScreen() {
           onTripCreated={(tripId) => router.replace(`/trip/${tripId}` as never)}
         />
       )}
-      {country && resolved && (resolved.category === 'visa-required' || resolved.category === 'evisa') && (
+      {country && resolved && needsApplication && (
         <VisaGuideSheet
           ref={guideSheetRef}
           countryCode={country.code}
@@ -439,30 +361,20 @@ export default function CountryDetailScreen() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Overview tab content
+// OverviewTab
 // ════════════════════════════════════════════════════════════════════════
-interface OverviewTabProps {
-  colors: ThemeColors;
-  country: { category: VisaCategory; days?: number; notes?: string };
-  resolved: { category: VisaCategory; days?: number; notes?: string };
-  catColor: string;
-  catBg: string;
-  stats: { label: string; value: string }[];
-  onStartVisa: () => void;
-  onDetails: () => void;
-  showStartVisa: boolean;
-}
-
 function OverviewTab({
-  colors, country, resolved, catColor, catBg,
-  stats, onStartVisa, onDetails, showStartVisa,
-}: OverviewTabProps) {
-  const bodyText = visaBody(resolved.category, resolved.days);
-  const titleText = visaTitle(resolved.category);
-
+  colors, catColor, resolved, stats, onPlanTrip,
+}: {
+  colors: ThemeColors;
+  catColor: string;
+  resolved: { category: VisaCategory; days?: number; notes?: string };
+  stats: { label: string; value: string }[];
+  onPlanTrip: () => void;
+}) {
   return (
     <>
-      {/* ── Visa card ────────────────────────────────────────────── */}
+      {/* Visa-at-a-glance card */}
       <View
         style={{
           backgroundColor: colors.surface,
@@ -474,45 +386,265 @@ function OverviewTab({
           ...Shadows.subtle,
         }}
       >
-        {/* Kicker */}
-        <SectionKicker style={{ color: catColor, marginBottom: 6 }}>
-          YOUR VISA
-        </SectionKicker>
+        <SectionKicker color={catColor}>YOUR VISA</SectionKicker>
+        <Text style={[Type.display22, { color: colors.ink, marginTop: 6 }]}>
+          {visaTitle(resolved.category)}
+        </Text>
+        <Text style={[Type.body14, { color: colors.inkMute, marginTop: 8, lineHeight: 21 }]}>
+          {visaBody(resolved.category, resolved.days)}
+        </Text>
+      </View>
 
-        {/* Visa title */}
-        <Text style={[Type.display22, { color: colors.ink, marginBottom: 8 }]}>
-          {titleText}
+      {/* Quick facts */}
+      <SectionKicker style={{ marginBottom: 10 }}>QUICK FACTS</SectionKicker>
+      <StatStrip stats={stats} divided />
+
+      {/* Primary CTA — replaces the old floating FAB */}
+      <PillButton
+        label="Plan a trip"
+        variant="primary"
+        onPress={onPlanTrip}
+        fullWidth
+        icon={<Sparkles size={16} color="#FFFFFF" strokeWidth={2} />}
+        style={{ marginTop: Spacing.lg }}
+      />
+    </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// VisaTab
+// ════════════════════════════════════════════════════════════════════════
+function VisaTab({
+  colors, catColor, category, days, needsApplication, hasGuide, onStartApplication,
+}: {
+  colors: ThemeColors;
+  catColor: string;
+  category: VisaCategory;
+  days?: number;
+  needsApplication: boolean;
+  hasGuide: boolean;
+  onStartApplication: () => void;
+}) {
+  // Visa-free or on-arrival — inline card, no CTA (or soft "Entry rules")
+  if (!needsApplication) {
+    return (
+      <View
+        style={{
+          backgroundColor: colors.surface,
+          borderRadius: Radius.xl,
+          padding: 18,
+          borderWidth: 1,
+          borderColor: colors.line,
+          marginTop: 4,
+          ...Shadows.subtle,
+        }}
+      >
+        <SectionKicker color={catColor}>ENTRY RULES</SectionKicker>
+        <Text style={[Type.display22, { color: colors.ink, marginTop: 6 }]}>
+          {visaTitle(category)}
+        </Text>
+        <Text style={[Type.body14, { color: colors.inkMute, marginTop: 8, lineHeight: 21 }]}>
+          {visaBody(category, days)}
+        </Text>
+        {category === 'visa-on-arrival' ? (
+          <View style={{ marginTop: 14, gap: 6 }}>
+            {[
+              'Valid passport (6+ months)',
+              'Return or onward ticket',
+              'Proof of accommodation',
+              'Visa fee in cash (USD typically accepted)',
+            ].map((item) => (
+              <Text key={item} style={[Type.body13, { color: colors.inkSoft }]}>• {item}</Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
+  // Required / E-visa — show guide status and action
+  return (
+    <View style={{ gap: 14, paddingTop: 4 }}>
+      <View
+        style={{
+          backgroundColor: colors.surface,
+          borderRadius: Radius.xl,
+          padding: 18,
+          borderWidth: 1,
+          borderColor: colors.line,
+          ...Shadows.subtle,
+        }}
+      >
+        <SectionKicker color={catColor}>APPLICATION</SectionKicker>
+        <Text style={[Type.display22, { color: colors.ink, marginTop: 6 }]}>
+          {visaTitle(category)}
+        </Text>
+        <Text style={[Type.body14, { color: colors.inkMute, marginTop: 8, lineHeight: 21 }]}>
+          {visaBody(category, days)}
         </Text>
 
-        {/* Visa body */}
-        <Text style={[Type.body14, { color: colors.inkMute, marginBottom: 18, lineHeight: 21 }]}>
-          {bodyText}
-        </Text>
-
-        {/* Action row */}
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          {showStartVisa && (
-            <PillButton
-              label="Start visa"
-              variant="primary"
-              onPress={onStartVisa}
-              style={{ flex: 1 }}
-            />
-          )}
+        {hasGuide ? (
           <PillButton
-            label="Details"
-            variant="soft"
-            onPress={onDetails}
-            style={showStartVisa ? { flex: 1 } : { alignSelf: 'flex-start', paddingHorizontal: 24 }}
+            label="Continue your application"
+            variant="primary"
+            fullWidth
+            onPress={onStartApplication}
+            style={{ marginTop: 18 }}
           />
+        ) : (
+          <PillButton
+            label="Start visa application"
+            variant="primary"
+            fullWidth
+            icon={<PlusCircle size={16} color="#FFFFFF" strokeWidth={2} />}
+            onPress={onStartApplication}
+            style={{ marginTop: 18 }}
+          />
+        )}
+      </View>
+
+      <View
+        style={{
+          backgroundColor: colors.surfaceMuted,
+          borderRadius: Radius.lg,
+          padding: 14,
+        }}
+      >
+        <Text style={[Type.meta11, { color: colors.inkMute }]}>
+          Your visa application is saved per country. Start it once, come back any time to continue.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// TipsTab — pulls from static `localInfo` map. Shows a clean empty state
+// when the country is not in the map.
+// ════════════════════════════════════════════════════════════════════════
+function TipsTab({
+  colors, countryName, local,
+}: {
+  colors: ThemeColors;
+  countryName: string;
+  local: import('@/data/localInfo').LocalInfo | null;
+}) {
+  if (!local) {
+    return (
+      <View
+        style={{
+          backgroundColor: colors.surface,
+          borderRadius: Radius.xl,
+          padding: 18,
+          borderWidth: 1,
+          borderColor: colors.line,
+          marginTop: 4,
+        }}
+      >
+        <SectionKicker>TRAVEL TIPS</SectionKicker>
+        <Text style={[Type.title17, { color: colors.ink, marginTop: 6 }]}>
+          No saved tips for {countryName} yet
+        </Text>
+        <Text style={[Type.body14, { color: colors.inkMute, marginTop: 8, lineHeight: 21 }]}>
+          Tips for this country will be generated on-demand and saved here when you plan your first
+          trip. For now, check the embassy website and your airline's entry requirements before
+          travel.
+        </Text>
+      </View>
+    );
+  }
+
+  const rows: Array<{ kicker: string; body: string | null; bullets?: string[] }> = [
+    { kicker: 'TIPPING', body: local.tippingCulture ?? null },
+    { kicker: 'MONEY', body: local.currencyTip ?? null },
+    { kicker: 'TAP WATER', body: local.tapWater === 'safe' ? 'Tap water is safe to drink.' : local.tapWater === 'unsafe' ? 'Tap water is NOT safe. Drink bottled or filtered water.' : 'Tap water safety varies — stick to bottled or filtered water to be safe.' },
+    { kicker: 'SIM & DATA', body: local.simCard ?? null },
+    { kicker: 'PLUGS', body: local.plugType ?? null },
+    { kicker: 'DRESS CODE', body: local.dressCode ?? null },
+  ];
+  const bulletRows: Array<{ kicker: string; items: string[] }> = [];
+  if (local.scamWarnings?.length) bulletRows.push({ kicker: 'SCAM WARNINGS', items: local.scamWarnings });
+  if (local.localCustoms?.length) bulletRows.push({ kicker: 'LOCAL CUSTOMS', items: local.localCustoms });
+
+  return (
+    <View style={{ gap: 12, paddingTop: 4 }}>
+      {/* Emergency strip */}
+      <View
+        style={{
+          backgroundColor: colors.surface,
+          borderRadius: Radius.xl,
+          padding: 18,
+          borderWidth: 1,
+          borderColor: colors.line,
+        }}
+      >
+        <SectionKicker color={colors.danger}>EMERGENCY</SectionKicker>
+        <View style={{ flexDirection: 'row', marginTop: 10, gap: 8 }}>
+          {[
+            { label: 'General', value: local.emergencyNumber },
+            { label: 'Police', value: local.policeNumber },
+            { label: 'Ambulance', value: local.ambulanceNumber },
+            { label: 'Fire', value: local.fireNumber },
+          ].map((e) => (
+            <View
+              key={e.label}
+              style={{
+                flex: 1,
+                backgroundColor: colors.surfaceMuted,
+                borderRadius: Radius.md,
+                padding: 10,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={[Type.meta10_5, { color: colors.inkMute }]}>{e.label}</Text>
+              <Text style={[Type.title17, { color: colors.ink, marginTop: 2 }]}>{e.value}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
-      {/* ── Quick facts section ─────────────────────────────────── */}
-      <SectionKicker style={{ marginBottom: 10 }}>
-        QUICK FACTS
-      </SectionKicker>
-      <StatStrip stats={stats} divided />
-    </>
+      {/* Info rows */}
+      {rows.filter((r) => r.body).map((r) => (
+        <View
+          key={r.kicker}
+          style={{
+            backgroundColor: colors.surface,
+            borderRadius: Radius.xl,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: colors.line,
+          }}
+        >
+          <SectionKicker>{r.kicker}</SectionKicker>
+          <Text style={[Type.body14, { color: colors.inkSoft, marginTop: 6, lineHeight: 21 }]}>
+            {r.body}
+          </Text>
+        </View>
+      ))}
+
+      {/* Bullet rows */}
+      {bulletRows.map((r) => (
+        <View
+          key={r.kicker}
+          style={{
+            backgroundColor: colors.surface,
+            borderRadius: Radius.xl,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: colors.line,
+          }}
+        >
+          <SectionKicker>{r.kicker}</SectionKicker>
+          <View style={{ marginTop: 8, gap: 4 }}>
+            {r.items.map((item, i) => (
+              <Text key={i} style={[Type.body13, { color: colors.inkSoft, lineHeight: 20 }]}>
+                • {item}
+              </Text>
+            ))}
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
