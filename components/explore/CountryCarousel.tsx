@@ -1,22 +1,24 @@
 import React, { useCallback, useEffect } from 'react';
-import { ScrollView, Pressable, StyleSheet } from 'react-native';
+import { ScrollView, Pressable, View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   withSpring,
   useSharedValue,
 } from 'react-native-reanimated';
 import { useTheme } from '@/contexts/theme-context';
-import { Photo, PhotoTone } from '@/components/ui/Photo';
+import { Flag } from '@/components/ui/Flag';
+import { Type } from '@/constants/typography';
 
 const THUMB_INACTIVE = 56;
 const THUMB_ACTIVE = 72;
 const SPRING_CONFIG = { damping: 18, stiffness: 240, mass: 0.8 };
 
 export interface CarouselCountry {
+  /** ISO-3 (used as the identity key the parent tracks) */
   code: string;
+  /** ISO-2 for rendering the flag */
+  iso2?: string;
   name: string;
-  photoUri?: string;
-  photoTone?: PhotoTone;
 }
 
 interface CountryCarouselProps {
@@ -35,10 +37,12 @@ function Thumbnail({ item, isActive, onSelect }: ThumbnailProps) {
   const { colors } = useTheme();
   const size = useSharedValue(isActive ? THUMB_ACTIVE : THUMB_INACTIVE);
 
-  // Animate on active change
   useEffect(() => {
-    size.value = withSpring(isActive ? THUMB_ACTIVE : THUMB_INACTIVE, SPRING_CONFIG);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    size.value = withSpring(
+      isActive ? THUMB_ACTIVE : THUMB_INACTIVE,
+      SPRING_CONFIG,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
   const animStyle = useAnimatedStyle(() => ({
@@ -51,31 +55,50 @@ function Thumbnail({ item, isActive, onSelect }: ThumbnailProps) {
     onSelect(item.code);
   }, [item.code, onSelect]);
 
+  const iso2 = (item.iso2 ?? item.code).toUpperCase();
+
   return (
-    <Pressable
-      onPress={handlePress}
-      accessibilityRole="button"
-      accessibilityLabel={item.name}
-      accessibilityState={{ selected: isActive }}
-      style={styles.thumbContainer}
-    >
-      <Animated.View
+    <View style={{ alignItems: 'center', width: THUMB_ACTIVE + 4 }}>
+      <Pressable
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel={item.name}
+        accessibilityState={{ selected: isActive }}
+        style={styles.thumbContainer}
+      >
+        <Animated.View
+          style={[
+            animStyle,
+            styles.thumbInner,
+            {
+              borderWidth: isActive ? 3 : 1,
+              borderColor: isActive ? colors.ink : colors.line,
+              backgroundColor: colors.surface,
+            },
+          ]}
+        >
+          {/* Flag fills inside the circle; slight inset so the border reads cleanly */}
+          <Flag
+            code={iso2}
+            size={isActive ? THUMB_ACTIVE - 6 : THUMB_INACTIVE - 2}
+          />
+        </Animated.View>
+      </Pressable>
+      <Text
+        numberOfLines={1}
         style={[
-          animStyle,
-          styles.thumbInner,
-          isActive && {
-            borderWidth: 3,
-            borderColor: colors.ink,
+          Type.meta11,
+          {
+            marginTop: 6,
+            color: isActive ? colors.ink : colors.inkMute,
+            maxWidth: THUMB_ACTIVE,
+            textAlign: 'center',
           },
         ]}
       >
-        <Photo
-          uri={item.photoUri}
-          tone={item.photoTone ?? 'stone'}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
-    </Pressable>
+        {item.name}
+      </Text>
+    </View>
   );
 }
 
@@ -106,14 +129,17 @@ export function CountryCarousel({
 const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 22,
-    gap: 12,
-    alignItems: 'center',
+    gap: 10,
+    alignItems: 'flex-start',
   },
   thumbContainer: {
-    // Extra hit area
     padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   thumbInner: {
     overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

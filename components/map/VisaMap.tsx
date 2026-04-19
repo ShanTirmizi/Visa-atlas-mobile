@@ -300,12 +300,6 @@ export function VisaMap({
           }}
         />
 
-        {/* Mono stone basemap — ocean and base map tint */}
-        <MapLibreGL.BackgroundLayer
-          id="mono-background"
-          style={{ backgroundColor: colors.backgroundDeep }}
-        />
-
         <MapLibreGL.ShapeSource
           id="countries-source"
           shape={countriesGeoJSON}
