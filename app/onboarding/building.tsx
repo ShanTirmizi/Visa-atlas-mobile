@@ -247,7 +247,7 @@ export default function BuildingScreen() {
   }, [visa]);
 
   const handleStartExploring = useCallback(() => {
-    router.replace('/(tabs)' as import('expo-router').Href);
+    router.replace('/(tabs)/trips' as import('expo-router').Href);
   }, [router]);
 
   const passportFlags = visa.passports.map((code) => getFlag(code)).join('  ');

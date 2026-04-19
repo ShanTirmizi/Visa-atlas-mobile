@@ -7,6 +7,7 @@ export default function TabLayout() {
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{ headerShown: false }}
+      initialRouteName="trips"
     >
       <Tabs.Screen name="trips" />
       <Tabs.Screen name="explore" />
