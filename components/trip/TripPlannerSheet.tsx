@@ -2,7 +2,7 @@ import React, {
   useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo,
 } from 'react';
 import {
-  View, Text, TouchableOpacity, TextInput, StyleSheet, Dimensions,
+  View, Text, TouchableOpacity, StyleSheet, Dimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -18,7 +18,7 @@ import {
   BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { Plane } from 'lucide-react-native';
+import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -26,33 +26,25 @@ import { useTheme } from '@/contexts/theme-context';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
+import { Type } from '@/constants/typography';
 import { endpoints } from '@/constants/api';
 import type { CountryVisa, HeldVisaType, VisaCategory } from '@/data/visaData';
 import type { CountryMeta } from '@/data/countryMeta';
 import type { TravelInfo } from '@/data/travelData';
+import { DarkOrb } from '@/components/ui/DarkOrb';
+import { SectionKicker } from '@/components/ui/SectionKicker';
+import { PillButton } from '@/components/ui/PillButton';
 
 // ── Constants ───────────────────────────────────────────────────────────
-const DURATIONS = [3, 5, 7, 10, 14];
 const VIBES = [
-  { v: 'relaxed', l: 'Relaxed' },
-  { v: 'balanced', l: 'Balanced' },
-  { v: 'packed', l: 'Action-packed' },
+  'Food', 'Culture', 'Nature', 'Nightlife', 'Adventure', 'Romance', 'Slow travel', 'History',
 ];
-const BUDGETS = [
-  { v: 'budget', l: 'Backpacker' },
-  { v: 'mid', l: 'Comfort' },
-  { v: 'luxury', l: 'Luxury' },
-];
-const COMPANIONS = [
-  { v: 'solo', l: 'Solo' },
-  { v: 'partner', l: 'Partner' },
-  { v: 'friends', l: 'Friends' },
-  { v: 'family', l: 'Family' },
-];
-const ACTIVITIES = [
-  'Hidden gems', 'Thrill-seeking', 'Foodie', 'Romantic', 'Photography',
-  'Nightlife', 'Wellness', 'History', 'Nature walks', 'Shopping',
-];
+
+// Legacy option constants preserved for generate() payload compatibility
+const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
+const BUDGET_OPTIONS = ['budget', 'mid', 'luxury'];
+const COMPANION_OPTIONS = ['solo', 'partner', 'friends', 'family'];
+
 const LOAD_MSGS = [
   'Researching your destination...', 'Planning your day-by-day itinerary...',
   'Finding the best local spots...', 'Scouting hidden gems & restaurants...',
@@ -61,11 +53,21 @@ const LOAD_MSGS = [
   'Finding the best time to visit...', 'Adding final touches...',
 ];
 
-// ── Vibrant color palette for option buttons ────────────────────────────
-const PACE_COLOR = '#2AAAA0';   // teal
-const BUDGET_COLOR = '#2EAA6E'; // green
-const PARTY_COLOR = '#EB6D3A';  // orange
-const CHIP_COLOR = '#E5A832';   // amber
+// Avatar tones for traveler stack — warm, forest, sunset palette
+const AVATAR_TONES = ['#C4A882', '#6B8F71', '#C97B4B'] as const;
+
+// Default dates: start = today + 30 days, end = today + 37 days (7-day trip)
+function defaultDates() {
+  const start = new Date();
+  start.setDate(start.getDate() + 30);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  return { start, end };
+}
+
+function formatDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 // ── Types ───────────────────────────────────────────────────────────────
 type ResolvedCountry = {
@@ -90,7 +92,7 @@ export interface TripPlannerSheetRef {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// usePlaneAnimation
+// usePlaneAnimation — preserved for loading state
 // ════════════════════════════════════════════════════════════════════════
 function usePlaneAnimation(isActive: boolean) {
   const translateY = useSharedValue(0);
@@ -120,18 +122,16 @@ function usePlaneAnimation(isActive: boolean) {
     }
   }, [isActive, translateY, rotate]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
+  return useAnimatedStyle(() => ({
     transform: [
       { translateY: translateY.value },
       { rotate: `${rotate.value}deg` },
     ],
   }));
-
-  return animatedStyle;
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// TypingDots
+// TypingDots — preserved for loading state
 // ════════════════════════════════════════════════════════════════════════
 function TypingDots({ color }: { color: string }) {
   const dot1 = useSharedValue(0.4);
@@ -170,6 +170,31 @@ function TypingDots({ color }: { color: string }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// AvatarStack — decorative traveler circles
+// ════════════════════════════════════════════════════════════════════════
+function AvatarStack({ count }: { count: number }) {
+  const shown = Math.min(count, 3);
+  return (
+    <View style={{ flexDirection: 'row' }}>
+      {AVATAR_TONES.slice(0, shown).map((tone, i) => (
+        <View
+          key={i}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: tone,
+            borderWidth: 2,
+            borderColor: '#FFFFFF',
+            marginLeft: i === 0 ? 0 : -10,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // TripPlannerSheet
 // ════════════════════════════════════════════════════════════════════════
 const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
@@ -178,52 +203,65 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
-    // ── Step state ──────────────────────────────────────────────────
-    const [step, setStep] = useState<'duration' | 'prefs' | 'loading'>('duration');
-    const [days, setDays] = useState<number | null>(null);
-    const [customDays, setCustomDays] = useState('');
-    const [vibe, setVibe] = useState('relaxed');
-    const [budget, setBudget] = useState('mid');
-    const [interests, setInterests] = useState('culture, food, sightseeing');
-    const [party, setParty] = useState('solo');
-    const [activityStyles, setActivityStyles] = useState<Set<string>>(new Set());
+    // ── Core state ──────────────────────────────────────────────
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [tick, setTick] = useState(0);
 
-    const createTrip = useMutation(api.trips.createTrip);
-    const planeStyle = usePlaneAnimation(step === 'loading');
+    // ── Date state ──────────────────────────────────────────────
+    const defaults = defaultDates();
+    const [startDate, setStartDate] = useState<Date>(defaults.start);
+    const [endDate, setEndDate] = useState<Date>(defaults.end);
 
-    // ── Loading timer ───────────────────────────────────────────────
+    // ── Travelers state ─────────────────────────────────────────
+    const [travelers, setTravelers] = useState(2);
+
+    // ── Vibes state (spec-aligned 8-chip set) ───────────────────
+    const [activeVibes, setActiveVibes] = useState<Set<string>>(new Set());
+
+    // ── Legacy preference state (preserved for payload compat) ──
+    const [vibe] = useState('balanced');
+    const [budget] = useState('mid');
+    const [party] = useState('couple');
+
+    const createTrip = useMutation(api.trips.createTrip);
+    const sparkleStyle = usePlaneAnimation(isLoading);
+
+    // ── Days derived from dates ─────────────────────────────────
+    const days = useMemo(() => {
+      const diff = endDate.getTime() - startDate.getTime();
+      return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
+    }, [startDate, endDate]);
+
+    // ── Loading ticker ──────────────────────────────────────────
     useEffect(() => {
-      if (step !== 'loading') { setTick(0); return; }
+      if (!isLoading) { setTick(0); return; }
       const id = setInterval(() => setTick((t) => t + 1), 3000);
       return () => clearInterval(id);
-    }, [step]);
+    }, [isLoading]);
 
-    // ── Toggle activity chip ────────────────────────────────────────
-    const toggleStyle = useCallback((s: string) => {
-      setActivityStyles((prev) => {
+    // ── Toggle vibe chip ────────────────────────────────────────
+    const toggleVibe = useCallback((v: string) => {
+      setActiveVibes((prev) => {
         const n = new Set(prev);
-        n.has(s) ? n.delete(s) : n.add(s);
+        n.has(v) ? n.delete(v) : n.add(v);
         return n;
       });
     }, []);
 
-    // ── Reset state on open ─────────────────────────────────────────
+    // ── Reset state on open ─────────────────────────────────────
     const resetState = useCallback(() => {
-      setStep('duration');
-      setDays(null);
-      setCustomDays('');
-      setVibe('relaxed');
-      setBudget('mid');
-      setInterests('culture, food, sightseeing');
-      setParty('solo');
-      setActivityStyles(new Set());
+      const d = defaultDates();
+      setStartDate(d.start);
+      setEndDate(d.end);
+      setTravelers(2);
+      setActiveVibes(new Set());
+      setIsLoading(false);
       setError('');
       setTick(0);
     }, []);
 
-    // ── Imperative handle for parent ────────────────────────────────
+    // ── Imperative handle ───────────────────────────────────────
     useImperativeHandle(ref, () => ({
       present: () => {
         resetState();
@@ -234,10 +272,38 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       },
     }));
 
-    // ── Generate trip ───────────────────────────────────────────────
+    // ── Adjust start date ───────────────────────────────────────
+    const shiftStart = useCallback((delta: number) => {
+      setStartDate((prev) => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() + delta);
+        // keep end at least 1 day after start
+        setEndDate((e) => {
+          if (next >= e) {
+            const newEnd = new Date(next);
+            newEnd.setDate(newEnd.getDate() + 1);
+            return newEnd;
+          }
+          return e;
+        });
+        return next;
+      });
+    }, []);
+
+    // ── Adjust end date ─────────────────────────────────────────
+    const shiftEnd = useCallback((delta: number) => {
+      setEndDate((prev) => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() + delta);
+        if (next <= startDate) return prev; // guard: end must be after start
+        return next;
+      });
+    }, [startDate]);
+
+    // ── Generate trip ───────────────────────────────────────────
     const generate = useCallback(async () => {
-      if (!country || !days || !meta || !travel || !resolved) return;
-      setStep('loading');
+      if (!country || !meta || !travel || !resolved) return;
+      setIsLoading(true);
       setError('');
       try {
         const res = await fetch(endpoints.generateTrip, {
@@ -249,15 +315,15 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             heldVisas: [...heldVisas],
             vibe,
             budget,
-            interests,
-            activityStyles: [...activityStyles],
-            travelParty: party,
+            interests: [...activeVibes].join(', ') || 'culture, food, sightseeing',
+            activityStyles: [...activeVibes],
+            travelParty: travelers > 1 ? party : 'solo',
           }),
         });
         if (!res.ok) throw new Error('fail');
         const data = await res.json();
 
-        // ── Fetch images (hero + per-day + per-activity) ─────────────────────
+        // ── Fetch images (hero + per-day + per-activity) ─────────────────
         let heroImageJson: string | undefined;
         let dayImagesJson: string | undefined;
         let activityImagesJson: string | undefined;
@@ -278,8 +344,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             d.eveningPlace ? { name: 'evening', place: d.eveningPlace } : null,
           ]).filter(Boolean);
 
-          // Build per-day hero subjects with graceful fallback for trips where
-          // the LLM didn't emit heroSubject.
           const dayHeroSubjects = itineraryDays.map(
             (d) =>
               d.heroSubject ??
@@ -317,7 +381,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         const tripId = await createTrip({
           ...data,
           status: 'planned' as const,
-          companions: party !== 'solo' ? JSON.stringify({ party }) : undefined,
+          companions: travelers > 1 ? JSON.stringify({ party, count: travelers }) : undefined,
           heroImage: heroImageJson,
           dayImages: dayImagesJson,
           activityImages: activityImagesJson,
@@ -328,11 +392,15 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         }, 300);
       } catch {
         setError('Failed to generate trip. Please try again.');
-        setStep('prefs');
+        setIsLoading(false);
       }
-    }, [country, days, meta, travel, resolved, heldVisas, vibe, budget, interests, activityStyles, party, createTrip, onTripCreated]);
+    }, [
+      country, meta, travel, resolved, heldVisas,
+      days, vibe, budget, activeVibes, travelers, party,
+      createTrip, onTripCreated,
+    ]);
 
-    // ── Backdrop ────────────────────────────────────────────────────
+    // ── Backdrop ────────────────────────────────────────────────
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => (
         <BottomSheetBackdrop
@@ -352,274 +420,133 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         ref={bottomSheetRef}
         enableDynamicSizing={true}
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
-        enablePanDownToClose={step !== 'loading'}
+        enablePanDownToClose={!isLoading}
         backdropComponent={renderBackdrop}
-        handleIndicatorStyle={{ backgroundColor: colors.textMuted, width: 40 }}
-        backgroundStyle={{ backgroundColor: colors.background, borderRadius: 28 }}
+        handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
+        backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
         onChange={(index) => {
           if (index === -1) resetState();
         }}
       >
         <BottomSheetScrollView
-          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
+          contentContainerStyle={s.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* ── STEP 1: Duration ──────────────────────────────────── */}
-          {step === 'duration' && (
+          {/* ── MAIN FORM ──────────────────────────────────────── */}
+          {!isLoading && (
             <View>
-              <Text style={[s.sheetTitle, { color: colors.foreground }]}>
-                How long?
-              </Text>
-              <Text style={[s.sheetSubtitle, { color: colors.textSecondary }]}>
-                Pick your trip duration to get started
-              </Text>
-
-              {/* Duration presets */}
-              <View style={s.durationGrid}>
-                {DURATIONS.map((d) => {
-                  const active = days === d;
-                  return (
-                    <TouchableOpacity
-                      key={d}
-                      onPress={() => { setDays(d); setCustomDays(''); }}
-                      activeOpacity={0.7}
-                      style={[
-                        s.durationPill,
-                        {
-                          backgroundColor: active ? colors.accent : colors.card,
-                          borderColor: active ? colors.accent : colors.border,
-                        },
-                      ]}
-                    >
-                      {d === 7 && !active && (
-                        <View style={[s.popularBadge, { backgroundColor: colors.accent }]}>
-                          <Text style={s.popularText}>Popular</Text>
-                        </View>
-                      )}
-                      <Text style={[
-                        s.durationNumber,
-                        { color: active ? '#FFFFFF' : colors.foreground },
-                      ]}>
-                        {d}
-                      </Text>
-                      <Text style={[
-                        s.durationLabel,
-                        { color: active ? 'rgba(255,255,255,0.85)' : colors.textMuted },
-                      ]}>
-                        DAYS
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-
-              </View>
-
-              {/* Custom duration input */}
-              <View style={[s.customRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[s.customLabel, { color: colors.textSecondary }]}>
-                  Or custom:
-                </Text>
-                <TextInput
-                  style={[s.customInput, {
-                    borderColor: colors.border,
-                    backgroundColor: colors.surface,
-                    color: colors.foreground,
-                  }]}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  placeholder="Days"
-                  placeholderTextColor={colors.textMuted}
-                  value={customDays}
-                  onChangeText={(t) => {
-                    setCustomDays(t);
-                    const n = parseInt(t);
-                    if (n > 0 && n <= 30) setDays(n);
-                    else if (t === '') setDays(null);
-                  }}
-                />
-              </View>
-
-              {/* Next button */}
-              <TouchableOpacity
-                onPress={() => { if (days && days > 0) setStep('prefs'); }}
-                disabled={!days}
-                activeOpacity={0.7}
-                style={[
-                  s.nextBtn,
-                  {
-                    backgroundColor: days ? colors.primary : colors.surfaceMuted,
-                    opacity: days ? 1 : 0.5,
-                    ...(days ? Shadows.glow(colors.primary, 0.25) : {}),
-                  },
-                ]}
-              >
-                <Text style={[s.nextBtnText, { color: days ? '#FFFFFF' : colors.textMuted }]}>
-                  Next
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ── STEP 2: Preferences ──────────────────────────────── */}
-          {step === 'prefs' && (
-            <View>
-              <View style={s.prefsHeader}>
-                <Text style={[s.sheetTitle, { color: colors.foreground }]}>
-                  Customize your trip
-                </Text>
-                <TouchableOpacity onPress={() => setStep('duration')}>
-                  <Text style={[s.changeLink, { color: colors.primary }]}>
-                    Change ({days}d)
+              {/* Header row */}
+              <View style={s.headerRow}>
+                <DarkOrb size={38}>
+                  <Sparkles size={17} color="#FFFFFF" />
+                </DarkOrb>
+                <View style={s.headerText}>
+                  <SectionKicker>AI PLANNER</SectionKicker>
+                  <Text style={[s.headerTitle, { color: colors.ink }]}>
+                    {country.name ? `Plan a trip to ${country.name}` : 'Plan your next trip'}
                   </Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={[s.sheetSubtitle, { color: colors.textSecondary }]}>
-                Tell us how you like to travel
-              </Text>
-
-              {/* Trip Pace */}
-              <View style={[s.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[s.sectionLabel, { color: colors.textMuted }]}>
-                  TRIP PACE
-                </Text>
-                <View style={s.optionRow}>
-                  {VIBES.map((o) => {
-                    const active = vibe === o.v;
-                    return (
-                      <TouchableOpacity
-                        key={o.v}
-                        onPress={() => setVibe(o.v)}
-                        activeOpacity={0.7}
-                        style={[
-                          s.optionPill,
-                          {
-                            backgroundColor: active ? PACE_COLOR : 'transparent',
-                            borderColor: active ? PACE_COLOR : colors.border,
-                          },
-                        ]}
-                      >
-                        <Text style={[
-                          s.optionText,
-                          { color: active ? '#FFFFFF' : colors.textSecondary },
-                        ]}>
-                          {o.l}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
                 </View>
               </View>
 
-              {/* Budget Style */}
-              <View style={[s.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[s.sectionLabel, { color: colors.textMuted }]}>
-                  BUDGET STYLE
-                </Text>
-                <View style={s.optionRow}>
-                  {BUDGETS.map((o) => {
-                    const active = budget === o.v;
-                    return (
-                      <TouchableOpacity
-                        key={o.v}
-                        onPress={() => setBudget(o.v)}
-                        activeOpacity={0.7}
-                        style={[
-                          s.optionPill,
-                          {
-                            backgroundColor: active ? BUDGET_COLOR : 'transparent',
-                            borderColor: active ? BUDGET_COLOR : colors.border,
-                          },
-                        ]}
-                      >
-                        <Text style={[
-                          s.optionText,
-                          { color: active ? '#FFFFFF' : colors.textSecondary },
-                        ]}>
-                          {o.l}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+              {/* Date cards row */}
+              <View style={s.dateRow}>
+                {/* Start date card */}
+                <View style={[s.dateCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                  <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>Start</Text>
+                  <Text style={[s.dateCardValue, { color: colors.ink }]}>{formatDate(startDate)}</Text>
+                  <View style={s.stepperRow}>
+                    <TouchableOpacity
+                      onPress={() => shiftStart(-1)}
+                      activeOpacity={0.7}
+                      style={[s.stepBtn, { borderColor: colors.line }]}
+                    >
+                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>−</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => shiftStart(1)}
+                      activeOpacity={0.7}
+                      style={[s.stepBtn, { borderColor: colors.line }]}
+                    >
+                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* End date card */}
+                <View style={[s.dateCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                  <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>End</Text>
+                  <Text style={[s.dateCardValue, { color: colors.ink }]}>{formatDate(endDate)}</Text>
+                  <View style={s.stepperRow}>
+                    <TouchableOpacity
+                      onPress={() => shiftEnd(-1)}
+                      activeOpacity={0.7}
+                      style={[s.stepBtn, { borderColor: colors.line }]}
+                    >
+                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>−</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => shiftEnd(1)}
+                      activeOpacity={0.7}
+                      style={[s.stepBtn, { borderColor: colors.line }]}
+                    >
+                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>+</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
 
-              {/* Interests */}
-              <View style={[s.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[s.sectionLabel, { color: colors.textMuted }]}>
-                  INTERESTS
-                </Text>
-                <TextInput
-                  style={[s.interestsInput, {
-                    borderColor: colors.border,
-                    backgroundColor: colors.surface,
-                    color: colors.foreground,
-                  }]}
-                  value={interests}
-                  onChangeText={setInterests}
-                  placeholder="e.g. food, history, hiking"
-                  placeholderTextColor={colors.textMuted}
-                />
+              {/* Travelers card */}
+              <View style={[s.travelersCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                <View style={s.travelersLeft}>
+                  <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>Travelers</Text>
+                  <Text style={[s.dateCardValue, { color: colors.ink }]}>
+                    {travelers} {travelers === 1 ? 'adult' : 'adults'}
+                  </Text>
+                </View>
+                <View style={s.travelersRight}>
+                  <AvatarStack count={travelers} />
+                  <View style={s.travelerStepper}>
+                    <TouchableOpacity
+                      onPress={() => setTravelers((t) => Math.max(1, t - 1))}
+                      activeOpacity={0.7}
+                      style={[s.stepBtn, { borderColor: colors.line }]}
+                    >
+                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>−</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setTravelers((t) => Math.min(12, t + 1))}
+                      activeOpacity={0.7}
+                      style={[s.stepBtn, { borderColor: colors.line }]}
+                    >
+                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
 
-              {/* Activity Style chips */}
-              <View style={[s.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[s.sectionLabel, { color: colors.textMuted }]}>
-                  ACTIVITY STYLE
-                </Text>
+              {/* Vibes section */}
+              <View style={s.vibesSection}>
+                <SectionKicker style={{ marginBottom: 8 }}>Vibes</SectionKicker>
                 <View style={s.chipWrap}>
-                  {ACTIVITIES.map((a) => {
-                    const active = activityStyles.has(a);
+                  {VIBES.map((v) => {
+                    const active = activeVibes.has(v);
                     return (
                       <TouchableOpacity
-                        key={a}
-                        onPress={() => toggleStyle(a)}
+                        key={v}
+                        onPress={() => toggleVibe(v)}
                         activeOpacity={0.7}
                         style={[
-                          s.chip,
-                          {
-                            backgroundColor: active ? CHIP_COLOR : 'transparent',
-                            borderColor: active ? CHIP_COLOR : colors.border,
-                          },
+                          s.vibeChip,
+                          active
+                            ? { backgroundColor: colors.ink, borderColor: colors.ink }
+                            : { backgroundColor: colors.surface, borderColor: colors.line },
                         ]}
                       >
                         <Text style={[
-                          s.chipText,
-                          { color: active ? '#FFFFFF' : colors.textMuted },
+                          s.vibeChipText,
+                          { color: active ? '#FFFFFF' : colors.inkSoft },
                         ]}>
-                          {a}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Traveling with */}
-              <View style={[s.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[s.sectionLabel, { color: colors.textMuted }]}>
-                  TRAVELING WITH
-                </Text>
-                <View style={s.optionRow}>
-                  {COMPANIONS.map((o) => {
-                    const active = party === o.v;
-                    return (
-                      <TouchableOpacity
-                        key={o.v}
-                        onPress={() => setParty(o.v)}
-                        activeOpacity={0.7}
-                        style={[
-                          s.optionPill,
-                          {
-                            backgroundColor: active ? PARTY_COLOR : 'transparent',
-                            borderColor: active ? PARTY_COLOR : colors.border,
-                          },
-                        ]}
-                      >
-                        <Text style={[
-                          s.optionText,
-                          { color: active ? '#FFFFFF' : colors.textSecondary },
-                        ]}>
-                          {o.l}
+                          {v}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -630,51 +557,47 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               {/* Error */}
               {error !== '' && (
                 <View style={[s.errorCard, {
-                  borderColor: colors.danger + '30',
+                  borderColor: colors.danger,
                   backgroundColor: colors.dangerBg,
                 }]}>
                   <Text style={[s.errorText, { color: colors.danger }]}>{error}</Text>
                   <TouchableOpacity
-                    onPress={() => { setError(''); }}
-                    style={[s.errorRetry, { borderColor: colors.danger + '40' }]}
+                    onPress={() => setError('')}
+                    style={[s.errorRetry, { borderColor: colors.danger }]}
                   >
                     <Text style={[s.errorRetryText, { color: colors.danger }]}>Dismiss</Text>
                   </TouchableOpacity>
                 </View>
               )}
 
-              {/* Generate button */}
-              <TouchableOpacity
+              {/* Primary CTA */}
+              <PillButton
+                label="Generate itinerary"
                 onPress={generate}
-                activeOpacity={0.7}
-                style={[
-                  s.generateBtn,
-                  {
-                    backgroundColor: colors.primary,
-                    ...Shadows.glow(colors.primary, 0.3),
-                  },
-                ]}
-              >
-                <Plane size={20} color="#FFFFFF" />
-                <Text style={s.generateBtnText}>
-                  Generate {days}-Day Trip
-                </Text>
-              </TouchableOpacity>
+                variant="primary"
+                fullWidth
+                icon={<Sparkles size={16} color="#FFFFFF" />}
+                style={s.ctaButton}
+              />
             </View>
           )}
 
-          {/* ── Loading ──────────────────────────────────────────── */}
-          {step === 'loading' && (
+          {/* ── LOADING STATE ───────────────────────────────────── */}
+          {isLoading && (
             <View style={s.loadingContainer}>
-              {/* Animated plane */}
-              <Animated.View style={[s.planeCircle, { backgroundColor: colors.primaryBg }, planeStyle]}>
-                <Plane size={32} color={colors.primary} />
+              {/* Animated sparkle orb */}
+              <Animated.View style={sparkleStyle}>
+                <DarkOrb size={80}>
+                  <Sparkles size={32} color="#FFFFFF" />
+                </DarkOrb>
               </Animated.View>
 
               {/* Country context */}
-              <Text style={[s.loadingContext, { color: colors.textSecondary }]}>
+              <Text style={[s.loadingContext, { color: colors.inkMute }]}>
                 Planning your trip to{' '}
-                <Text style={{ fontFamily: FontFamily.serifSemibold }}>{country.name}</Text>
+                <Text style={{ fontFamily: FontFamily.semibold, color: colors.ink }}>
+                  {country.name}
+                </Text>
                 ...
               </Text>
 
@@ -683,13 +606,13 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                 key={tick}
                 entering={FadeIn.duration(400)}
                 exiting={FadeOut.duration(200)}
-                style={[s.loadingMsg, { color: colors.foreground }]}
+                style={[s.loadingMsg, { color: colors.ink }]}
               >
                 {LOAD_MSGS[tick % LOAD_MSGS.length]}
               </Animated.Text>
 
               {/* Typing dots */}
-              <TypingDots color={colors.primary} />
+              <TypingDots color={colors.ink} />
             </View>
           )}
         </BottomSheetScrollView>
@@ -704,158 +627,112 @@ export default TripPlannerSheet;
 // ── Styles ──────────────────────────────────────────────────────────────
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // ── Sheet headers ─────────────────────────────────────────
-    sheetTitle: {
-      fontFamily: FontFamily.display,
-      fontSize: FontSize['3xl'],
-      letterSpacing: 0.5,
-    },
-    sheetSubtitle: {
-      fontFamily: FontFamily.regular,
-      fontSize: FontSize.sm,
-      marginTop: 2,
-      marginBottom: Spacing.lg,
+    scrollContent: {
+      padding: Spacing.lg,
+      paddingBottom: 48,
     },
 
-    // ── Step 1: Duration ──────────────────────────────────────
-    durationGrid: {
+    // ── Header ────────────────────────────────────────────────
+    headerRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: Spacing.sm,
-      marginBottom: Spacing.lg,
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 18,
     },
-    durationPill: {
+    headerText: {
       flex: 1,
-      minWidth: '17%' as unknown as number,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: Spacing.lg,
-      borderRadius: 20,
-      borderWidth: 1.5,
-      overflow: 'visible',
     },
-    durationNumber: {
-      fontFamily: FontFamily.bold,
-      fontSize: FontSize['2xl'],
-    },
-    durationLabel: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.xs,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginTop: 2,
-    },
-    popularBadge: {
-      position: 'absolute',
-      top: -8,
-      right: -4,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: Radius.full,
-    },
-    popularText: {
-      fontFamily: FontFamily.condensedSemibold,
-      fontSize: 9,
-      color: '#FFFFFF',
-      letterSpacing: 0.3,
-    },
-    customRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.sm,
-      padding: Spacing.md,
-      borderRadius: 20,
-      borderWidth: 1,
-      marginBottom: Spacing.lg,
-    },
-    customLabel: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.sm,
-    },
-    customInput: {
-      width: 70,
-      paddingVertical: 8,
-      paddingHorizontal: 10,
-      borderRadius: Radius.sm,
-      borderWidth: 1,
-      fontFamily: FontFamily.bold,
-      fontSize: FontSize.base,
-      textAlign: 'center',
-    },
-    nextBtn: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 16,
-      borderRadius: 20,
-    },
-    nextBtnText: {
-      fontFamily: FontFamily.bold,
-      fontSize: FontSize.base,
-      letterSpacing: 0.5,
+    headerTitle: {
+      ...Type.title18,
+      marginTop: 1,
     },
 
-    // ── Step 2: Preferences ───────────────────────────────────
-    prefsHeader: {
+    // ── Date cards ────────────────────────────────────────────
+    dateRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      gap: 10,
+      marginBottom: 10,
     },
-    changeLink: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.sm,
-      textDecorationLine: 'underline',
-    },
-    sectionCard: {
-      borderRadius: 20,
-      padding: Spacing.md,
-      marginBottom: Spacing.sm,
+    dateCard: {
+      flex: 1,
+      padding: 14,
+      borderRadius: 16,
       borderWidth: 1,
       ...Shadows.subtle,
     },
-    sectionLabel: {
-      fontFamily: FontFamily.condensedSemibold,
-      fontSize: FontSize.xs,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-      marginBottom: Spacing.sm,
+    dateCardLabel: {
+      ...Type.meta10_5,
     },
-    optionRow: {
+    dateCardValue: {
+      ...Type.title17,
+      marginTop: 3,
+    },
+    stepperRow: {
       flexDirection: 'row',
-      gap: Spacing.xs,
+      gap: 6,
+      marginTop: 10,
     },
-    optionPill: {
-      flex: 1,
+
+    // ── Travelers card ────────────────────────────────────────
+    travelersCard: {
+      flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 10,
-      borderRadius: Radius.sm,
-      borderWidth: 1.5,
-    },
-    optionText: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.sm,
-    },
-    interestsInput: {
-      paddingVertical: Spacing.sm,
-      paddingHorizontal: Spacing.md,
-      borderRadius: Radius.sm,
+      justifyContent: 'space-between',
+      padding: 14,
+      paddingHorizontal: 16,
+      borderRadius: 16,
       borderWidth: 1,
-      fontFamily: FontFamily.regular,
-      fontSize: FontSize.sm,
+      marginBottom: 10,
+      ...Shadows.subtle,
+    },
+    travelersLeft: {
+      gap: 3,
+    },
+    travelersRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    travelerStepper: {
+      flexDirection: 'row',
+      gap: 6,
+    },
+
+    // ── Shared stepper button ─────────────────────────────────
+    stepBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepBtnText: {
+      fontFamily: FontFamily.semibold,
+      fontSize: FontSize.base,
+      lineHeight: 20,
+      includeFontPadding: false,
+    },
+
+    // ── Vibes ─────────────────────────────────────────────────
+    vibesSection: {
+      marginTop: 6,
+      marginBottom: 0,
     },
     chipWrap: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: Spacing.xs,
+      gap: 6,
     },
-    chip: {
-      paddingHorizontal: Spacing.md,
-      paddingVertical: 7,
+    vibeChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
       borderRadius: Radius.full,
-      borderWidth: 1.5,
+      borderWidth: 1,
     },
-    chipText: {
+    vibeChipText: {
       fontFamily: FontFamily.semibold,
-      fontSize: FontSize.xs,
+      fontSize: FontSize.sm,
     },
 
     // ── Error ─────────────────────────────────────────────────
@@ -865,6 +742,7 @@ const makeStyles = (colors: ThemeColors) =>
       padding: Spacing.md,
       borderRadius: Radius.sm,
       borderWidth: 1,
+      marginTop: 12,
       marginBottom: Spacing.sm,
     },
     errorText: {
@@ -884,42 +762,22 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: FontSize.xs,
     },
 
-    // ── Generate button ───────────────────────────────────────
-    generateBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Spacing.sm,
-      paddingVertical: 16,
-      borderRadius: 20,
-      marginTop: Spacing.md,
-    },
-    generateBtnText: {
-      fontFamily: FontFamily.bold,
-      fontSize: FontSize.base,
-      color: '#FFFFFF',
-      letterSpacing: 0.5,
+    // ── CTA ───────────────────────────────────────────────────
+    ctaButton: {
+      marginTop: 18,
     },
 
     // ── Loading ───────────────────────────────────────────────
     loadingContainer: {
-      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: Spacing['5xl'],
     },
-    planeCircle: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: Spacing.xl,
-    },
     loadingContext: {
-      fontFamily: FontFamily.serif,
+      fontFamily: FontFamily.regular,
       fontSize: FontSize.sm,
       textAlign: 'center',
+      marginTop: Spacing.xl,
       marginBottom: Spacing.md,
     },
     loadingMsg: {
