@@ -50,6 +50,7 @@ export function NextUpCard({
           tone="forest"
           radius={16}
           style={{ width: 62, height: 62 }}
+          showPlaceholderGlyph={false}
         />
 
         {/* Content */}

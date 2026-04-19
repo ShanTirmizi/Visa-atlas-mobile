@@ -1,50 +1,52 @@
 import React from 'react';
 import { View, StyleProp, ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { ImageOff } from 'lucide-react-native';
+import { useTheme } from '@/contexts/theme-context';
 
+// Tone kept as a typed prop for call-site back-compat, but no longer affects
+// the no-URI render — the old two-tone mud gradient was replaced with a
+// clean neutral placeholder.
 export type PhotoTone =
   | 'warm' | 'forest' | 'ocean' | 'sunset' | 'stone'
   | 'plum' | 'night' | 'mist' | 'gold' | 'mountain';
 
-const TONE_COLORS: Record<PhotoTone, [string, string]> = {
-  warm: ['#8B5A3C', '#6B3E26'],
-  forest: ['#2C3E2E', '#1C2C1E'],
-  ocean: ['#2E3F4A', '#1C2832'],
-  sunset: ['#8B4A2E', '#6B3520'],
-  stone: ['#5C5C5C', '#3D3D3D'],
-  plum: ['#5A3A5E', '#3E2842'],
-  night: ['#1A2238', '#0E1424'],
-  mist: ['#8C8C8C', '#6E6E6E'],
-  gold: ['#8B6F2E', '#6B5420'],
-  mountain: ['#4A5A6A', '#2E3A48'],
-};
-
 interface PhotoProps {
+  /** If provided, the real image is rendered via expo-image with a blurhash
+   *  placeholder and 200ms fade-in. If omitted, a clean neutral placeholder
+   *  is shown (no muddy gradient). */
   uri?: string;
+  /** @deprecated — kept for call-site compat; no longer affects rendering. */
   tone?: PhotoTone;
   radius?: number;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
   testID?: string;
+  /** Small ImageOff glyph in the placeholder. Set false for tight thumbs. */
+  showPlaceholderGlyph?: boolean;
 }
 
 export function Photo({
   uri,
-  tone = 'stone',
   radius = 0,
   style,
   children,
   testID,
+  showPlaceholderGlyph = true,
 }: PhotoProps) {
-  const [a, b] = TONE_COLORS[tone];
+  const { colors } = useTheme();
+
   return (
     <View
       testID={testID}
       style={[
         {
-          backgroundColor: b,
+          // Neutral placeholder when no image. The real photo (if any) covers it.
+          backgroundColor: colors.surfaceMuted,
           borderRadius: radius,
           overflow: 'hidden',
+          alignItems: 'center',
+          justifyContent: 'center',
         },
         style,
       ]}
@@ -52,19 +54,20 @@ export function Photo({
       {uri ? (
         <ExpoImage
           source={{ uri }}
-          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+          // BlurHash is a standard neutral-grey bh; it shows briefly before fade-in.
+          placeholder={{ blurhash: 'L5H2EC=PM+yV0g-mq.wG9c010J}I' }}
           contentFit="cover"
-          transition={200}
+          transition={220}
           style={{ width: '100%', height: '100%' }}
         />
-      ) : (
-        // Two-tone placeholder: linear gradient approximation using two absolute
-        // views. Visual stand-in until real imagery is available.
-        <>
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: '50%', backgroundColor: a }} />
-          <View style={{ position: 'absolute', top: '50%', left: 0, right: 0, bottom: 0, backgroundColor: b }} />
-        </>
-      )}
+      ) : showPlaceholderGlyph ? (
+        <ImageOff
+          size={22}
+          color={colors.inkFaint}
+          strokeWidth={1.5}
+          opacity={0.6}
+        />
+      ) : null}
       {children}
     </View>
   );

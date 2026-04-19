@@ -138,6 +138,7 @@ export function TripRow({
         tone="mountain"
         radius={18}
         style={{ width: 70, height: 70 }}
+        showPlaceholderGlyph={false}
       />
 
       {/* Middle: title + date + flag/country */}

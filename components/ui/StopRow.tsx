@@ -31,7 +31,13 @@ export function StopRow({ meta, title, thumbTone = 'forest', thumbUri, onPress }
         borderColor: colors.line,
       }}
     >
-      <Photo tone={thumbTone} uri={thumbUri} radius={14} style={{ width: 52, height: 52 }} />
+      <Photo
+        tone={thumbTone}
+        uri={thumbUri}
+        radius={14}
+        style={{ width: 52, height: 52 }}
+        showPlaceholderGlyph={false}
+      />
       <View style={{ flex: 1 }}>
         <Text style={[Type.mono10, { color: colors.inkMute }]}>{meta}</Text>
         <Text style={[Type.title14, { color: colors.ink, marginTop: 2 }]}>{title}</Text>
