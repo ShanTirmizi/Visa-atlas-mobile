@@ -4,7 +4,6 @@ import React, {
   useRef,
   useState,
   useCallback,
-  useMemo,
 } from 'react';
 import {
   View,
@@ -16,9 +15,8 @@ import {
 import {
   BottomSheetModal,
   BottomSheetScrollView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
 import { Copy, Trash2, Unlink, Link2, MapPin, Plane } from 'lucide-react-native';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -403,9 +401,6 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
     const deleteBooking = useMutation(api.bookings.deleteBooking);
     const unlinkBookingFromTrip = useMutation(api.bookings.unlinkBookingFromTrip);
 
-    // No fixed snap points — let the sheet size to its content
-    const snapPoints = useMemo(() => [], []);
-
     useImperativeHandle(ref, () => ({
       open: (data: BookingDetailData) => {
         setBooking(data);
@@ -469,29 +464,11 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
       );
     }, [booking, unlinkBookingFromTrip, onUnlink]);
 
-    const renderBackdrop = useCallback(
-      (props: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop
-          {...props}
-          disappearsOnIndex={-1}
-          appearsOnIndex={0}
-          opacity={0.5}
-        />
-      ),
-      [],
-    );
-
     if (!booking) {
       return (
-        <BottomSheetModal
-          ref={bottomSheetRef}
-          enableDynamicSizing={true}
-          backdropComponent={renderBackdrop}
-          handleIndicatorStyle={{ backgroundColor: 'rgba(255,255,255,0.5)', width: 40 }}
-          backgroundStyle={{ backgroundColor: colors.card, borderRadius: 24 }}
-        >
+        <AppBottomSheet ref={bottomSheetRef}>
           <View />
-        </BottomSheetModal>
+        </AppBottomSheet>
       );
     }
 
@@ -528,13 +505,10 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
     const handleColor = 'rgba(255,255,255,0.5)';
 
     return (
-      <BottomSheetModal
+      <AppBottomSheet
         ref={bottomSheetRef}
-        snapPoints={snapPoints}
-        enableDynamicSizing={true}
-        backdropComponent={renderBackdrop}
-        handleIndicatorStyle={{ backgroundColor: handleColor, width: 40 }}
-        backgroundStyle={{ backgroundColor: sheetBg, borderRadius: 24 }}
+        backgroundColor={sheetBg}
+        handleColor={handleColor}
       >
         <BottomSheetScrollView
           contentContainerStyle={{ paddingBottom: 40 }}
@@ -657,7 +631,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
             </>
           )}
         </BottomSheetScrollView>
-      </BottomSheetModal>
+      </AppBottomSheet>
     );
   },
 );
