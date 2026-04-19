@@ -447,7 +447,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                 style={[
                   s.nextBtn,
                   {
-                    backgroundColor: days ? colors.primary : colors.surfaceLight,
+                    backgroundColor: days ? colors.primary : colors.surfaceMuted,
                     opacity: days ? 1 : 0.5,
                     ...(days ? Shadows.glow(colors.primary, 0.25) : {}),
                   },

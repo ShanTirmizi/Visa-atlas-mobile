@@ -321,7 +321,7 @@ function DayDetailScreen({
                 />
               </ImageBackground>
             ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.surfaceLight }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.backgroundDeep }]} />
             )}
 
             {/* Top nav buttons */}
@@ -402,8 +402,8 @@ function DayDetailScreen({
                 cardBg={colors.card}
                 textColor={colors.foreground}
                 mutedColor={colors.textMuted}
-                iconBg={colors.surfaceLight}
-                placeholderBg={colors.surfaceLight}
+                iconBg={colors.surfaceMuted}
+                placeholderBg={colors.surfaceMuted}
               />
             ) : null}
             {day.afternoon.trim().length > 0 ? (
@@ -415,8 +415,8 @@ function DayDetailScreen({
                 cardBg={colors.card}
                 textColor={colors.foreground}
                 mutedColor={colors.textMuted}
-                iconBg={colors.surfaceLight}
-                placeholderBg={colors.surfaceLight}
+                iconBg={colors.surfaceMuted}
+                placeholderBg={colors.surfaceMuted}
               />
             ) : null}
             {day.evening.trim().length > 0 ? (
@@ -428,8 +428,8 @@ function DayDetailScreen({
                 cardBg={colors.card}
                 textColor={colors.foreground}
                 mutedColor={colors.textMuted}
-                iconBg={colors.surfaceLight}
-                placeholderBg={colors.surfaceLight}
+                iconBg={colors.surfaceMuted}
+                placeholderBg={colors.surfaceMuted}
               />
             ) : null}
 

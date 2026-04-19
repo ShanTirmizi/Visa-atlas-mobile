@@ -479,7 +479,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   typingText: {
-    fontFamily: FontFamily.serifItalic,
+    fontFamily: FontFamily.regular,
+    fontStyle: 'italic',
     fontSize: FontSize.sm,
   },
   inputBar: {

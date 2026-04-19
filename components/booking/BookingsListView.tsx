@@ -269,7 +269,7 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
         ListEmptyComponent={
           activeFilter !== 'all' && FilterIcon ? (
             <View style={styles.filterEmpty}>
-              <View style={[styles.filterEmptyIcon, { backgroundColor: colors.surfaceLight }]}>
+              <View style={[styles.filterEmptyIcon, { backgroundColor: colors.surfaceMuted }]}>
                 <FilterIcon size={28} color={colors.textMuted} />
               </View>
               <Text style={[styles.filterEmptyTitle, { color: colors.foreground }]}>

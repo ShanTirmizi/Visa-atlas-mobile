@@ -20,7 +20,7 @@ function DayDeckCard({ dayNumber, title, place, date, image }: DayDeckCardProps)
   return (
     <View style={[styles.card, Shadows.cardRaised, { backgroundColor: colors.card }]}>
       {/* ── Photo region (top ~62%) ───────────────────────────────── */}
-      <View style={[styles.photoRegion, { backgroundColor: colors.surfaceLight }]}>
+      <View style={[styles.photoRegion, { backgroundColor: colors.backgroundDeep }]}>
         {image?.url ? (
           <ImageBackground
             source={{ uri: image.url }}

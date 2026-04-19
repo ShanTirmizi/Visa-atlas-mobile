@@ -403,7 +403,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                 style={[
                   s.nextBtn,
                   {
-                    backgroundColor: selectedVibes.size >= 1 ? colors.primary : colors.surfaceLight,
+                    backgroundColor: selectedVibes.size >= 1 ? colors.primary : colors.surfaceMuted,
                     opacity: selectedVibes.size >= 1 ? 1 : 0.5,
                     ...(selectedVibes.size >= 1 ? Shadows.glow(colors.primary, 0.25) : {}),
                   },
@@ -573,7 +573,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                   <View style={[
                     s.togglePill,
                     {
-                      backgroundColor: includeVisaReq ? colors.accent : colors.surfaceLight,
+                      backgroundColor: includeVisaReq ? colors.accent : colors.surfaceMuted,
                     },
                   ]}>
                     <Text style={[
