@@ -147,7 +147,7 @@ export function ExploreSheet({
   const renderItem = useCallback(
     ({ item }: { item: CountryBrief }) => (
       <Pressable
-        onPress={() => onSelectCountry(item.code)}
+        onPress={() => onViewDetails(item.code)}
         style={({ pressed }) => [
           styles.listRow,
           { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
@@ -162,13 +162,17 @@ export function ExploreSheet({
             {item.region}
           </Text>
         </View>
-        <VisaBadge cat={item.visaCategory} size="sm" />
+        <VisaBadge
+          cat={item.visaCategory}
+          size="sm"
+          style={{ alignSelf: 'center' }}
+        />
         <DarkOrb size={32} muted>
           <ArrowRight size={13} color={colors.ink} strokeWidth={2} />
         </DarkOrb>
       </Pressable>
     ),
-    [colors, onSelectCountry],
+    [colors, onViewDetails],
   );
 
   const keyExtractor = useCallback((item: CountryBrief) => item.code, []);
