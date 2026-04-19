@@ -254,12 +254,14 @@ export function VisaMap({
           categoryKey: entry.categoryKey,
           maxStay: entry.maxStay,
         });
+        // Notify parent so the Explore sheet can update its featured card.
+        onCountrySelect(iso);
       } else {
         // Country not in visa data
         setSelected(null);
       }
     },
-    [selected, countryLookup],
+    [selected, countryLookup, onCountrySelect],
   );
 
   // Track whether a shape was just pressed (prevents MapView.onPress from dismissing)

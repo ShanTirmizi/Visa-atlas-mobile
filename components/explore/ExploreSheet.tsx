@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
 import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { ArrowRight } from 'lucide-react-native';
@@ -55,7 +55,21 @@ export function ExploreSheet({
   const bottomSheetRef = useRef<BottomSheet>(null);
   const [filter, setFilter] = useState('All');
 
-  const snapPoints = useMemo(() => ['30%', '85%'], []);
+  const snapPoints = useMemo(() => ['30%', '70%', '92%'], []);
+
+  // When the user picks a country (from the map OR the carousel), expand
+  // the sheet to the mid snap so the featured card is visible. We skip the
+  // initial mount to avoid fighting the default collapsed position.
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    if (selectedCode) {
+      bottomSheetRef.current?.snapToIndex(1);
+    }
+  }, [selectedCode]);
 
   // Featured country (selected or first)
   const featured = useMemo<CountryBrief | undefined>(
