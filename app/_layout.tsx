@@ -11,26 +11,16 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Fonts
-import { BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
 import {
-  Sora_400Regular,
-  Sora_500Medium,
-  Sora_600SemiBold,
-  Sora_700Bold,
-} from '@expo-google-fonts/sora';
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
 import {
-  Lora_400Regular,
-  Lora_500Medium,
-  Lora_600SemiBold,
-  Lora_700Bold,
-  Lora_400Regular_Italic,
-} from '@expo-google-fonts/lora';
-import {
-  BarlowCondensed_400Regular,
-  BarlowCondensed_500Medium,
-  BarlowCondensed_600SemiBold,
-  BarlowCondensed_700Bold,
-} from '@expo-google-fonts/barlow-condensed';
+  JetBrainsMono_400Regular,
+  JetBrainsMono_500Medium,
+} from '@expo-google-fonts/jetbrains-mono';
 
 // Providers
 import { ConvexProvider } from '@/contexts/ConvexProvider';
@@ -78,7 +68,7 @@ function ThemedApp() {
   // Show loading screen while checking auth
   if (isLoading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5D9C0' }]}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F2F2F0' }]}>
         <StatusBar style="dark" />
         <Image
           source={require('@/assets/icon.png')}
@@ -144,20 +134,12 @@ function ThemedApp() {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    BebasNeue_400Regular,
-    Sora_400Regular,
-    Sora_500Medium,
-    Sora_600SemiBold,
-    Sora_700Bold,
-    Lora_400Regular,
-    Lora_500Medium,
-    Lora_600SemiBold,
-    Lora_700Bold,
-    Lora_400Regular_Italic,
-    BarlowCondensed_400Regular,
-    BarlowCondensed_500Medium,
-    BarlowCondensed_600SemiBold,
-    BarlowCondensed_700Bold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    JetBrainsMono_400Regular,
+    JetBrainsMono_500Medium,
   });
 
   useEffect(() => {
