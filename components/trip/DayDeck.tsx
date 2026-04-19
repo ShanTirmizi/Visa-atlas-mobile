@@ -68,6 +68,7 @@ interface DeckCardItemProps {
   activeIdxJS: number; // JS-side active index, used to compute integer offset
   dragX: SharedValue<number>;
   onCommit: (newIdx: number) => void;
+  onTap: () => void;
   numDays: number;
 }
 
@@ -80,6 +81,7 @@ function DeckCardItem({
   activeIdxJS,
   dragX,
   onCommit,
+  onTap,
   numDays,
 }: DeckCardItemProps) {
   // Integer offset from center (computed on JS side for render decisions)
@@ -134,8 +136,20 @@ function DeckCardItem({
       }
     });
 
+  // Tap gesture — only active for the center card. Opens the day detail.
+  // Composed with pan so dragging still works; the tap only fires on a clean tap.
+  const tap = Gesture.Tap()
+    .enabled(isCenter)
+    .maxDuration(250)
+    .maxDistance(10)
+    .onEnd((_e, success) => {
+      if (success) runOnJS(onTap)();
+    });
+
+  const gesture = Gesture.Exclusive(pan, tap);
+
   return (
-    <GestureDetector gesture={pan}>
+    <GestureDetector gesture={gesture}>
       <Animated.View style={[styles.cardSlot, animatedStyle]}>
         <DayDeckCard
           dayNumber={day.day}
@@ -201,6 +215,7 @@ function DayDeck({
             activeIdxJS={activeIdx}
             dragX={dragX}
             onCommit={handleCommit}
+            onTap={openDay}
             numDays={numDays}
           />
         ))}

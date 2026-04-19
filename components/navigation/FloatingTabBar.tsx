@@ -50,8 +50,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
               style={[styles.tab, isFocused && styles.tabActive]}
             >
               {tab.icon({
-                color: isFocused ? colors.ink : 'rgba(255,255,255,0.6)',
-                size: 18,
+                color: isFocused ? colors.ink : 'rgba(255,255,255,0.7)',
+                size: 22,
               })}
             </Pressable>
           );
@@ -72,16 +72,16 @@ const createStyles = (colors: ThemeColors) =>
     },
     pill: {
       flexDirection: 'row',
-      gap: 4,
+      gap: 6,
       backgroundColor: colors.ink,
       borderRadius: 999,
-      padding: 6,
+      padding: 8,
       ...Shadows.tabBar,
     },
     tab: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: 'transparent',

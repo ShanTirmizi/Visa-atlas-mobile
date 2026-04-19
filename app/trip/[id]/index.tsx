@@ -340,34 +340,63 @@ export default function TripDetailScreen() {
           </View>
         )}
 
-        {/* ── Visa tab (stub) ── */}
-        {activeTab === 'Visa' && (
-          <View style={styles.visaStub}>
-            <View style={[styles.visaCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-              <SectionKicker color={catColor}>VISA STATUS</SectionKicker>
-              <Text style={[Type.title18, { color: colors.ink, marginTop: 8 }]}>
-                {getVisaLabel(trip.visaCategory)}
-              </Text>
-              {trip.capital ? (
-                <Text style={[Type.body13, { color: colors.inkMute, marginTop: 4 }]}>
-                  {trip.countryName} · {trip.capital}
+        {/* ── Visa tab ── */}
+        {activeTab === 'Visa' && (() => {
+          const cat = (trip.visaCategory ?? '').toLowerCase();
+          const isFree = cat.includes('free');
+          const isOnArrival = cat.includes('arrival');
+          const needsApplication = cat.includes('evisa') || cat.includes('e-visa') || cat.includes('required');
+
+          // Copy per status
+          const title = getVisaLabel(trip.visaCategory);
+          const body = isFree
+            ? `Good news — you don't need a visa to enter ${trip.countryName}. Just show up with a valid passport and you're in.`
+            : isOnArrival
+              ? `You can get your visa on arrival in ${trip.countryName}. Have your passport and return ticket ready at immigration.`
+              : `You'll need to apply for a visa before you travel to ${trip.countryName}. Start your application early — processing can take a few days to weeks.`;
+
+          return (
+            <View style={styles.visaStub}>
+              <View style={[styles.visaCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                <SectionKicker color={catColor}>VISA STATUS</SectionKicker>
+                <Text style={[Type.title18, { color: colors.ink, marginTop: 8 }]}>
+                  {title}
                 </Text>
-              ) : null}
+                {trip.capital ? (
+                  <Text style={[Type.body13, { color: colors.inkMute, marginTop: 4 }]}>
+                    {trip.countryName} · {trip.capital}
+                  </Text>
+                ) : null}
 
-              <View style={styles.visaIconRow}>
-                <Shield size={40} color={catColor} strokeWidth={1.5} />
+                <View style={styles.visaIconRow}>
+                  <Shield size={40} color={catColor} strokeWidth={1.5} />
+                </View>
+
+                <Text style={[Type.body14, { color: colors.inkSoft, marginTop: 4, lineHeight: 22 }]}>
+                  {body}
+                </Text>
+
+                {needsApplication ? (
+                  <PillButton
+                    label="Start visa application"
+                    variant="primary"
+                    fullWidth
+                    onPress={() => router.push(`/country/${trip.countryCode}` as const)}
+                    style={{ marginTop: 20 }}
+                  />
+                ) : isOnArrival ? (
+                  <PillButton
+                    label="View entry details"
+                    variant="soft"
+                    fullWidth
+                    onPress={() => router.push(`/country/${trip.countryCode}` as const)}
+                    style={{ marginTop: 20 }}
+                  />
+                ) : null}
               </View>
-
-              <PillButton
-                label="Start visa application"
-                variant="primary"
-                fullWidth
-                onPress={() => router.push('/more/visas' as const)}
-                style={{ marginTop: 20 }}
-              />
             </View>
-          </View>
-        )}
+          );
+        })()}
       </ScrollView>
 
       {/* ─── Booking sheets ─── */}
