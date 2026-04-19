@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Photo, PhotoTone } from '@/components/ui/Photo';
-import { GlassPill } from '@/components/ui/GlassPill';
+import { ArrowUpRight } from 'lucide-react-native';
+import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
-import { Shadows } from '@/constants/theme';
+import { Shadows, Radius } from '@/constants/theme';
+import { SectionKicker } from '@/components/ui/SectionKicker';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -11,7 +12,9 @@ export interface GuideHeroData {
   title: string;
   author: string;
   readMin: number;
-  tone?: PhotoTone;
+  /** @deprecated — photo support dropped; kept for compat */
+  tone?: string;
+  /** @deprecated — photo support dropped; kept for compat */
   uri?: string;
   category?: string;
 }
@@ -24,36 +27,48 @@ interface GuideHeroProps {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function GuideHero({ guide, onPress }: GuideHeroProps) {
+  const { colors } = useTheme();
+
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.88}
-      style={styles.container}
+      activeOpacity={0.92}
+      style={[
+        styles.container,
+        { backgroundColor: colors.ink },
+        Shadows.cardRaised,
+      ]}
     >
-      {/* Background photo */}
-      <Photo
-        uri={guide.uri}
-        tone={guide.tone ?? 'mountain'}
-        style={StyleSheet.absoluteFillObject}
-      />
+      {/* Category kicker (top) */}
+      <SectionKicker color="rgba(255,255,255,0.55)">
+        {(guide.category ?? 'Essay').toUpperCase()}
+      </SectionKicker>
 
-      {/* Bottom-dark gradient scrim — two stacked views */}
-      <View style={styles.scrimTop} pointerEvents="none" />
-      <View style={styles.scrimBottom} pointerEvents="none" />
+      {/* Title */}
+      <Text
+        style={[
+          Type.display22,
+          { color: '#FFFFFF', marginTop: 14, fontSize: 26, lineHeight: 30 },
+        ]}
+        numberOfLines={3}
+      >
+        {guide.title}
+      </Text>
 
-      {/* Category pill — top-left */}
-      <View style={styles.pillContainer}>
-        <GlassPill>{guide.category ?? 'Essay'}</GlassPill>
-      </View>
-
-      {/* Bottom text block */}
-      <View style={styles.textBlock}>
-        <Text style={styles.meta}>
+      {/* Meta row at bottom with subtle arrow affordance */}
+      <View style={styles.metaRow}>
+        <Text
+          style={{
+            fontFamily: 'Inter_500Medium',
+            fontSize: 12,
+            color: 'rgba(255,255,255,0.7)',
+          }}
+        >
           {guide.readMin} min read · by {guide.author}
         </Text>
-        <Text style={styles.title} numberOfLines={3}>
-          {guide.title}
-        </Text>
+        <View style={styles.arrow}>
+          <ArrowUpRight size={14} color="#FFFFFF" strokeWidth={2} />
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -63,61 +78,25 @@ export function GuideHero({ guide, onPress }: GuideHeroProps) {
 
 const styles = StyleSheet.create({
   container: {
-    height: 220,
-    borderRadius: 24,
+    borderRadius: Radius['2xl'],
+    padding: 22,
+    paddingBottom: 18,
+    minHeight: 180,
+    justifyContent: 'flex-end',
     overflow: 'hidden',
-    position: 'relative',
-    ...Shadows.card,
   },
-
-  // Gradient scrim layers — top layer transparent, bottom opaque dark
-  scrimTop: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    // covers top 15% — transparent effectively (just a placeholder for stack)
-    height: '15%',
-    backgroundColor: 'transparent',
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
   },
-  scrimBottom: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    // covers bottom 85% with a graduated dark overlay
-    top: '15%',
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-
-  // Category pill
-  pillContainer: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-  },
-
-  // Bottom text
-  textBlock: {
-    position: 'absolute',
-    left: 18,
-    right: 18,
-    bottom: 16,
-  },
-  meta: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.75)',
-    letterSpacing: 11 * 0.02,
-    lineHeight: 11 * 1.5,
-  },
-  title: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 22,
-    lineHeight: 22 * 1.15,
-    letterSpacing: 22 * -0.025,
-    color: '#FFFFFF',
-    marginTop: 4,
-    fontWeight: '700',
+  arrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

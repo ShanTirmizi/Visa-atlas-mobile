@@ -1,8 +1,15 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowUpRight } from 'lucide-react-native';
+import {
+  ArrowUpRight,
+  BookOpen,
+  Compass,
+  FileText,
+  Globe2,
+  Map as MapIcon,
+  Sparkles,
+} from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { Photo, PhotoTone } from '@/components/ui/Photo';
 import { DarkOrb } from '@/components/ui/DarkOrb';
 import { Type } from '@/constants/typography';
 
@@ -13,7 +20,9 @@ export interface GuideRowData {
   author: string;
   readMin: number;
   category: string;
-  tone?: PhotoTone;
+  /** @deprecated — photo support dropped in favor of category glyph */
+  tone?: string;
+  /** @deprecated — photo support dropped in favor of category glyph */
   uri?: string;
 }
 
@@ -22,10 +31,22 @@ interface GuideRowProps {
   onPress?: () => void;
 }
 
+// Map category → Lucide icon. Anything unknown falls back to BookOpen.
+function iconForCategory(cat: string) {
+  const c = cat.toLowerCase();
+  if (c.includes('itin')) return MapIcon;
+  if (c.includes('how')) return FileText;
+  if (c.includes('dest')) return Compass;
+  if (c.includes('essay')) return Sparkles;
+  if (c.includes('visa')) return Globe2;
+  return BookOpen;
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function GuideRow({ guide, onPress }: GuideRowProps) {
   const { colors } = useTheme();
+  const Icon = iconForCategory(guide.category);
 
   return (
     <TouchableOpacity
@@ -36,13 +57,10 @@ export function GuideRow({ guide, onPress }: GuideRowProps) {
         { backgroundColor: colors.surface, borderColor: colors.line },
       ]}
     >
-      {/* Thumbnail */}
-      <Photo
-        uri={guide.uri}
-        tone={guide.tone ?? 'stone'}
-        radius={16}
-        style={styles.thumb}
-      />
+      {/* Category glyph — a small icon chip instead of a photo thumbnail */}
+      <View style={[styles.glyph, { backgroundColor: colors.surfaceMuted }]}>
+        <Icon size={22} color={colors.ink} strokeWidth={1.75} />
+      </View>
 
       {/* Middle text */}
       <View style={styles.middle}>
@@ -76,9 +94,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
-  thumb: {
-    width: 60,
-    height: 60,
+  glyph: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   middle: {
     flex: 1,
