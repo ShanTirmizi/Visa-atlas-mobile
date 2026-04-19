@@ -156,7 +156,8 @@ export function VisaMap({
 
   // Build the fillColor expression: ['match', ['get', 'iso_a3'], code1, color1, ..., default]
   const fillColorExpression = useMemo(() => {
-    const defaultColor = isDark ? '#1a3340' : '#e0d5c8';
+    // Unclassified countries use the stone base so the map reads as monochrome
+    const defaultColor = colors.backgroundDeep;
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     for (const [code, entry] of countryLookup) {
       const color = getVisaCategoryColor(entry.categoryKey, colors);
@@ -164,19 +165,19 @@ export function VisaMap({
     }
     expr.push(defaultColor);
     return expr;
-  }, [countryLookup, colors, isDark]);
+  }, [countryLookup, colors]);
 
-  // Build the fillOpacity expression
+  // Build the fillOpacity expression (0.75 for layered depth per Mono spec)
   const fillOpacityExpression = useMemo(() => {
     if (activeFilters.size === 0) {
-      // No filters — all countries at full opacity
-      return 0.9;
+      // No filters — all countries at spec opacity
+      return 0.75;
     }
-    // With filters — matching full, non-matching dimmed
+    // With filters — matching at spec opacity, non-matching dimmed
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     for (const [code, entry] of countryLookup) {
       if (activeFilters.has(entry.categoryKey)) {
-        expr.push(code, 0.9);
+        expr.push(code, 0.75);
       } else {
         expr.push(code, 0.1);
       }
@@ -194,15 +195,16 @@ export function VisaMap({
     return expr;
   }, [selected]);
 
-  // Line color expression: white for selected country, subtle border for others
+  // Line color expression: white for selected country, Mono hairline for others
   const lineColorExpression = useMemo(() => {
-    const defaultLineColor = isDark ? '#2d4a58' : '#aaaaaa';
+    // colors.line = 'rgba(0,0,0,0.06)' — the Mono hairline token
+    const defaultLineColor = colors.line;
     if (!selected) return defaultLineColor;
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     expr.push(selected.code, '#FFFFFF');
     expr.push(defaultLineColor);
     return expr;
-  }, [selected, isDark]);
+  }, [selected, colors.line]);
 
   // Handle tap on a country shape
   const handleShapePress = useCallback(
@@ -296,6 +298,12 @@ export function VisaMap({
             centerCoordinate: [40, 20],
             zoomLevel: 1.5,
           }}
+        />
+
+        {/* Mono stone basemap — ocean and base map tint */}
+        <MapLibreGL.BackgroundLayer
+          id="mono-background"
+          style={{ backgroundColor: colors.backgroundDeep }}
         />
 
         <MapLibreGL.ShapeSource
