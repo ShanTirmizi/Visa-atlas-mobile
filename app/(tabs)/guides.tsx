@@ -238,56 +238,101 @@ export default function GuidesScreen() {
                 return (
                   <TouchableOpacity
                     key={guide._id}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                     onPress={() => router.push(`/guide/${guide._id}`)}
                     style={[
                       styles.visaGuideCard,
                       {
-                        backgroundColor: status.color,
+                        backgroundColor: colors.surface,
+                        borderColor: colors.line,
                         opacity: isDeleting ? 0.5 : 1,
                       },
                     ]}
                   >
                     <View style={styles.visaGuideBody}>
+                      {/* Top row: flag + country + status pill */}
                       <View style={styles.visaGuideTop}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.visaGuideCountry}>
-                            {flag} {guide.countryName}
-                          </Text>
-                          <Text style={styles.visaGuideType}>
-                            {guide.visaType}
-                          </Text>
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                          <Text style={{ fontSize: 22 }}>{flag}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[Type.title17, { color: colors.ink }]} numberOfLines={1}>
+                              {guide.countryName}
+                            </Text>
+                            <Text
+                              style={[Type.meta10_5, { color: colors.inkMute, marginTop: 2 }]}
+                              numberOfLines={1}
+                            >
+                              {guide.visaType}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.visaStatusBadge}>
-                          <Text style={styles.visaStatusText}>{status.label}</Text>
+                        <View
+                          style={[
+                            styles.statusPill,
+                            { backgroundColor: colors.surfaceMuted },
+                          ]}
+                        >
+                          <View
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: 3,
+                              backgroundColor: status.color,
+                            }}
+                          />
+                          <Text style={[Type.meta11, { color: colors.ink, fontWeight: '600' }]}>
+                            {status.label}
+                          </Text>
                         </View>
                       </View>
+
+                      {/* Progress */}
                       {progress.total > 0 && (
-                        <View style={{ marginTop: 10 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <Text style={styles.visaProgressLabel}>
+                        <View style={{ marginTop: 14 }}>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              marginBottom: 6,
+                            }}
+                          >
+                            <Text style={[Type.meta11, { color: colors.inkMute }]}>
                               {progress.checked}/{progress.total} documents
                             </Text>
-                            <Text style={styles.visaProgressPct}>{pct}%</Text>
+                            <Text style={[Type.meta11, { color: colors.ink, fontWeight: '600' }]}>
+                              {pct}%
+                            </Text>
                           </View>
-                          <View style={styles.visaProgressTrack}>
+                          <View style={[styles.visaProgressTrack, { backgroundColor: colors.surfaceMuted }]}>
                             <View
-                              style={[styles.visaProgressFill, { width: `${pct}%` }]}
+                              style={[
+                                styles.visaProgressFill,
+                                { width: `${pct}%`, backgroundColor: colors.ink },
+                              ]}
                             />
                           </View>
                         </View>
                       )}
+
+                      {/* Delete icon — inline, subtle */}
                       <View style={styles.visaGuideFooter}>
                         <TouchableOpacity
-                          onPress={() => handleDelete(guide._id as Id<'visaGuides'>, guide.countryName)}
+                          onPress={() =>
+                            handleDelete(guide._id as Id<'visaGuides'>, guide.countryName)
+                          }
                           disabled={isDeleting}
                           hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                          style={styles.deleteBtn}
+                          style={[styles.deleteBtn, { borderColor: colors.line }]}
+                          accessibilityLabel="Delete guide"
                         >
                           {isDeleting ? (
-                            <ActivityIndicator size={14} color="#FFFFFF" />
+                            <ActivityIndicator size={14} color={colors.inkMute} />
                           ) : (
-                            <Trash2 color="rgba(255,255,255,0.70)" size={15} strokeWidth={1.5} />
+                            <Trash2
+                              color={colors.inkMute}
+                              size={15}
+                              strokeWidth={1.75}
+                            />
                           )}
                         </TouchableOpacity>
                       </View>
@@ -358,8 +403,8 @@ const styles = StyleSheet.create({
   },
   visaGuideCard: {
     borderRadius: 20,
+    borderWidth: 1,
     overflow: 'hidden',
-    ...Shadows.card,
   },
   visaGuideBody: {
     padding: 14,
@@ -367,54 +412,24 @@ const styles = StyleSheet.create({
   visaGuideTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 10,
   },
-  visaGuideCountry: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 18,
-    color: '#FFFFFF',
-    lineHeight: 24,
-  },
-  visaGuideType: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.70)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
-  visaStatusBadge: {
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 9999,
-    backgroundColor: 'rgba(255,255,255,0.20)',
-  },
-  visaStatusText: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 10,
-    color: '#FFFFFF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  visaProgressLabel: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.70)',
-  },
-  visaProgressPct: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 11,
-    color: '#FFFFFF',
   },
   visaProgressTrack: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.20)',
     overflow: 'hidden',
   },
   visaProgressFill: {
     height: '100%',
-    backgroundColor: '#FFFFFF',
     borderRadius: 2,
   },
   visaGuideFooter: {
@@ -427,7 +442,6 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
