@@ -1,17 +1,30 @@
+/**
+ * Onboarding — Residence Picker (spec screen 01)
+ * Step 1 of 3.
+ *
+ * Data source : passportCountries (Alpha-3 codes) from @/data/passportCountries
+ * Context     : useVisa() — setResidence(selected)
+ * Navigation  : router.push('/onboarding/visas')
+ */
 import React, { useState, useMemo, useCallback } from 'react';
 import {
-  View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet,
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 import { passportCountries, type PassportCountry } from '@/data/passportCountries';
-import BackButton from '@/components/ui/BackButton';
+import { OnboardingScaffold } from '@/components/onboarding/OnboardingScaffold';
+import { Flag } from '@/components/ui/Flag';
+import { Type } from '@/constants/typography';
 
-// ── Alpha-3 to flag emoji ────────────────────────────────────────────
+// ── Alpha-3 → Alpha-2 for the Flag component ──────────────────────────────
 const A3_TO_A2: Record<string, string> = {
   AFG:'AF',ALB:'AL',DZA:'DZ',AND:'AD',AGO:'AO',ATG:'AG',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',
   AZE:'AZ',BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
@@ -35,17 +48,59 @@ const A3_TO_A2: Record<string, string> = {
   VNM:'VN',YEM:'YE',ZMB:'ZM',ZWE:'ZW',
 };
 
-function getFlag(alpha3: string): string {
-  const a2 = A3_TO_A2[alpha3];
-  if (!a2) return '';
-  return String.fromCodePoint(
-    ...a2.split('').map((c) => 0x1f1e6 + c.charCodeAt(0) - 65),
+/** Convert an Alpha-3 passport code to the Alpha-2 code used by the Flag component. */
+function toA2(a3: string): string {
+  return A3_TO_A2[a3] ?? '';
+}
+
+// ── Country row ────────────────────────────────────────────────────────────
+interface CountryRowProps {
+  item: PassportCountry;
+  isSelected: boolean;
+  onPress: (code: string) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}
+
+function CountryRow({ item, isSelected, onPress, colors }: CountryRowProps) {
+  return (
+    <TouchableOpacity
+      onPress={() => onPress(item.code)}
+      activeOpacity={0.7}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: isSelected }}
+      style={styles.row}
+    >
+      {/* Flag */}
+      <Flag code={toA2(item.code)} size={22} />
+
+      {/* Country name */}
+      <Text
+        style={[Type.title14, { color: colors.ink, flex: 1 }]}
+        numberOfLines={1}
+      >
+        {item.name}
+      </Text>
+
+      {/* Radio indicator */}
+      <View
+        style={[
+          styles.radioIndicator,
+          isSelected
+            ? { backgroundColor: colors.ink, borderColor: colors.ink }
+            : { backgroundColor: 'transparent', borderColor: colors.surfaceMuted },
+        ]}
+      >
+        {isSelected && <Check size={12} color="#FFFFFF" strokeWidth={2.5} />}
+      </View>
+    </TouchableOpacity>
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Screen
+// ══════════════════════════════════════════════════════════════════════════════
 export default function ResidencePickerScreen() {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const visa = useVisa();
 
@@ -53,8 +108,8 @@ export default function ResidencePickerScreen() {
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return passportCountries;
     const q = search.trim().toLowerCase();
+    if (!q) return passportCountries;
     return passportCountries.filter((c) => c.name.toLowerCase().includes(q));
   }, [search]);
 
@@ -68,193 +123,105 @@ export default function ResidencePickerScreen() {
     router.push('/onboarding/visas' as import('expo-router').Href);
   }, [selected, visa, router]);
 
-  const renderItem = useCallback(({ item }: { item: PassportCountry }) => {
-    const isSelected = selected === item.code;
-    return (
-      <TouchableOpacity
-        onPress={() => toggleCountry(item.code)}
-        activeOpacity={0.7}
+  const renderItem = useCallback(
+    ({ item }: { item: PassportCountry }) => (
+      <CountryRow
+        item={item}
+        isSelected={selected === item.code}
+        onPress={toggleCountry}
+        colors={colors}
+      />
+    ),
+    [selected, colors, toggleCountry],
+  );
+
+  return (
+    <OnboardingScaffold
+      step={1}
+      totalSteps={3}
+      heroTone="ocean"
+      title="Where do you live?"
+      body="Your residence affects where you apply for visas and which benefits you qualify for."
+      ctaLabel="Continue"
+      onCta={handleContinue}
+    >
+      {/* ── Spec card: surface bg, radius 20, 1px border, padding 6 ── */}
+      <View
         style={[
-          styles.row,
+          styles.card,
           {
-            backgroundColor: isSelected ? colors.accent : colors.card,
-            borderColor: isSelected ? colors.accent : colors.border,
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
           },
         ]}
       >
-        <Text style={styles.flag}>{getFlag(item.code)}</Text>
-        <Text
-          style={[
-            styles.countryName,
-            { color: isSelected ? '#FFFFFF' : colors.foreground },
-          ]}
-        >
-          {item.name}
-        </Text>
-        {isSelected && (
-          <View style={[styles.checkWrap, { backgroundColor: colors.solidOverlayMd }]}>
-            <Check size={16} color="#FFFFFF" />
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }, [selected, colors, toggleCountry]);
-
-  const canContinue = selected !== null;
-
-  return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: colors.background,
-          paddingTop: insets.top + Spacing.lg,
-          paddingBottom: insets.bottom,
-        },
-      ]}
-    >
-      {/* Back button */}
-      <View style={styles.backWrap}>
-        <BackButton />
-      </View>
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.foreground }]}>
-          Where do you live?
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Your residence affects where you apply for visas and which benefits you qualify for
-        </Text>
-      </View>
-
-      {/* Search */}
-      <View style={styles.searchWrap}>
+        {/* Search input inside the card */}
         <TextInput
           value={search}
           onChangeText={setSearch}
           placeholder="Search countries..."
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={colors.inkFaint}
+          autoCorrect={false}
+          autoCapitalize="words"
           style={[
             styles.searchInput,
             {
-              backgroundColor: colors.card,
-              color: colors.foreground,
-              borderColor: colors.border,
+              backgroundColor: colors.surfaceMuted,
+              color: colors.ink,
+              fontFamily: 'Inter_400Regular',
             },
           ]}
-          autoCorrect={false}
-          autoCapitalize="words"
         />
-      </View>
 
-      {/* Country list */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.code}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        initialNumToRender={20}
-      />
+        {/* Country list — rendered inline (not FlatList) for ScrollView nesting */}
+        {filtered.slice(0, 50).map((item) => (
+          <CountryRow
+            key={item.code}
+            item={item}
+            isSelected={selected === item.code}
+            onPress={toggleCountry}
+            colors={colors}
+          />
+        ))}
 
-      {/* Bottom controls */}
-      <View style={[styles.bottomBar, { borderTopColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={handleContinue}
-          activeOpacity={0.7}
-          disabled={!canContinue}
-          style={[
-            styles.continueBtn,
-            {
-              backgroundColor: canContinue ? colors.primary : colors.border,
-            },
-          ]}
-        >
-          <Text style={[styles.continueBtnText, { opacity: canContinue ? 1 : 0.5 }]}>
-            Continue
+        {filtered.length === 0 && (
+          <Text style={[Type.body14, { color: colors.inkMute, textAlign: 'center', paddingVertical: 16 }]}>
+            No countries found
           </Text>
-        </TouchableOpacity>
+        )}
       </View>
-    </View>
+    </OnboardingScaffold>
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-  },
-  backWrap: {
-    marginBottom: Spacing.md,
-  },
-  header: {
-    marginBottom: Spacing.lg,
-  },
-  title: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize['4xl'],
-    letterSpacing: 1,
-  },
-  subtitle: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
-    marginTop: Spacing.xs,
-  },
-  searchWrap: {
-    marginBottom: Spacing.md,
+  card: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 6,
+    overflow: 'hidden',
   },
   searchInput: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
-    paddingVertical: 12,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-  },
-  listContent: {
-    paddingBottom: Spacing.sm,
-    gap: Spacing.sm,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    marginBottom: 4,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 12,
   },
-  flag: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  countryName: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.base,
-    flex: 1,
-  },
-  checkWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  radioIndicator: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  bottomBar: {
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-  },
-  continueBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 20,
-  },
-  continueBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.base,
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
   },
 });
