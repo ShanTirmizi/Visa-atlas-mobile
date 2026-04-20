@@ -18,6 +18,8 @@ import {
 import { countryMeta } from '@/data/countryMeta';
 import { travelData } from '@/data/travelData';
 import { localInfo } from '@/data/localInfo';
+import { convertBudget } from '@/utils/currency';
+import { bestTimeStatus, bestTimeColor } from '@/utils/bestTime';
 import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
 import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
 import { useQuery, useConvexAuth } from 'convex/react';
@@ -28,7 +30,6 @@ import { Photo } from '@/components/ui/Photo';
 import { Flag } from '@/components/ui/Flag';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { PillButton } from '@/components/ui/PillButton';
-import { StatStrip } from '@/components/ui/StatStrip';
 import { SectionKicker } from '@/components/ui/SectionKicker';
 
 // ── Alpha-3 → Alpha-2 flag code map ────────────────────────────────────
@@ -121,7 +122,12 @@ export default function CountryDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { heldVisas } = useVisa();
+  const { heldVisas, residence } = useVisa();
+  // User's home currency, derived from their residence country.
+  const userCurrency = useMemo(
+    () => (residence ? countryMeta[residence]?.currencyCode : undefined),
+    [residence],
+  );
   const dynamicVisaData = useVisaData();
 
   const [tab, setTab] = useState<'Overview' | 'Visa' | 'Tips'>('Overview');
@@ -172,10 +178,24 @@ export default function CountryDetailScreen() {
 
   const catColor = catFgColor(resolved.category, colors);
 
+  // Rich quick-facts: colored best-time dot, localized budget, safety score.
+  const btStatus = bestTimeStatus(travel?.bestMonths);
+  const btDotColor = bestTimeColor(btStatus, colors);
+  const budgetDisplay = travel?.dailyBudget
+    ? convertBudget(travel.dailyBudget, userCurrency)
+    : '—';
+  const safetyDisplay =
+    typeof travel?.safetyScore === 'number'
+      ? `${travel.safetyScore.toFixed(1)}/10`
+      : '—';
   const stats = [
-    { label: 'Best time', value: travel ? bestTimeLabel(travel.bestMonths) : '—' },
-    { label: 'Budget',    value: travel?.dailyBudget ?? '—' },
-    { label: 'Safety',    value: '—' },
+    {
+      label: 'Best time',
+      value: travel ? bestTimeLabel(travel.bestMonths) : '—',
+      dotColor: travel ? btDotColor : undefined,
+    },
+    { label: 'Budget', value: budgetDisplay },
+    { label: 'Safety', value: safetyDisplay },
   ];
 
   const subRow = [
@@ -369,7 +389,7 @@ function OverviewTab({
   colors: ThemeColors;
   catColor: string;
   resolved: { category: VisaCategory; days?: number; notes?: string };
-  stats: { label: string; value: string }[];
+  stats: { label: string; value: string; dotColor?: string }[];
   onPlanTrip: () => void;
 }) {
   return (
@@ -395,9 +415,51 @@ function OverviewTab({
         </Text>
       </View>
 
-      {/* Quick facts */}
+      {/* Quick facts — colored dot on Best Time, localized budget, safety score */}
       <SectionKicker style={{ marginBottom: 10 }}>QUICK FACTS</SectionKicker>
-      <StatStrip stats={stats} divided />
+      <View
+        style={{
+          flexDirection: 'row',
+          backgroundColor: colors.surfaceMuted,
+          borderRadius: 18,
+          overflow: 'hidden',
+        }}
+      >
+        {stats.map((s, i) => (
+          <View
+            key={s.label}
+            style={{
+              flex: 1,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              borderLeftWidth: i > 0 ? 1 : 0,
+              borderLeftColor: colors.line,
+            }}
+          >
+            <Text style={[Type.meta10_5, { color: colors.inkMute }]} numberOfLines={1}>
+              {s.label}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              {s.dotColor ? (
+                <View
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: s.dotColor,
+                  }}
+                />
+              ) : null}
+              <Text
+                style={[Type.title17, { color: colors.ink, fontSize: 16 }]}
+                numberOfLines={1}
+              >
+                {s.value}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
 
       {/* Primary CTA — replaces the old floating FAB */}
       <PillButton
