@@ -580,7 +580,7 @@ function TipsTab({
         }}
       >
         <SectionKicker color={colors.danger}>EMERGENCY</SectionKicker>
-        <View style={{ flexDirection: 'row', marginTop: 10, gap: 8 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 8 }}>
           {[
             { label: 'General', value: local.emergencyNumber },
             { label: 'Police', value: local.policeNumber },
@@ -589,16 +589,29 @@ function TipsTab({
           ].map((e) => (
             <View
               key={e.label}
+              // 2×2 grid: each tile takes half the row minus the gap.
               style={{
-                flex: 1,
+                flexBasis: '48%',
+                flexGrow: 1,
                 backgroundColor: colors.surfaceMuted,
                 borderRadius: Radius.md,
-                padding: 10,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                flexDirection: 'row',
                 alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
               }}
             >
-              <Text style={[Type.meta10_5, { color: colors.inkMute }]}>{e.label}</Text>
-              <Text style={[Type.title17, { color: colors.ink, marginTop: 2 }]}>{e.value}</Text>
+              <Text
+                style={[Type.meta10_5, { color: colors.inkMute, flexShrink: 1 }]}
+                numberOfLines={1}
+              >
+                {e.label}
+              </Text>
+              <Text style={[Type.title17, { color: colors.ink }]} numberOfLines={1}>
+                {e.value}
+              </Text>
             </View>
           ))}
         </View>
