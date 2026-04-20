@@ -163,13 +163,8 @@ export default function ExploreScreen() {
       });
   }, [dynamicVisaData, heldVisasSet, favorites, passports, residence]);
 
-  // Default selected: Japan (JPN) or first available
-  const defaultCode = useMemo(() => {
-    if (countries.find((c) => c.code === 'JPN')) return 'JPN';
-    return countries[0]?.code ?? '';
-  }, [countries]);
-
-  const [selectedCode, setSelectedCode] = useState<string>(defaultCode);
+  // No default selection — user picks via map, carousel, or list.
+  const [selectedCode, setSelectedCode] = useState<string>('');
 
   // When map taps a country (ISO-3), update selected
   const handleMapCountrySelect = useCallback((code: string) => {

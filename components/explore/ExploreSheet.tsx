@@ -71,9 +71,10 @@ export function ExploreSheet({
     }
   }, [selectedCode]);
 
-  // Featured country (selected or first)
+  // Featured country — only when the user has actively picked one.
+  // No hard-coded default; empty state shows a prompt instead.
   const featured = useMemo<CountryBrief | undefined>(
-    () => countries.find((c) => c.code === selectedCode) ?? countries[0],
+    () => (selectedCode ? countries.find((c) => c.code === selectedCode) : undefined),
     [countries, selectedCode],
   );
 
@@ -130,12 +131,31 @@ export function ExploreSheet({
         />
       </View>
 
-      {/* Featured card */}
+      {/* Featured card — or empty-state hint when nothing picked */}
       {featuredCardProps ? (
         <View style={styles.featuredWrapper}>
           <FeaturedCountryCard {...featuredCardProps} />
         </View>
-      ) : null}
+      ) : (
+        <View
+          style={[
+            styles.emptyState,
+            { backgroundColor: colors.surface, borderColor: colors.line },
+          ]}
+        >
+          <Text style={[Type.title15, { color: colors.ink, textAlign: 'center' }]}>
+            Tap a country to get started
+          </Text>
+          <Text
+            style={[
+              Type.body13,
+              { color: colors.inkMute, textAlign: 'center', marginTop: 6 },
+            ]}
+          >
+            Pick any country on the map, in the carousel above, or in the list below.
+          </Text>
+        </View>
+      )}
 
       {/* More destinations kicker */}
       <SectionKicker style={styles.moreSectionKicker}>
@@ -235,6 +255,15 @@ const styles = StyleSheet.create({
   featuredWrapper: {
     marginHorizontal: 22,
     marginBottom: 8,
+  },
+  emptyState: {
+    marginHorizontal: 22,
+    marginTop: 10,
+    marginBottom: 8,
+    paddingVertical: 22,
+    paddingHorizontal: 22,
+    borderRadius: 22,
+    borderWidth: 1,
   },
   moreSectionKicker: {
     paddingHorizontal: 22,
