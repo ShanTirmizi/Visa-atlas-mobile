@@ -12,6 +12,16 @@ export interface VisaBenefit {
   category: VisaCategory; // what category this upgrades to
   days?: number;
   notes?: string;
+  /** Visa fee, e.g. "$50", "€80", "Free". */
+  cost?: string;
+  /** Processing time, e.g. "3 days", "4 weeks", "15min". */
+  processingTime?: string;
+  /** Number of supporting documents, e.g. "7 docs". */
+  forms?: string;
+  /** Required passport validity at entry, e.g. "6m+", "3m+". */
+  passportValidity?: string;
+  /** Permitted entries, e.g. "single", "multi", "∞". */
+  entries?: string;
 }
 
 export interface CountryVisa {
@@ -25,6 +35,16 @@ export interface CountryVisa {
   usVisaBenefit?: boolean; // legacy compat — will be derived from visaBenefits
   visaBenefits?: Partial<Record<HeldVisaType, VisaBenefit>>; // benefits from holding other visas
   lastVerified?: string; // ISO date when this entry was last verified, e.g. "2026-03"
+  /** Visa fee, e.g. "$50", "€80", "Free". */
+  cost?: string;
+  /** Processing time, e.g. "3 days", "4 weeks", "15min". */
+  processingTime?: string;
+  /** Number of supporting documents, e.g. "7 docs". */
+  forms?: string;
+  /** Required passport validity at entry, e.g. "6m+", "3m+". */
+  passportValidity?: string;
+  /** Permitted entries, e.g. "single", "multi", "∞". */
+  entries?: string;
 }
 
 // Metadata for each visa type you can add
@@ -64,6 +84,8 @@ export const visaData: CountryVisa[] = [
     code: "NPL",
     category: "visa-free",
     notes: "No visa required for Indian citizens. Unlimited stay.",
+    passportValidity: "6m+",
+    entries: "∞",
   },
   {
     name: "Serbia",
@@ -71,6 +93,8 @@ export const visaData: CountryVisa[] = [
     category: "visa-free",
     days: 30,
     notes: "Visa-free for up to 30 days within a 12-month period.",
+    passportValidity: "6m+",
+    entries: "single",
   },
   {
     name: "Mauritius",
@@ -78,6 +102,8 @@ export const visaData: CountryVisa[] = [
     category: "visa-free",
     days: 90,
     notes: "Free visa on arrival. Must have return ticket and hotel booking.",
+    passportValidity: "6m+",
+    entries: "single",
   },
   {
     name: "Indonesia",
@@ -85,6 +111,8 @@ export const visaData: CountryVisa[] = [
     category: "visa-free",
     days: 30,
     notes: "Visa-free for tourism at designated ports. Can be extended once for another 30 days.",
+    passportValidity: "6m+",
+    entries: "single",
   },
   {
     name: "Tunisia",
@@ -183,6 +211,8 @@ export const visaData: CountryVisa[] = [
     category: "visa-free",
     days: 30,
     notes: "Visa waiver for 30 days. Can be extended for another 30 days.",
+    passportValidity: "6m+",
+    entries: "single",
   },
   {
     name: "Hong Kong",
@@ -207,6 +237,8 @@ export const visaData: CountryVisa[] = [
     days: 60,
     notes: "Visa-free for 60 days (updated late 2024). Must have passport valid 6 months, return ticket, and accommodation proof.",
     lastVerified: "2026-03",
+    passportValidity: "6m+",
+    entries: "single",
   },
   {
     name: "Cambodia",
@@ -214,6 +246,11 @@ export const visaData: CountryVisa[] = [
     category: "visa-on-arrival",
     days: 30,
     notes: "Tourist visa on arrival. Fee: $30. Need 1 passport photo.",
+    cost: "$30",
+    processingTime: "15min",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "1 photo",
   },
   {
     name: "Laos",
@@ -221,6 +258,11 @@ export const visaData: CountryVisa[] = [
     category: "visa-on-arrival",
     days: 30,
     notes: "Visa on arrival at international airports and select border crossings. Fee: $30–$42.",
+    cost: "$35",
+    processingTime: "20min",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "1 photo",
   },
   {
     name: "Maldives",
@@ -228,6 +270,10 @@ export const visaData: CountryVisa[] = [
     category: "visa-on-arrival",
     days: 30,
     notes: "Free visa on arrival for 30 days. Must have hotel booking and return ticket.",
+    cost: "Free",
+    processingTime: "10min",
+    passportValidity: "6m+",
+    entries: "single",
   },
   {
     name: "Seychelles",
@@ -249,6 +295,10 @@ export const visaData: CountryVisa[] = [
     category: "visa-on-arrival",
     days: 30,
     notes: "Visa on arrival at Queen Alia International Airport. Fee: 40 JOD. Jordan Pass recommended.",
+    cost: "40 JOD",
+    processingTime: "20min",
+    passportValidity: "6m+",
+    entries: "single",
   },
   {
     name: "Bolivia",
@@ -256,6 +306,11 @@ export const visaData: CountryVisa[] = [
     category: "visa-on-arrival",
     days: 90,
     notes: "Tourist visa on arrival at major airports. Fee: $52.",
+    cost: "$52",
+    processingTime: "30min",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "5 docs",
   },
   {
     name: "Ethiopia",
@@ -277,6 +332,11 @@ export const visaData: CountryVisa[] = [
     category: "visa-on-arrival",
     days: 90,
     notes: "Electronic Travel Authorization (eTA) required before travel. Fee: ~$30.",
+    cost: "$30",
+    processingTime: "3 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "3 docs",
   },
   {
     name: "Rwanda",
@@ -381,14 +441,14 @@ export const visaData: CountryVisa[] = [
   // ===== COUNTRIES UNLOCKABLE BY HELD VISAS =====
   // Base category = what Indian passport gets WITHOUT any other visa
   // The visaBenefitsMap handles upgrades when you hold US/Schengen/UK etc.
-  { name: "Mexico", code: "MEX", category: "visa-required", notes: "Visa required for Indian passport. With a valid US visa, you get visa-free entry up to 180 days.", lastVerified: "2026-03" },
+  { name: "Mexico", code: "MEX", category: "visa-required", notes: "Visa required for Indian passport. With a valid US visa, you get visa-free entry up to 180 days.", lastVerified: "2026-03", cost: "$45", processingTime: "10 days", passportValidity: "6m+", entries: "single", forms: "6 docs" },
   { name: "Panama", code: "PAN", category: "visa-required", notes: "Visa required. Unlocked with US visa." },
   { name: "Costa Rica", code: "CRI", category: "visa-required", notes: "Visa required. Unlocked with US visa (must have been used once)." },
-  { name: "Colombia", code: "COL", category: "visa-required", notes: "Visa required for Indian passport. With a valid US visa (B1/B2 or multiple-entry), you get visa-free entry up to 90 days.", lastVerified: "2026-03" },
+  { name: "Colombia", code: "COL", category: "visa-required", notes: "Visa required for Indian passport. With a valid US visa (B1/B2 or multiple-entry), you get visa-free entry up to 90 days.", lastVerified: "2026-03", cost: "$52", processingTime: "10 days", passportValidity: "6m+", entries: "single", forms: "5 docs" },
   { name: "Georgia", code: "GEO", category: "visa-required", notes: "Visa required. Unlocked with US or Schengen visa." },
   { name: "Albania", code: "ALB", category: "visa-required", notes: "Visa required. Unlocked with US or Schengen visa." },
   { name: "North Macedonia", code: "MKD", category: "visa-required", notes: "Visa required. Unlocked with US or Schengen visa." },
-  { name: "Philippines", code: "PHL", category: "visa-free", days: 14, notes: "Visa-free for 14 days (since June 2025). Passport must be valid 6 months. Need return ticket, hotel booking, proof of funds. Non-extendable.", lastVerified: "2026-03" },
+  { name: "Philippines", code: "PHL", category: "visa-free", days: 14, notes: "Visa-free for 14 days (since June 2025). Passport must be valid 6 months. Need return ticket, hotel booking, proof of funds. Non-extendable.", lastVerified: "2026-03", passportValidity: "6m+", entries: "single" },
   { name: "Turkey", code: "TUR", category: "visa-required", notes: "Visa required. eVisa available with US/Schengen/UK visa.", applyAt: "https://www.evisa.gov.tr" },
   { name: "South Korea", code: "KOR", category: "visa-required", notes: "Visa required. Transit tourism available with US visa.", restrictions: "Must be transiting — direct India-Korea flights may not qualify. Check K-ETA requirements." },
   { name: "Taiwan", code: "TWN", category: "visa-required", notes: "Visa required. Unlocked with US visa (used at least once)." },
@@ -408,6 +468,10 @@ export const visaData: CountryVisa[] = [
     category: "visa-on-arrival",
     days: 14,
     notes: "14-day visa on arrival. Can be extended. Also available as 30-day eVisa.",
+    cost: "Free",
+    processingTime: "10min",
+    passportValidity: "6m+",
+    entries: "single",
   },
   {
     name: "Singapore",
@@ -416,6 +480,11 @@ export const visaData: CountryVisa[] = [
     days: 30,
     notes: "eVisa required. US visa holders may get faster processing. Apply via Singapore's ICA website.",
     applyAt: "https://www.ica.gov.sg",
+    cost: "$30",
+    processingTime: "3 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "3 docs",
   },
 
   // ===== eVISA =====
@@ -426,6 +495,11 @@ export const visaData: CountryVisa[] = [
     days: 30,
     notes: "Electronic Travel Authorization (ETA). Fee: $50. Extendable to 90 days.",
     applyAt: "https://www.srilankaeta.gov.lk",
+    cost: "$50",
+    processingTime: "2 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "3 docs",
   },
   {
     name: "Myanmar",
@@ -434,6 +508,11 @@ export const visaData: CountryVisa[] = [
     days: 28,
     notes: "eVisa for tourism. Fee: $50. Takes 3 business days.",
     applyAt: "https://evisa.moip.gov.mm",
+    cost: "$50",
+    processingTime: "3 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "4 docs",
   },
   {
     name: "Vietnam",
@@ -442,6 +521,11 @@ export const visaData: CountryVisa[] = [
     days: 90,
     notes: "eVisa for 90 days single/multiple entry. Fee: $25.",
     applyAt: "https://evisa.xuatnhapcanh.gov.vn",
+    cost: "$25",
+    processingTime: "3 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "4 docs",
   },
   {
     name: "Malaysia",
@@ -450,6 +534,11 @@ export const visaData: CountryVisa[] = [
     days: 30,
     notes: "eNTRI (electronic travel registration) or eVisa. eNTRI free for 15 days; eVisa for 30 days.",
     applyAt: "https://www.windowmalaysia.my",
+    cost: "$25",
+    processingTime: "2 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "3 docs",
   },
   {
     name: "Azerbaijan",
@@ -482,6 +571,11 @@ export const visaData: CountryVisa[] = [
     days: 30,
     notes: "eVisa for tourism. Fee: $25 (single entry) / $60 (multiple entry).",
     applyAt: "https://visa2egypt.gov.eg",
+    cost: "$25",
+    processingTime: "7 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "3 docs",
   },
   {
     name: "Morocco",
@@ -490,6 +584,11 @@ export const visaData: CountryVisa[] = [
     days: 30,
     notes: "eVisa available. Apply online before travel.",
     applyAt: "https://www.acces-maroc.ma",
+    cost: "$10",
+    processingTime: "3 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "3 docs",
   },
   {
     name: "Uzbekistan",
@@ -522,6 +621,11 @@ export const visaData: CountryVisa[] = [
     days: 90,
     notes: "Visitor visa (subclass 600). Apply online. Processing: 1–4 weeks. Fee: AUD $195.",
     applyAt: "https://immi.homeaffairs.gov.au",
+    cost: "AUD $195",
+    processingTime: "1–4 weeks",
+    passportValidity: "6m+",
+    entries: "multi",
+    forms: "6 docs",
   },
   {
     name: "New Zealand",
@@ -530,6 +634,11 @@ export const visaData: CountryVisa[] = [
     days: 90,
     notes: "Visitor visa. Apply online. Processing: ~20 working days. Fee: NZD $211.",
     applyAt: "https://www.immigration.govt.nz",
+    cost: "NZD $211",
+    processingTime: "20 days",
+    passportValidity: "3m+",
+    entries: "single",
+    forms: "5 docs",
   },
   {
     name: "Russia",
@@ -585,6 +694,11 @@ export const visaData: CountryVisa[] = [
     days: 30,
     notes: "eVisa pilot available. Processing may take 5–10 days.",
     applyAt: "https://www.dha.gov.za",
+    cost: "$50",
+    processingTime: "10 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "5 docs",
   },
   {
     name: "Saudi Arabia",
@@ -593,6 +707,11 @@ export const visaData: CountryVisa[] = [
     days: 90,
     notes: "Tourist eVisa. Fee: SAR 440 (~$117). Multiple entry, valid 1 year.",
     applyAt: "https://visa.visitsaudi.com",
+    cost: "$117",
+    processingTime: "1 day",
+    passportValidity: "6m+",
+    entries: "multi",
+    forms: "3 docs",
   },
   {
     name: "Kuwait",
@@ -658,6 +777,11 @@ export const visaData: CountryVisa[] = [
     category: "visa-required",
     notes: "B1/B2 visa required. Unlocked when you hold a US visa.",
     applyAt: "https://ceac.state.gov/ceac",
+    cost: "$185",
+    processingTime: "3–8 weeks",
+    passportValidity: "6m+",
+    entries: "multi",
+    forms: "6 docs",
   },
   {
     name: "United Kingdom",
@@ -672,6 +796,11 @@ export const visaData: CountryVisa[] = [
     notes: "Temporary Resident Visa required. Fee: CAD $100. Processing: 4–8 weeks.",
     applyAt: "https://www.canada.ca/en/immigration-refugees-citizenship",
     restrictions: "Biometrics required. Apply online via IRCC.",
+    cost: "CAD $100",
+    processingTime: "4–8 weeks",
+    passportValidity: "6m+",
+    entries: "multi",
+    forms: "8 docs",
   },
   {
     name: "Germany",
@@ -680,6 +809,11 @@ export const visaData: CountryVisa[] = [
     notes: "Schengen visa required. Fee: €80. Apply through VFS Global.",
     applyAt: "https://india.diplo.de",
     restrictions: "Valid for all 27 Schengen countries. Must apply at country of main destination.",
+    cost: "€80",
+    processingTime: "15 days",
+    passportValidity: "3m+",
+    entries: "single",
+    forms: "8 docs",
   },
   {
     name: "France",
@@ -688,6 +822,11 @@ export const visaData: CountryVisa[] = [
     notes: "Schengen visa required. Fee: €80. Apply through VFS Global.",
     applyAt: "https://france-visas.gouv.fr",
     restrictions: "Up to 90 days in any 180-day period across Schengen area.",
+    cost: "€80",
+    processingTime: "15 days",
+    passportValidity: "3m+",
+    entries: "single",
+    forms: "8 docs",
   },
   {
     name: "Italy",
@@ -725,6 +864,11 @@ export const visaData: CountryVisa[] = [
     notes: "Tourist visa required. Free of charge. Processing: 4–5 working days.",
     applyAt: "https://www.in.emb-japan.go.jp",
     restrictions: "Apply through Japanese Embassy. No fee but must apply in person.",
+    cost: "Free",
+    processingTime: "5 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "5 docs",
   },
   {
     name: "China",
@@ -733,6 +877,11 @@ export const visaData: CountryVisa[] = [
     notes: "Tourist visa (L-visa) required. Fee: varies. Apply at Chinese Visa Application Center.",
     applyAt: "https://www.visaforchina.cn",
     restrictions: "144-hour transit visa exemption at select cities.",
+    cost: "$140",
+    processingTime: "4 weeks",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "7 docs",
   },
   {
     name: "Brazil",
@@ -740,6 +889,11 @@ export const visaData: CountryVisa[] = [
     category: "visa-required",
     notes: "Tourist visa required. Fee: ~$80. Apply at Brazilian Consulate.",
     applyAt: "https://formulario-mre.serpro.gov.br",
+    cost: "$80",
+    processingTime: "30 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "6 docs",
   },
   {
     name: "Argentina",
@@ -747,6 +901,11 @@ export const visaData: CountryVisa[] = [
     category: "visa-required",
     notes: "Tourist visa required. Apply at Argentine Consulate in India.",
     applyAt: "https://www.argentina.gob.ar",
+    cost: "$200",
+    processingTime: "20 days",
+    passportValidity: "6m+",
+    entries: "single",
+    forms: "6 docs",
   },
   {
     name: "Chile",
