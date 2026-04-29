@@ -28,12 +28,12 @@ import BackButton from '@/components/ui/BackButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { CircleBtn } from '@/components/ui/CircleBtn';
 import { SectionKicker } from '@/components/ui/SectionKicker';
+import { Squiggle } from '@/components/ui/Squiggle';
 
 // ── Trip Overview components ───────────────────────────────
 import { TripOverviewHero } from '@/components/trip/overview/TripOverviewHero';
 import { NextUpCard } from '@/components/trip/overview/NextUpCard';
 import { HighlightsStrip, type HighlightItem } from '@/components/trip/overview/HighlightsStrip';
-import { LocalEssentialsCard } from '@/components/trip/overview/LocalEssentialsCard';
 import { CountryTipsView } from '@/components/tips/CountryTipsView';
 
 // ── Bookings ───────────────────────────────────────────────
@@ -444,14 +444,6 @@ export default function TripDetailScreen() {
               onSeeAll={() => setActiveTab('Itinerary')}
             />
 
-            {/* Local essentials — emergency / language / currency / water.
-                "View all tips →" jumps to the Tips tab on this same screen
-                rather than routing out to country detail. */}
-            <LocalEssentialsCard
-              countryCode={trip.countryCode}
-              onViewAll={() => setActiveTab('Tips')}
-            />
-
             {/* AI chat — opens the conversational tweaker for the itinerary */}
             <Pressable
               onPress={() => router.push(`/chat/${id}` as never)}
@@ -525,14 +517,133 @@ export default function TripDetailScreen() {
           </Animated.View>
         )}
 
-        {/* ── Visa tab — same hero card used on country detail ── */}
+        {/* ── Visa tab — hero card + editorial framing + value cards ── */}
         {activeTab === 'Visa' && (() => {
           const country = staticVisaData.find((c) => c.code === trip.countryCode);
           if (!country) return null;
           const resolved = resolveCountry(country, heldVisasSet);
 
+          // Status-derived editorial copy.
+          const c = resolved.category;
+          const editorial = (() => {
+            if (c === 'visa-free' || c === 'home') {
+              return {
+                headerKicker: 'YOU’RE COVERED',
+                headerTitle: 'Set to go',
+                checklistTitle: 'Bring with you',
+                checklist: [
+                  'Passport with 6+ months validity',
+                  'Onward or return ticket',
+                  'Proof of accommodation',
+                ],
+                tipKicker: 'TRAVELLER’S TIP',
+                tipTitle: 'Pack light',
+                tipBody:
+                  'No paperwork to chase. Confirm passport validity once and you’re free to fly.',
+              };
+            }
+            if (c === 'visa-on-arrival') {
+              return {
+                headerKicker: 'PAY AT THE GATE',
+                headerTitle: 'Quick stop',
+                checklistTitle: 'Bring with you',
+                checklist: [
+                  'Passport with 6+ months validity',
+                  'Visa fee in fresh USD cash',
+                  '1–2 passport-size photos',
+                  'Return ticket and accommodation proof',
+                ],
+                tipKicker: 'TRAVELLER’S TIP',
+                tipTitle: 'Crisp bills only',
+                tipBody:
+                  'Visa-on-arrival counters reject torn or marked notes. Get fresh USD before you leave.',
+              };
+            }
+            if (c === 'evisa') {
+              return {
+                headerKicker: 'APPLY ONLINE',
+                headerTitle: 'Apply ahead',
+                checklistTitle: 'Bring with you',
+                checklist: [
+                  'Printed eVisa approval (don’t rely on your phone)',
+                  'Passport with 6+ months validity',
+                  'Proof of funds and accommodation',
+                ],
+                tipKicker: 'TRAVELLER’S TIP',
+                tipTitle: 'Print, don’t screenshot',
+                tipBody:
+                  'Some entry desks won’t accept a phone-screen eVisa. Bring a paper copy as a backup.',
+              };
+            }
+            return {
+              headerKicker: 'EMBASSY · IN PERSON',
+              headerTitle: 'Plan ahead',
+              checklistTitle: 'Before you book flights',
+              checklist: [
+                'Start the embassy application 4–6 weeks ahead',
+                'Gather supporting docs (bank, employer, itinerary)',
+                'Book biometrics + interview slot',
+                'Carry the physical visa with your passport',
+              ],
+              tipKicker: 'TRAVELLER’S TIP',
+              tipTitle: 'Don’t buy refundable',
+              tipBody:
+                'Hold off on flights until your visa is approved. Embassies sometimes ask for proof of paid bookings only at the very end.',
+            };
+          })();
+
           return (
             <Animated.View entering={tabSlideIn(tabDirection * 18)} style={styles.visaStub}>
+              {/* Editorial header — mono kicker + italic title with coral period */}
+              <View style={{ paddingHorizontal: 4, paddingTop: 6, marginBottom: 14 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.monoMedium,
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: colors.inkMute,
+                      letterSpacing: 11 * 0.22,
+                    }}
+                  >
+                    {editorial.headerKicker} · {trip.countryName.toUpperCase()}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.display,
+                    fontSize: 26,
+                    fontWeight: '500',
+                    lineHeight: 30,
+                    letterSpacing: -26 * 0.022,
+                    color: colors.ink,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    {editorial.headerTitle}
+                  </Text>
+                  <Text style={{ color: colors.coral }}>.</Text>
+                </Text>
+                <Squiggle
+                  width={64}
+                  color={colors.coral}
+                  style={{ marginTop: 6 }}
+                />
+              </View>
+
+              {/* Visa hero card */}
               <VisaHeroCardForCountry
                 country={country}
                 category={resolved.category}
@@ -542,22 +653,212 @@ export default function TripDetailScreen() {
                 onCreateGuide={handleStartVisaApplication}
               />
 
-              {/* "Visiting" row — flag + italic country name. Tap to drill into country detail. */}
+              {/* Bring-with-you checklist — paper card, coral check bullets */}
+              <View
+                style={{
+                  marginTop: 14,
+                  backgroundColor: colors.surface,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  padding: 18,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.monoMedium,
+                      fontSize: 10,
+                      fontWeight: '700',
+                      color: colors.inkMute,
+                      letterSpacing: 10 * 0.22,
+                    }}
+                  >
+                    PRE-FLIGHT CHECKLIST
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.display,
+                    fontSize: 22,
+                    fontWeight: '500',
+                    lineHeight: 26,
+                    letterSpacing: -22 * 0.022,
+                    color: colors.ink,
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    {editorial.checklistTitle}
+                  </Text>
+                  <Text style={{ color: colors.coral }}>.</Text>
+                </Text>
+                <View style={{ gap: 10 }}>
+                  {editorial.checklist.map((item) => (
+                    <View
+                      key={item}
+                      style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}
+                    >
+                      <View
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: 9,
+                          backgroundColor: colors.coralBg,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginTop: 2,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: 3.5,
+                            backgroundColor: colors.coralDeep,
+                          }}
+                        />
+                      </View>
+                      <Text
+                        style={{
+                          flex: 1,
+                          fontFamily: FontFamily.regular,
+                          fontSize: 14,
+                          lineHeight: 21,
+                          color: colors.inkSoft,
+                        }}
+                      >
+                        {item}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {/* Traveller's tip — dark ink editorial card with quote glyph */}
+              <View
+                style={{
+                  marginTop: 12,
+                  backgroundColor: colors.ink,
+                  borderRadius: 18,
+                  padding: 20,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                      fontSize: 22,
+                      lineHeight: 22,
+                      color: colors.coral,
+                      marginTop: -4,
+                    }}
+                  >
+                    “
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.monoMedium,
+                      fontSize: 10,
+                      fontWeight: '700',
+                      color: colors.coral,
+                      letterSpacing: 10 * 0.22,
+                    }}
+                  >
+                    {editorial.tipKicker}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.display,
+                    fontSize: 22,
+                    fontWeight: '500',
+                    lineHeight: 26,
+                    letterSpacing: -22 * 0.022,
+                    color: '#FFFFFF',
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    {editorial.tipTitle}
+                  </Text>
+                  <Text style={{ color: colors.coral }}>.</Text>
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.regular,
+                    fontSize: 14,
+                    lineHeight: 21,
+                    color: 'rgba(255,255,255,0.78)',
+                  }}
+                >
+                  {editorial.tipBody}
+                </Text>
+              </View>
+
+              {/* Country deep-dive link — replaces the plain Visiting row */}
               <Pressable
                 onPress={() => router.push(`/country/${trip.countryCode}` as const)}
                 style={({ pressed }) => [
                   styles.visitingRow,
                   {
+                    marginTop: 12,
                     backgroundColor: colors.surface,
                     borderColor: colors.line,
                     opacity: pressed ? 0.85 : 1,
                   },
                 ]}
+                accessibilityRole="link"
+                accessibilityLabel={`View ${trip.countryName} country page`}
               >
-                <Globe size={20} color={colors.inkSoft} />
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: colors.tealBg,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Globe size={18} color={colors.teal} />
+                </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[Type.body13, { color: colors.inkMute, fontSize: 12 }]}>
-                    Visiting
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.monoMedium,
+                      fontSize: 10,
+                      fontWeight: '700',
+                      color: colors.inkMute,
+                      letterSpacing: 10 * 0.22,
+                    }}
+                  >
+                    COUNTRY DEEP-DIVE
                   </Text>
                   <Text
                     style={{
@@ -567,12 +868,23 @@ export default function TripDetailScreen() {
                       fontWeight: '500',
                       color: colors.ink,
                       letterSpacing: -16 * 0.012,
-                      marginTop: 1,
+                      marginTop: 2,
                     }}
                   >
                     {trip.countryName}
+                    <Text style={{ color: colors.coral }}>.</Text>
                   </Text>
                 </View>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 13,
+                    color: colors.coral,
+                  }}
+                >
+                  Open →
+                </Text>
               </Pressable>
             </Animated.View>
           );
