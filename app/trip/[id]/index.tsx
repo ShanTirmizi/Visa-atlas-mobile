@@ -33,6 +33,7 @@ import { SectionKicker } from '@/components/ui/SectionKicker';
 import { TripOverviewHero } from '@/components/trip/overview/TripOverviewHero';
 import { NextUpCard } from '@/components/trip/overview/NextUpCard';
 import { HighlightsStrip, type HighlightItem } from '@/components/trip/overview/HighlightsStrip';
+import { LocalEssentialsCard } from '@/components/trip/overview/LocalEssentialsCard';
 
 // ── Bookings ───────────────────────────────────────────────
 import { BookingTimeline } from '@/components/trip/bookings/BookingTimeline';
@@ -441,6 +442,10 @@ export default function TripDetailScreen() {
               items={highlights}
               onSeeAll={() => setActiveTab('Itinerary')}
             />
+
+            {/* Local essentials — emergency / language / currency / water,
+                routes to country detail Tips tab for the full breakdown */}
+            <LocalEssentialsCard countryCode={trip.countryCode} />
 
             {/* AI chat — opens the conversational tweaker for the itinerary */}
             <Pressable

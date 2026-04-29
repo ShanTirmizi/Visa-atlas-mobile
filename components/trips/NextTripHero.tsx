@@ -17,6 +17,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
 import { FontFamily } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import { Photo } from '@/components/ui/Photo';
@@ -98,7 +99,7 @@ function countdownParts(startDate: string | undefined): { d: number; h: number }
 }
 
 function formatFlightCaption(flightHours: number | undefined): string {
-  if (!flightHours) return '1 stop · 2h 00m';
+  if (!flightHours || flightHours <= 0) return '';
   const h = Math.floor(flightHours);
   const m = Math.round((flightHours - h) * 60);
   const stops = flightHours > 4 ? '1 stop' : 'direct';
@@ -115,8 +116,17 @@ function visaLabel(category: string): string {
 
 function parseDailyBudget(raw: string | undefined): number {
   if (!raw) return 0;
-  const n = parseFloat(raw.replace(/[^0-9.]/g, ''));
-  return isNaN(n) ? 0 : n;
+  // Pull every standalone number out of the string. A common AI output is
+  // "£150-200/day" — naively stripping non-digits gives "150200". Instead
+  // we grab the numbers individually and average a range, or take the lone
+  // value when it isn't a range.
+  const matches = raw.match(/\d+(?:\.\d+)?/g);
+  if (!matches || matches.length === 0) return 0;
+  const nums = matches.map(parseFloat).filter((n) => !isNaN(n) && n > 0);
+  if (nums.length === 0) return 0;
+  if (nums.length === 1) return nums[0];
+  // Range — average the first two.
+  return (nums[0] + nums[1]) / 2;
 }
 
 function budgetPct(
@@ -247,6 +257,7 @@ export function NextTripHero({
 }: NextTripHeroProps) {
   const { colors } = useTheme();
   const router = useRouter();
+  const { residence } = useVisa();
 
   const imageUri = parseHeroImage(heroImage);
   const monoDate = formatMonoDateRange(startDate, endDate, duration);
@@ -257,8 +268,12 @@ export function NextTripHero({
   const head = name && name !== countryName ? `${name}, ` : '';
   const tail = countryName || name || '';
 
-  // IATA: use trip iataCode falling back to a 3-char uppercase slice
-  const destIata = (iataCode || countryCode || 'DST').toUpperCase().slice(0, 3);
+  // Origin / destination labels for the flight strip — use ISO-2 country
+  // codes (e.g. "AT" → "US") rather than airport IATAs the user may not
+  // recognize. Origin comes from the user's saved residence; destination
+  // is the trip country.
+  const fromCode = residence ? toAlpha2(residence) || residence.slice(0, 2).toUpperCase() : '';
+  const toCode = alpha2 || (countryCode || '').slice(0, 2).toUpperCase();
   const flightCaption = formatFlightCaption(flightHours);
 
   // Budget card
@@ -375,8 +390,8 @@ export function NextTripHero({
         <FlightPath
           width={300}
           height={52}
-          from="VIE"
-          to={destIata}
+          from={fromCode || '—'}
+          to={toCode || '—'}
           caption={flightCaption}
         />
       </View>
