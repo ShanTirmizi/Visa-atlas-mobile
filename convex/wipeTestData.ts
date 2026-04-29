@@ -1,4 +1,4 @@
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 export const wipeAll = internalMutation({
@@ -11,6 +11,68 @@ export const wipeAll = internalMutation({
         await ctx.db.delete(doc._id);
       }
     }
+  },
+});
+
+/** Diagnostic — list all authAccounts + whether their userId still exists. */
+export const inspectAuthAccounts = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const accounts = await ctx.db.query("authAccounts").collect();
+    const result: Array<{
+      _id: string;
+      provider: string;
+      providerAccountId: string;
+      userId: string | null;
+      userExists: boolean;
+      userEmail: string | null;
+    }> = [];
+    for (const a of accounts) {
+      const acc = a as {
+        _id: string;
+        provider: string;
+        providerAccountId: string;
+        userId?: string;
+      };
+      let userExists = false;
+      let userEmail: string | null = null;
+      if (acc.userId) {
+        const u = await ctx.db.get(acc.userId as never);
+        userExists = !!u;
+        if (u && (u as { email?: string }).email) {
+          userEmail = (u as { email: string }).email;
+        }
+      }
+      result.push({
+        _id: acc._id,
+        provider: acc.provider,
+        providerAccountId: acc.providerAccountId,
+        userId: acc.userId ?? null,
+        userExists,
+        userEmail,
+      });
+    }
+    return result;
+  },
+});
+
+/** Wipes EVERY orphan account in one shot. Safe — only deletes accounts whose
+ *  user doc is missing. */
+export const wipeAllOrphanAccounts = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const accounts = await ctx.db.query("authAccounts").collect();
+    let removed = 0;
+    for (const a of accounts) {
+      const acc = a as { _id: string; userId?: string };
+      if (!acc.userId) continue;
+      const user = await ctx.db.get(acc.userId as never);
+      if (!user) {
+        await ctx.db.delete(acc._id as never);
+        removed++;
+      }
+    }
+    return { removed };
   },
 });
 
@@ -27,8 +89,6 @@ export const wipeAuthAccountByEmail = internalMutation({
   handler: async (ctx, { email }) => {
     const lower = email.trim().toLowerCase();
 
-    // Find authAccounts rows tied to this email — providerAccountId is the
-    // email for the password / resend-otp providers.
     const accounts = await ctx.db
       .query("authAccounts")
       .filter((q) => q.eq(q.field("providerAccountId"), lower))
@@ -45,7 +105,6 @@ export const wipeAuthAccountByEmail = internalMutation({
       removedAccounts++;
     }
 
-    // Wipe sessions + refresh tokens that point at this user.
     let removedSessions = 0;
     let removedRefresh = 0;
     if (userId) {
@@ -68,7 +127,6 @@ export const wipeAuthAccountByEmail = internalMutation({
         removedSessions++;
       }
 
-      // Remove the user doc itself if it still exists.
       const stillThere = await ctx.db.get(userId as never);
       if (stillThere) await ctx.db.delete(userId as never);
     }
