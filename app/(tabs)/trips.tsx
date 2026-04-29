@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import { tabSlideIn } from '@/utils/tabAnimation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useConvexAuth } from 'convex/react';
@@ -13,18 +14,19 @@ import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
-import { Shadows } from '@/constants/theme';
+import { FontFamily } from '@/constants/theme';
 
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { SectionKicker } from '@/components/ui/SectionKicker';
-import { PillButton } from '@/components/ui/PillButton';
-import { FontFamily } from '@/constants/theme';
 
 import { TripsGreeting } from '@/components/trips/TripsGreeting';
 import { TripsSearch } from '@/components/trips/TripsSearch';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
-import { FeaturedTripCard } from '@/components/trips/FeaturedTripCard';
+import { NextTripHero } from '@/components/trips/NextTripHero';
 import { TripRow } from '@/components/trips/TripRow';
+import { EmptyAtlasCard } from '@/components/trips/EmptyAtlasCard';
+import { HandPickedCard } from '@/components/trips/HandPickedCard';
+import type { HandPickedTone } from '@/components/trips/HandPickedCard';
 
 import TripPlannerSheet, {
   type TripPlannerSheetRef,
@@ -49,9 +51,28 @@ interface RawTrip {
   endDate?: string;
   heroImage?: string;
   starred?: boolean;
+  iataCode?: string;
+  flightHours?: number;
+  dailyBudget?: string;
   _creationTime: number;
   [key: string]: unknown;
 }
+
+// ──────────────────────────────────────────────
+// Hand-picked destination tiles
+// ──────────────────────────────────────────────
+interface HandPickedDest {
+  code: string;
+  name: string;
+  tag: string;
+  tone: HandPickedTone;
+}
+
+const HAND_PICKED: HandPickedDest[] = [
+  { code: 'JPN', name: 'Tokyo',  tag: 'CHERRY · APR', tone: 'plum'  },
+  { code: 'IDN', name: 'Bali',   tag: 'BEACH · DRY',  tone: 'amber' },
+  { code: 'PRT', name: 'Lisbon', tag: 'COAST · OCT',  tone: 'teal'  },
+];
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -76,7 +97,6 @@ function applyFilter(trips: RawTrip[], filter: FilterTab): RawTrip[] {
 }
 
 // Stub country for TripPlannerSheet when there's no country context.
-// The sheet guard `if (!country || ...) return` prevents any actual API call.
 const STUB_COUNTRY: CountryVisa = {
   name: '',
   code: '',
@@ -84,32 +104,67 @@ const STUB_COUNTRY: CountryVisa = {
 };
 
 // ──────────────────────────────────────────────
-// Empty state
+// Empty state — premium version
 // ──────────────────────────────────────────────
-function EmptyState({ onPlan }: { onPlan: () => void }) {
+function EmptyStateContent({
+  onPlan,
+  onBrowse,
+}: {
+  onPlan: () => void;
+  onBrowse: () => void;
+}) {
   const { colors } = useTheme();
+  const router = useRouter();
+
   return (
-    <View
-      style={[
-        {
+    <>
+      {/* Dashed-border atlas card */}
+      <EmptyAtlasCard onPlan={onPlan} onBrowse={onBrowse} />
+
+      {/* "Try one of these" section header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
           marginHorizontal: 22,
-          marginTop: 24,
-          borderRadius: 22,
-          backgroundColor: colors.surface,
-          paddingHorizontal: 24,
-          paddingVertical: 36,
-          alignItems: 'center',
-          gap: 12,
-        },
-        Shadows.subtle,
-      ]}
-    >
-      <SectionKicker>No trips yet</SectionKicker>
-      <Text style={[Type.body14, { color: colors.inkMute, textAlign: 'center' }]}>
-        Plan your first adventure
-      </Text>
-      <PillButton label="Plan a trip" onPress={onPlan} style={{ marginTop: 4 }} />
-    </View>
+          marginTop: 28,
+          marginBottom: 14,
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: FontFamily.displayItalic,
+            fontStyle: 'italic',
+            fontWeight: '500',
+            fontSize: 20,
+            letterSpacing: -20 * 0.018,
+            color: colors.ink,
+          }}
+        >
+          Try one of these
+        </Text>
+        <SectionKicker color={colors.coral}>HAND-PICKED</SectionKicker>
+      </View>
+
+      {/* Horizontal scroll of destination tiles */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 22, gap: 10 }}
+      >
+        {HAND_PICKED.map((dest) => (
+          <HandPickedCard
+            key={dest.code}
+            countryCode={dest.code}
+            name={dest.name}
+            tag={dest.tag}
+            tone={dest.tone}
+            onPress={() => router.push(`/country/${dest.code}` as never)}
+          />
+        ))}
+      </ScrollView>
+    </>
   );
 }
 
@@ -119,6 +174,7 @@ function EmptyState({ onPlan }: { onPlan: () => void }) {
 export default function TripsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   // Planner sheet ref — used from search AI pill and empty state CTA
   const plannerRef = useRef<TripPlannerSheetRef>(null);
@@ -201,38 +257,41 @@ export default function TripsScreen() {
   // ── Empty ────────────────────────────────────────
   if (trips.length === 0) {
     return (
-      <ScrollView
-        style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={{
-          paddingTop: insets.top + 12,
-          paddingBottom: insets.bottom + 110,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        <TripsGreeting />
-        <View style={{ marginTop: 16 }}>
-          <TripsSearch plannerRef={plannerRef} value={search} onChangeText={setSearch} />
-        </View>
-        <View style={{ marginTop: 14, paddingHorizontal: 22 }}>
-          <SegmentedControl
-            options={FILTER_OPTIONS}
-            value={filter}
-            onChange={(v: string) => setFilter(v as FilterTab)}
-            variant="pill"
-          />
-        </View>
-        <EmptyState onPlan={() => plannerRef.current?.present()} />
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingTop: insets.top + 12,
+            paddingBottom: insets.bottom + 110,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Greeting header */}
+          <TripsGreeting />
 
-        <TripPlannerSheet
-          ref={plannerRef}
-          country={STUB_COUNTRY}
-          meta={null}
-          travel={null}
-          resolved={{ category: 'visa-required' }}
-          heldVisas={new Set()}
-          onTripCreated={() => {}}
-        />
-      </ScrollView>
+          {/* Search + AI plan pill */}
+          <View style={{ marginTop: 16 }}>
+            <TripsSearch plannerRef={plannerRef} value={search} onChangeText={setSearch} />
+          </View>
+
+          {/* Empty state: dashed card + hand-picked row */}
+          <EmptyStateContent
+            onPlan={() => plannerRef.current?.present()}
+            onBrowse={() => router.push('/(tabs)/explore' as never)}
+          />
+
+          <TripPlannerSheet
+            ref={plannerRef}
+            country={STUB_COUNTRY}
+            meta={null}
+            travel={null}
+            resolved={{ category: 'visa-required' }}
+            heldVisas={new Set()}
+            onTripCreated={() => {}}
+          />
+        </ScrollView>
+        <TopSafeAreaBlur />
+      </View>
     );
   }
 
@@ -265,10 +324,10 @@ export default function TripsScreen() {
         />
       </View>
 
-      {/* 4. Featured hero card */}
+      {/* 4. Featured hero — NextTripHero (4-block composition) */}
       {featured && (
         <View style={{ marginTop: 16 }}>
-          <FeaturedTripCard
+          <NextTripHero
             id={featured._id}
             name={featured.countryName}
             countryName={featured.countryName}
@@ -279,6 +338,10 @@ export default function TripsScreen() {
             duration={featured.duration}
             heroImage={featured.heroImage}
             status={featured.status}
+            iataCode={featured.iataCode}
+            flightHours={featured.flightHours}
+            dailyBudget={featured.dailyBudget}
+            loggedCost={0}
           />
         </View>
       )}
