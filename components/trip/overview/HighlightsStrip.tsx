@@ -1,15 +1,17 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Photo, type PhotoTone } from '@/components/ui/Photo';
 import { Type } from '@/constants/typography';
+import { FontFamily } from '@/constants/theme';
 import { useTheme } from '@/contexts/theme-context';
+import { Section } from '@/components/ui/Section';
 
 export interface HighlightItem {
   label: string;
   dayStamp: string;
   imageUri?: string;
   tone?: PhotoTone;
+  onPress?: () => void;
 }
 
 interface HighlightsStripProps {
@@ -25,73 +27,102 @@ export function HighlightsStrip({ items, onSeeAll }: HighlightsStripProps) {
   if (items.length === 0) return null;
 
   return (
-    <View style={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 110 }}>
-      {/* Title row */}
-      <View style={styles.titleRow}>
-        <Text style={[Type.title14, { color: colors.ink }]}>Highlights</Text>
-        <Pressable onPress={onSeeAll ?? undefined} hitSlop={8}>
-          <Text style={[Type.body12_5, { color: colors.inkMute }]}>See all</Text>
-        </Pressable>
+    <View style={{ paddingTop: 18, paddingBottom: 110 }}>
+      {/* Editorial header */}
+      <View style={styles.headerRow}>
+        <Section
+          kicker="HIGHLIGHTS"
+          title="What's planned"
+          squiggleWidth={90}
+          size="md"
+        />
+        {onSeeAll ? (
+          <Pressable onPress={onSeeAll} hitSlop={8}>
+            <Text
+              style={[
+                Type.kickerSm,
+                { color: colors.teal, fontSize: 10, letterSpacing: 0.4 },
+              ]}
+            >
+              SEE ALL
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
-      {/* Card strip — 3 flex-1 cards side by side */}
-      <View style={styles.strip}>
-        {items.slice(0, 3).map((item, idx) => (
-          <View key={idx} style={styles.cardWrapper}>
+      {/* Card strip — horizontal scroll */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}
+      >
+        {items.slice(0, 6).map((item, idx) => (
+          <Pressable
+            key={idx}
+            onPress={item.onPress}
+            style={({ pressed }) => [
+              styles.card,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.line,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
             <Photo
               uri={item.imageUri}
               tone={item.tone ?? TONES[idx % TONES.length]}
-              radius={20}
-              style={styles.card}
-            >
-              {/* Bottom-dark gradient overlay */}
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.62)']}
-                locations={[0.3, 1]}
-                style={StyleSheet.absoluteFillObject}
-                pointerEvents="none"
-              />
-              {/* Bottom content */}
-              <View style={styles.cardContent}>
-                <Text style={[Type.kickerSm, { color: 'rgba(255,255,255,0.60)' }]}>
-                  {item.dayStamp}
-                </Text>
-                <Text style={[Type.title14, { color: '#FFFFFF' }]} numberOfLines={2}>
-                  {item.label}
-                </Text>
-              </View>
-            </Photo>
-          </View>
+              radius={0}
+              style={styles.cardPhoto}
+            />
+            <View style={styles.cardBody}>
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 13,
+                  fontWeight: '500',
+                  color: colors.ink,
+                }}
+                numberOfLines={1}
+              >
+                {item.label}
+              </Text>
+              <Text
+                style={[
+                  Type.kickerSm,
+                  { color: colors.inkMute, marginTop: 2, fontSize: 9 },
+                ]}
+              >
+                {item.dayStamp}
+              </Text>
+            </View>
+          </Pressable>
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleRow: {
+  headerRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingHorizontal: 20,
     marginBottom: 10,
   },
-  strip: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  cardWrapper: {
-    flex: 1,
-    minWidth: 0, // allow shrink
-  },
   card: {
-    height: 130,
+    width: 130,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  cardContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  cardPhoto: {
+    width: '100%',
+    height: 86,
+  },
+  cardBody: {
     padding: 10,
-    gap: 2,
   },
 });

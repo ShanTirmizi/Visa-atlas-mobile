@@ -10,6 +10,7 @@ interface PillButtonProps {
   icon?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   fullWidth?: boolean;
+  disabled?: boolean;
 }
 
 // Spec: primary = ink bg + white text, soft = surfaceMuted bg + ink text,
@@ -21,6 +22,7 @@ export function PillButton({
   icon,
   style,
   fullWidth = false,
+  disabled = false,
 }: PillButtonProps) {
   const { colors } = useTheme();
 
@@ -34,8 +36,9 @@ export function PillButton({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
       style={({ pressed }) => [
         {
           flexDirection: 'row',
@@ -46,7 +49,7 @@ export function PillButton({
           borderRadius: 999,
           paddingVertical: 14,
           paddingHorizontal: 20,
-          opacity: pressed ? 0.88 : 1,
+          opacity: disabled ? 0.45 : pressed ? 0.88 : 1,
           ...(fullWidth ? { alignSelf: 'stretch' } : {}),
         },
         style,

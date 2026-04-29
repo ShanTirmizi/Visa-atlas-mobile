@@ -3,9 +3,9 @@ import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Sun, MapPin } from 'lucide-react-native';
 import { Photo } from '@/components/ui/Photo';
-import { GlassPill } from '@/components/ui/GlassPill';
 import { Type } from '@/constants/typography';
-import { Shadows } from '@/constants/theme';
+import { Shadows, FontFamily } from '@/constants/theme';
+import { useTheme } from '@/contexts/theme-context';
 
 interface TripOverviewHeroProps {
   tripName: string;
@@ -18,47 +18,101 @@ export function TripOverviewHero({
   tripName,
   cityName,
   heroImageUrl,
-  duration,
 }: TripOverviewHeroProps) {
-  const durationLabel = duration ? `${duration}-day itinerary` : 'Itinerary';
+  const { colors } = useTheme();
+
+  // Pull last word out for italic emphasis ("Indonesia." → italic period)
+  const words = tripName.split(/\s+/);
+  const head = words.slice(0, -1).join(' ');
+  const tail = words.length > 1 ? words[words.length - 1] : tripName;
 
   return (
     <View style={[styles.container, Shadows.card]}>
       <Photo
         uri={heroImageUrl}
         tone="sunset"
-        radius={26}
+        radius={22}
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Bottom-dark gradient: covers 75% from bottom, transparent above 40% */}
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.72)']}
-        locations={[0, 0.4, 1]}
+        colors={['rgba(0,0,0,0.18)', 'transparent', 'rgba(0,0,0,0.58)']}
+        locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFillObject}
         pointerEvents="none"
       />
 
-      {/* Top-right: weather pill */}
-      <View style={styles.topRight}>
-        <GlassPill icon={<Sun size={13} color="#FFFFFF" />}>
-          21° Sunny
-        </GlassPill>
-      </View>
-
-      {/* Bottom row: left content + right city pill */}
-      <View style={styles.bottomRow}>
-        <View style={styles.bottomLeft}>
-          <Text style={[Type.kickerSm, styles.kickerText]}>
-            {durationLabel}
-          </Text>
-          <Text style={[Type.display24, styles.tripNameText]} numberOfLines={2}>
-            {tripName}
+      {/* Top-left: warm white weather pill with coral sun */}
+      <View style={styles.topLeft}>
+        <View style={styles.weatherPill}>
+          <Sun size={12} color={colors.coral} fill={colors.coral} />
+          <Text
+            style={{
+              fontFamily: FontFamily.semibold,
+              fontSize: 11,
+              fontWeight: '600',
+              color: colors.ink,
+            }}
+          >
+            21°C · clear
           </Text>
         </View>
-        <GlassPill icon={<MapPin size={12} color="#FFFFFF" />}>
-          {cityName}
-        </GlassPill>
+      </View>
+
+      {/* Top-right: glass city pill */}
+      <View style={styles.topRight}>
+        <View style={styles.cityPill}>
+          <MapPin size={12} color="#FFFFFF" />
+          <Text
+            style={{
+              fontFamily: FontFamily.semibold,
+              fontSize: 11,
+              fontWeight: '600',
+              color: '#FFFFFF',
+            }}
+          >
+            {cityName}
+          </Text>
+        </View>
+      </View>
+
+      {/* Bottom: kicker + italic destination + coral period */}
+      <View style={styles.bottom}>
+        <Text
+          style={{
+            fontFamily: FontFamily.monoMedium,
+            fontSize: 9,
+            fontWeight: '700',
+            letterSpacing: 1.62,
+            color: 'rgba(255,255,255,0.92)',
+            textTransform: 'uppercase',
+          }}
+        >
+          YOUR DESTINATION
+        </Text>
+        <Text
+          style={{
+            fontFamily: FontFamily.display,
+            fontSize: 30,
+            fontWeight: '500',
+            letterSpacing: -30 * 0.02,
+            color: '#FFFFFF',
+            marginTop: 2,
+            lineHeight: 32,
+          }}
+          numberOfLines={2}
+        >
+          {head ? `${head} ` : ''}
+          <Text
+            style={{
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+            }}
+          >
+            {tail}
+          </Text>
+          <Text style={{ color: colors.coral }}>.</Text>
+        </Text>
       </View>
     </View>
   );
@@ -66,36 +120,44 @@ export function TripOverviewHero({
 
 const styles = StyleSheet.create({
   container: {
-    height: 220,
-    borderRadius: 26,
+    height: 210,
+    borderRadius: 22,
     overflow: 'hidden',
-    marginHorizontal: 22,
+    marginHorizontal: 16,
     marginBottom: 14,
+  },
+  topLeft: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
   },
   topRight: {
     position: 'absolute',
-    top: 14,
-    right: 14,
+    top: 12,
+    right: 12,
   },
-  bottomRow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 18,
+  weatherPill: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
-  bottomLeft: {
-    flex: 1,
-    gap: 2,
-    marginRight: 10,
+  cityPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  kickerText: {
-    color: 'rgba(255,255,255,0.75)',
-  },
-  tripNameText: {
-    color: '#FFFFFF',
+  bottom: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    right: 14,
   },
 });

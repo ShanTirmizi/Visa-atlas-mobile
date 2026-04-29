@@ -2,20 +2,22 @@ import React, { useMemo } from 'react';
 import {
   View,
   Text,
+  Pressable,
   StyleSheet,
   ScrollView,
   ImageBackground,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Pencil, Sparkles } from 'lucide-react-native';
+import { FontFamily } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CircleBtn } from '@/components/ui/CircleBtn';
-import { GlassPill } from '@/components/ui/GlassPill';
 import { Photo, type PhotoTone } from '@/components/ui/Photo';
 import { StopList, type Stop } from '@/components/trip/day/StopList';
 import { PullQuote } from '@/components/trip/day/PullQuote';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
+import { Squiggle } from '@/components/ui/Squiggle';
 
 export interface DayDetailDay {
   day: number;
@@ -46,7 +48,10 @@ interface DayDetailScreenProps {
   tripStartDate?: string;
   onBack: () => void;
   onShare: () => void;
+  onEdit?: () => void;
   onNavigateDay: (newIndex: number) => void;
+  /** Open AI chat scoped to this specific day. */
+  onTweakWithAI?: () => void;
 }
 
 const HERO_HEIGHT = 280;
@@ -103,6 +108,10 @@ function buildStops(day: DayDetailDay, morningImg: ActivityImage, afternoonImg: 
     stops.push({
       title: day.morningPlace ?? day.morning.split('.')[0].trim().slice(0, 50),
       meta: 'Morning',
+      timeLabel: '09:30',
+      detail: day.morning.split('.')[0].trim() === (day.morningPlace ?? '')
+        ? undefined
+        : day.morning.split('.')[0].trim(),
       thumbUri: morningImg?.thumb || morningImg?.url,
     });
   }
@@ -110,6 +119,10 @@ function buildStops(day: DayDetailDay, morningImg: ActivityImage, afternoonImg: 
     stops.push({
       title: day.afternoonPlace ?? day.afternoon.split('.')[0].trim().slice(0, 50),
       meta: 'Afternoon',
+      timeLabel: '13:00',
+      detail: day.afternoon.split('.')[0].trim() === (day.afternoonPlace ?? '')
+        ? undefined
+        : day.afternoon.split('.')[0].trim(),
       thumbUri: afternoonImg?.thumb || afternoonImg?.url,
     });
   }
@@ -117,6 +130,10 @@ function buildStops(day: DayDetailDay, morningImg: ActivityImage, afternoonImg: 
     stops.push({
       title: day.eveningPlace ?? day.evening.split('.')[0].trim().slice(0, 50),
       meta: 'Evening',
+      timeLabel: '18:30',
+      detail: day.evening.split('.')[0].trim() === (day.eveningPlace ?? '')
+        ? undefined
+        : day.evening.split('.')[0].trim(),
       thumbUri: eveningImg?.thumb || eveningImg?.url,
     });
   }
@@ -161,6 +178,9 @@ function DayDetailScreen({
   destination,
   tripStartDate,
   onBack,
+  onEdit,
+  onNavigateDay,
+  onTweakWithAI,
 }: DayDetailScreenProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -212,33 +232,115 @@ function DayDetailScreen({
             <ChevronLeft size={20} color={colors.ink} strokeWidth={2.2} />
           </CircleBtn>
 
-          <GlassPill>{`Day ${dayIndex + 1} of ${numDays}`}</GlassPill>
+          {/* Day navigator — chevron buttons flank the count, all in one
+              glass pill so it reads as a single widget. Edge chevrons fade
+              when there's no further day in that direction. */}
+          <View style={styles.dayNav}>
+            <Pressable
+              onPress={() => dayIndex > 0 && onNavigateDay(dayIndex - 1)}
+              disabled={dayIndex <= 0}
+              accessibilityLabel="Previous day"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.dayNavBtn,
+                {
+                  opacity: dayIndex <= 0 ? 0.35 : pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <ChevronLeft size={16} color="#FFFFFF" strokeWidth={2.4} />
+            </Pressable>
+            <View style={styles.dayNavLabel}>
+              <Text style={styles.dayNavText}>{`Day ${dayIndex + 1} of ${numDays}`}</Text>
+            </View>
+            <Pressable
+              onPress={() => dayIndex < numDays - 1 && onNavigateDay(dayIndex + 1)}
+              disabled={dayIndex >= numDays - 1}
+              accessibilityLabel="Next day"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.dayNavBtn,
+                {
+                  opacity: dayIndex >= numDays - 1 ? 0.35 : pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.4} />
+            </Pressable>
+          </View>
 
           <CircleBtn
             solid
-            onPress={undefined}
-            accessibilityLabel="More options"
+            onPress={onEdit}
+            accessibilityLabel="Edit day"
           >
-            <MoreHorizontal size={18} color={colors.ink} strokeWidth={2.2} />
+            <Pencil size={16} color={colors.ink} strokeWidth={2} />
           </CircleBtn>
         </View>
 
-        {/* ── Hero bottom: title + subtitle ── */}
+        {/* ── Hero bottom: kicker + italic title + coral squiggle ── */}
         <View style={styles.heroBottom}>
-          <Text style={[Type.display26, { color: '#FFFFFF' }]} numberOfLines={2}>
-            {dayTitle}
-          </Text>
           {subtitle.length > 0 ? (
             <Text
               style={[
-                Type.body13,
-                { color: '#FFFFFF', opacity: 0.85, marginTop: 6 },
+                Type.kickerSm,
+                {
+                  color: 'rgba(255,255,255,0.92)',
+                  fontSize: 10,
+                  letterSpacing: 10 * 0.18,
+                },
               ]}
               numberOfLines={1}
             >
-              {subtitle}
+              {(destination ?? '').toUpperCase()}
+              {destination && subtitle ? ' · ' : ''}
+              {subtitle.split(' · ')[0]?.toUpperCase()}
             </Text>
           ) : null}
+          <Text
+            style={{
+              fontFamily: FontFamily.display,
+              fontSize: 30,
+              fontWeight: '500',
+              letterSpacing: -30 * 0.02,
+              color: '#FFFFFF',
+              marginTop: 4,
+              lineHeight: 32,
+            }}
+            numberOfLines={2}
+          >
+            {(() => {
+              const titleWords = dayTitle.split(/\s+/);
+              if (titleWords.length === 1) {
+                return (
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    {dayTitle}
+                  </Text>
+                );
+              }
+              const head = titleWords.slice(0, -1).join(' ');
+              const tail = titleWords[titleWords.length - 1];
+              return (
+                <>
+                  {head}{' '}
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    {tail}
+                  </Text>
+                </>
+              );
+            })()}
+          </Text>
+          <Squiggle width={120} color={colors.coral} style={{ marginTop: 4 }} />
         </View>
       </View>
 
@@ -274,6 +376,56 @@ function DayDetailScreen({
 
           {/* Pull quote */}
           <PullQuote tip={tip} />
+
+          {/* Tweak this day — AI chat scoped to this specific day */}
+          {onTweakWithAI ? (
+            <Pressable
+              onPress={onTweakWithAI}
+              style={({ pressed }) => [
+                styles.aiCta,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.line,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <View style={[styles.aiCtaIcon, { backgroundColor: colors.coralBg }]}>
+                <Sparkles size={16} color={colors.coralDeep} strokeWidth={2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    Type.kickerSm,
+                    { color: colors.coralDeep, fontSize: 9, letterSpacing: 9 * 0.18 },
+                  ]}
+                >
+                  AI ASSISTANT
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 16,
+                    fontWeight: '500',
+                    color: colors.ink,
+                    marginTop: 2,
+                    letterSpacing: -16 * 0.012,
+                  }}
+                >
+                  Tweak this day
+                </Text>
+              </View>
+              <Text
+                style={[
+                  Type.kickerSm,
+                  { color: colors.inkMute, fontSize: 9 },
+                ]}
+              >
+                CHAT →
+              </Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </View>
     </View>
@@ -302,6 +454,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  dayNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    gap: 2,
+  },
+  dayNavBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayNavLabel: {
+    paddingHorizontal: 4,
+  },
+  dayNavText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: -0.1,
+  },
+  aiCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  aiCtaIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroBottom: {
     position: 'absolute',

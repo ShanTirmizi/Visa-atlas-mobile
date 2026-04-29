@@ -14,7 +14,9 @@ import DayDeckCard, { type DayImage } from './DayDeckCard';
 import { DAY_DECK_PHYSICS } from './DayDeck.constants';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
+import { FontFamily } from '@/constants/theme';
 import { PillButton } from '@/components/ui/PillButton';
+import { Squiggle } from '@/components/ui/Squiggle';
 
 export interface DayDeckDay {
   day: number;
@@ -36,6 +38,9 @@ interface DayDeckProps {
   tripHeroImage?: DayImage;
   tripStartDate?: string;
   destination?: string;
+  /** Tap handler for the inline edit pencil on each day card. The active
+   *  index is the JS-side activeIdx, so this always edits the centre day. */
+  onEditDay?: (index: number) => void;
 }
 
 // ── Sizing ────────────────────────────────────────────────────────────
@@ -202,6 +207,36 @@ function DayDeck({
 
   return (
     <View style={styles.container}>
+      {/* ── Editorial header ──────────────────────────────────────── */}
+      <View style={styles.header}>
+        <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
+          {numDays} {numDays === 1 ? 'DAY' : 'DAYS'}
+        </Text>
+        <Text
+          style={{
+            fontFamily: FontFamily.display,
+            fontSize: 22,
+            fontWeight: '500',
+            letterSpacing: -22 * 0.018,
+            color: colors.ink,
+            marginTop: 2,
+            lineHeight: 24,
+          }}
+        >
+          Drag the{' '}
+          <Text
+            style={{
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+            }}
+          >
+            centre
+          </Text>
+          <Text style={{ color: colors.coral }}>.</Text>
+        </Text>
+        <Squiggle width={120} color={colors.coral} style={{ marginTop: 4 }} />
+      </View>
+
       {/* ── Card Deck ─────────────────────────────────────────────── */}
       <View style={styles.deckArea}>
         {visibleCards.map(({ day, idx }) => (
@@ -221,7 +256,7 @@ function DayDeck({
         ))}
       </View>
 
-      {/* ── Progress dots ─────────────────────────────────────────── */}
+      {/* ── Progress dots — coral on active ───────────────────────── */}
       {numDays > 1 && (
         <View style={styles.dotsRow}>
           {Array.from({ length: numDays }).map((_, i) => {
@@ -232,8 +267,8 @@ function DayDeck({
                 style={[
                   styles.dot,
                   isActive
-                    ? [styles.dotActive, { backgroundColor: colors.ink }]
-                    : [styles.dotInactive, { backgroundColor: colors.inkFaint }],
+                    ? [styles.dotActive, { backgroundColor: colors.coral }]
+                    : [styles.dotInactive, { backgroundColor: colors.lineMid }],
                 ]}
               />
             );
@@ -241,14 +276,7 @@ function DayDeck({
         </View>
       )}
 
-      {/* ── Hint text ─────────────────────────────────────────────── */}
-      <Text style={[Type.kickerSm, styles.hint, { color: colors.inkFaint }]}>
-        Drag the centre card →
-      </Text>
-
       {/* ── Bottom CTA ────────────────────────────────────────────── */}
-      {/* Per spec: absolute bottom 30, left/right 22. In a scroll context we
-          approximate with marginTop so it flows naturally below the hint. */}
       <View style={styles.ctaRow}>
         <PillButton
           label={`Open Day ${activeIdx + 1}`}
@@ -265,9 +293,14 @@ export default React.memo(DayDeck);
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    paddingTop: 14,
+    alignItems: 'stretch',
+    paddingTop: 0,
     paddingBottom: 30,
+  },
+  header: {
+    paddingHorizontal: 22,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   deckArea: {
     width: SCREEN_WIDTH,

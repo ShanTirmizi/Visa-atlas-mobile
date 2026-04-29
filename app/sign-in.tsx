@@ -13,6 +13,7 @@ import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthActions } from '@convex-dev/auth/react';
+import { Ionicons } from '@expo/vector-icons';
 import { makeRedirectUri } from 'expo-auth-session';
 import { openAuthSessionAsync } from 'expo-web-browser';
 import { useTheme } from '@/contexts/theme-context';
@@ -630,7 +631,7 @@ export default function SignInScreen() {
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <>
-                  <Text style={styles.appleIcon}>{''}</Text>
+                  <Ionicons name="logo-apple" size={18} color="#FFFFFF" style={{ marginTop: -2 }} />
                   <Text style={[styles.socialBtnText, { color: '#FFFFFF' }]}>Apple</Text>
                 </>
               )}
@@ -646,7 +647,7 @@ export default function SignInScreen() {
               onPress={() => router.push('/more/terms' as never)}
               accessibilityRole="link"
               accessibilityLabel="Terms of Service"
-              hitSlop={6}
+              hitSlop={{ top: 18, bottom: 18, left: 8, right: 8 }}
             >
               <Text style={[styles.footerLink, { color: colors.inkSoft }]}>Terms</Text>
             </Pressable>
@@ -655,7 +656,7 @@ export default function SignInScreen() {
               onPress={() => router.push('/more/privacy-policy' as never)}
               accessibilityRole="link"
               accessibilityLabel="Privacy Policy"
-              hitSlop={6}
+              hitSlop={{ top: 18, bottom: 18, left: 8, right: 8 }}
             >
               <Text style={[styles.footerLink, { color: colors.inkSoft }]}>Privacy</Text>
             </Pressable>
@@ -807,11 +808,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#FFFFFF',
   },
-  appleIcon: {
-    fontSize: 18,
-    color: '#FFFFFF',
-  },
-
   // Footer
   footerRow: {
     flexDirection: 'row',

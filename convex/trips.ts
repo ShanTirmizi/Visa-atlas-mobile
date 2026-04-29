@@ -171,6 +171,7 @@ export const updateTripField = mutation({
       "accommodationTips",
       "heroImage",
       "dayImages",
+      "activityImages",
       "localEssentials",
       "localGuide",
       "carRental",

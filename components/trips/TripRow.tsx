@@ -1,12 +1,14 @@
 import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { ChevronRight, Heart } from 'lucide-react-native';
 import { Type } from '@/constants/typography';
-import { Shadows } from '@/constants/theme';
+import { FontFamily } from '@/constants/theme';
 import { useTheme } from '@/contexts/theme-context';
 import { Photo } from '@/components/ui/Photo';
 import { Flag } from '@/components/ui/Flag';
 import { VisaBadge, type Cat } from '@/components/ui/Badge';
+import { toAlpha2 } from '@/utils/countryCode';
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -30,59 +32,34 @@ function parseHeroImageUri(raw: string | null | undefined): string | null {
 }
 
 function toCat(visaCategory: string): Cat {
-  const c = visaCategory.toLowerCase().replace(/[-_ ]/g, '');
+  const c = (visaCategory || '').toLowerCase().replace(/[-_ ]/g, '');
   if (c.includes('free')) return 'free';
   if (c.includes('arrival')) return 'arrival';
   if (c.includes('evisa')) return 'evisa';
   return 'required';
 }
 
-// Alpha-2 from alpha-3 mapping (subset used in trip rows)
-const A3_TO_A2: Record<string, string> = {
-  AFG:'AF',ALB:'AL',DZA:'DZ',AND:'AD',AGO:'AO',ATG:'AG',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',
-  AZE:'AZ',BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
-  BOL:'BO',BIH:'BA',BWA:'BW',BRA:'BR',BRN:'BN',BGR:'BG',BFA:'BF',BDI:'BI',KHM:'KH',CMR:'CM',
-  CAN:'CA',CPV:'CV',CAF:'CF',TCD:'TD',CHL:'CL',CHN:'CN',COL:'CO',COM:'KM',COG:'CG',COD:'CD',
-  CRI:'CR',CIV:'CI',HRV:'HR',CUB:'CU',CYP:'CY',CZE:'CZ',DNK:'DK',DJI:'DJ',DMA:'DM',DOM:'DO',
-  ECU:'EC',EGY:'EG',SLV:'SV',GNQ:'GQ',ERI:'ER',EST:'EE',SWZ:'SZ',ETH:'ET',FJI:'FJ',FIN:'FI',
-  FRA:'FR',GAB:'GA',GMB:'GM',GEO:'GE',DEU:'DE',GHA:'GH',GRC:'GR',GRD:'GD',GTM:'GT',GIN:'GN',
-  GNB:'GW',GUY:'GY',HTI:'HT',HND:'HN',HUN:'HU',ISL:'IS',IND:'IN',IDN:'ID',IRN:'IR',IRQ:'IQ',
-  IRL:'IE',ISR:'IL',ITA:'IT',JAM:'JM',JPN:'JP',JOR:'JO',KAZ:'KZ',KEN:'KE',KIR:'KI',PRK:'KP',
-  KOR:'KR',KWT:'KW',KGZ:'KG',LAO:'LA',LVA:'LV',LBN:'LB',LSO:'LS',LBR:'LR',LBY:'LY',LIE:'LI',
-  LTU:'LT',LUX:'LU',MDG:'MG',MWI:'MW',MYS:'MY',MDV:'MV',MLI:'ML',MLT:'MT',MHL:'MH',MRT:'MR',
-  MUS:'MU',MEX:'MX',FSM:'FM',MDA:'MD',MCO:'MC',MNG:'MN',MNE:'ME',MAR:'MA',MOZ:'MZ',MMR:'MM',
-  NAM:'NA',NRU:'NR',NPL:'NP',NLD:'NL',NZL:'NZ',NIC:'NI',NER:'NE',NGA:'NG',MKD:'MK',NOR:'NO',
-  OMN:'OM',PAK:'PK',PLW:'PW',PAN:'PA',PNG:'PG',PRY:'PY',PER:'PE',PHL:'PH',POL:'PL',PRT:'PT',
-  QAT:'QA',ROU:'RO',RUS:'RU',RWA:'RW',KNA:'KN',LCA:'LC',VCT:'VC',WSM:'WS',SMR:'SM',STP:'ST',
-  SAU:'SA',SEN:'SN',SRB:'RS',SYC:'SC',SLE:'SL',SGP:'SG',SVK:'SK',SVN:'SI',SLB:'SB',SOM:'SO',
-  ZAF:'ZA',ESP:'ES',LKA:'LK',SDN:'SD',SUR:'SR',SWE:'SE',CHE:'CH',SYR:'SY',TWN:'TW',TJK:'TJ',
-  TZA:'TZ',THA:'TH',TLS:'TL',TGO:'TG',TON:'TO',TTO:'TT',TUN:'TN',TUR:'TR',TKM:'TM',TUV:'TV',
-  UGA:'UG',UKR:'UA',ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VUT:'VU',VEN:'VE',VNM:'VN',
-  YEM:'YE',ZMB:'ZM',ZWE:'ZW',PSE:'PS',XKX:'XK',
-};
-
-function toA2(code: string): string {
-  if (!code) return '';
-  const upper = code.toUpperCase();
-  if (upper.length === 2) return upper;
-  return A3_TO_A2[upper] || upper.slice(0, 2);
-}
-
-function formatTripDate(startDate: string | undefined, endDate: string | undefined): string {
-  if (!startDate) return 'No date set';
+function formatMonoDate(startDate: string | undefined, endDate: string | undefined): string {
+  if (!startDate) return 'NO DATE SET';
   const start = new Date(startDate);
-  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-  const s = start.toLocaleDateString('en-GB', opts);
+  const month = start.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+  const year = start.getFullYear();
   if (endDate) {
     const end = new Date(endDate);
-    const e = end.toLocaleDateString('en-GB', opts);
-    return `${s} – ${e}`;
+    const days = Math.max(
+      1,
+      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
+    );
+    if (start.getTime() < Date.now() && end.getTime() < Date.now()) {
+      return `${month} ${year} · PAST`;
+    }
+    return `${month} ${year} · ${days} NIGHTS`;
   }
-  return s;
+  return `${month} ${year}`;
 }
 
 // ──────────────────────────────────────────────
-// TripRow
+// TripRow — Signature v2 (with flag-on-thumb + stacked right side)
 // ──────────────────────────────────────────────
 interface TripRowProps {
   id: string;
@@ -93,6 +70,9 @@ interface TripRowProps {
   startDate?: string;
   endDate?: string;
   heroImage?: string;
+  /** Show a small coral heart corner badge on the thumbnail when the user
+   *  has starred this trip from the trip detail header. */
+  starred?: boolean;
 }
 
 export function TripRow({
@@ -104,14 +84,15 @@ export function TripRow({
   startDate,
   endDate,
   heroImage,
+  starred,
 }: TripRowProps) {
   const { colors } = useTheme();
   const router = useRouter();
 
   const imageUri = parseHeroImageUri(heroImage);
-  const a2 = toA2(countryCode);
+  const a2 = toAlpha2(countryCode);
   const cat = toCat(visaCategory);
-  const dateStr = formatTripDate(startDate, endDate);
+  const dateStr = formatMonoDate(startDate, endDate);
   const displayName = name || countryName;
 
   return (
@@ -123,42 +104,113 @@ export function TripRow({
         {
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 12,
-          padding: 10,
-          borderRadius: 22,
+          gap: 14,
+          padding: 12,
+          borderRadius: 18,
           backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.line,
           opacity: pressed ? 0.88 : 1,
         },
-        Shadows.subtle,
       ]}
     >
-      {/* Thumbnail */}
-      <Photo
-        uri={imageUri ?? undefined}
-        tone="mountain"
-        radius={18}
-        style={{ width: 70, height: 70 }}
-        showPlaceholderGlyph={false}
-      />
-
-      {/* Middle: title + date + flag/country */}
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text style={[Type.title17, { color: colors.ink }]} numberOfLines={1}>
-          {displayName}
-        </Text>
-        <Text style={[Type.meta11, { color: colors.inkMute }]} numberOfLines={1}>
-          {dateStr}
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
-          <Flag code={a2} size={12} />
-          <Text style={[Type.meta11, { color: colors.inkMute }]} numberOfLines={1}>
-            {countryName}
-          </Text>
+      {/* Thumbnail with flag badge bottom-right + (optional) starred heart top-right */}
+      <View style={styles.thumbWrap}>
+        <Photo
+          uri={imageUri ?? undefined}
+          tone="mountain"
+          radius={14}
+          style={styles.thumb}
+          showPlaceholderGlyph={false}
+        />
+        <View style={[styles.flagBadge, { borderColor: colors.surface }]}>
+          <Flag code={a2} size={20} />
         </View>
+        {starred ? (
+          <View
+            style={[
+              styles.starredBadge,
+              {
+                backgroundColor: colors.coral,
+                borderColor: colors.surface,
+              },
+            ]}
+          >
+            <Heart size={10} color="#FFFFFF" fill="#FFFFFF" strokeWidth={0} />
+          </View>
+        ) : null}
       </View>
 
-      {/* Right: visa badge */}
-      <VisaBadge cat={cat} size="sm" />
+      {/* Title + mono date */}
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text
+          style={{
+            fontFamily: FontFamily.displayItalic,
+            fontStyle: 'italic',
+            fontSize: 17,
+            fontWeight: '500',
+            letterSpacing: -17 * 0.012,
+            color: colors.ink,
+          }}
+          numberOfLines={1}
+        >
+          {displayName}
+        </Text>
+        <Text
+          style={[
+            Type.kickerSm,
+            { color: colors.inkMute, fontSize: 9, lineHeight: 13 },
+          ]}
+          numberOfLines={2}
+        >
+          {dateStr}
+        </Text>
+      </View>
+
+      {/* Right rail: visa pill on top, chevron below */}
+      <View style={styles.rightRail}>
+        <VisaBadge cat={cat} size="sm" />
+        <ChevronRight size={18} color={colors.inkMute} strokeWidth={2} />
+      </View>
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  thumbWrap: {
+    position: 'relative',
+    width: 64,
+    height: 64,
+  },
+  thumb: {
+    width: 64,
+    height: 64,
+  },
+  flagBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  starredBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rightRail: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+});

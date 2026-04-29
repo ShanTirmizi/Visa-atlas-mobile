@@ -1,16 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Mail, Plus } from 'lucide-react-native';
+import Animated from 'react-native-reanimated';
+import { tabSlideIn } from '@/utils/tabAnimation';
 import { useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { BookingRow } from './BookingRow';
-import { SectionKicker } from '@/components/ui/SectionKicker';
-import { PillButton } from '@/components/ui/PillButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Squiggle } from '@/components/ui/Squiggle';
 import { Type } from '@/constants/typography';
+import { FontFamily, Shadows } from '@/constants/theme';
 import { BOOKING_TYPES, type BookingType } from '@/constants/bookings';
 import type { BookingDetailData } from '@/components/booking/BookingDetailSheet';
+import { Pressable } from 'react-native';
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -19,12 +23,13 @@ import type { BookingDetailData } from '@/components/booking/BookingDetailSheet'
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-function formatGroupDate(dateStr: string): string {
+function formatGroupParts(dateStr: string): { month: string; day: number; dayName: string } {
   const d = new Date(dateStr + 'T00:00:00');
-  const month = MONTHS[d.getMonth()];
-  const day = d.getDate();
-  const dayName = DAYS[d.getDay()];
-  return `${month} ${day} · ${dayName}`;
+  return {
+    month: MONTHS[d.getMonth()],
+    day: d.getDate(),
+    dayName: DAYS[d.getDay()],
+  };
 }
 
 function formatTimeLabel(dateStr: string): string {
@@ -84,6 +89,15 @@ export function BookingTimeline({
 }: BookingTimelineProps) {
   const { colors } = useTheme();
   const [filter, setFilter] = useState<FilterOption>('All');
+  // Track previous filter so the directional fade-slide knows the side.
+  const prevFilterRef = useRef<FilterOption>('All');
+  const filterDirection =
+    FILTER_OPTIONS.indexOf(filter) >= FILTER_OPTIONS.indexOf(prevFilterRef.current)
+      ? 1
+      : -1;
+  useEffect(() => {
+    prevFilterRef.current = filter;
+  }, [filter]);
 
   const { isAuthenticated } = useConvexAuth();
   const bookings = useQuery(
@@ -153,46 +167,304 @@ export function BookingTimeline({
         variant="pill"
       />
 
-      {/* Empty state */}
+      {/* Empty state — boarding pass illustration + italic headline + coral CTA */}
       {bookings !== undefined && filtered.length === 0 && (
         <View style={styles.emptyState}>
-          <SectionKicker>NO BOOKINGS YET</SectionKicker>
-          <Text style={[Type.body13, { color: colors.inkMute, marginTop: 8, textAlign: 'center' }]}>
-            Add flights, hotels, experiences and more to keep everything in one place.
+          <View style={styles.passStack}>
+            <View
+              style={[
+                styles.passCardBack,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.lineMid,
+                },
+                Shadows.subtle,
+              ]}
+            />
+            <View
+              style={[
+                styles.passCardFront,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.lineMid,
+                },
+                Shadows.subtle,
+              ]}
+            >
+              <Text
+                style={[
+                  Type.kickerSm,
+                  {
+                    color: colors.coral,
+                    fontSize: 8,
+                    letterSpacing: 8 * 0.18,
+                  },
+                ]}
+              >
+                BOARDING PASS
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 16,
+                  fontWeight: '500',
+                  letterSpacing: -16 * 0.012,
+                  color: colors.ink,
+                  marginTop: 6,
+                }}
+              >
+                YOU → DEST
+              </Text>
+              <Text
+                style={[
+                  Type.kickerSm,
+                  {
+                    color: colors.inkMute,
+                    fontSize: 8,
+                    letterSpacing: 8 * 0.14,
+                    marginTop: 4,
+                  },
+                ]}
+              >
+                SEAT 14A · 09:40
+              </Text>
+            </View>
+          </View>
+
+          <Text
+            style={{
+              fontFamily: FontFamily.display,
+              fontSize: 22,
+              fontWeight: '500',
+              letterSpacing: -22 * 0.018,
+              color: colors.ink,
+              marginTop: 28,
+            }}
+          >
+            Nothing here,{' '}
+            <Text
+              style={{
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+              }}
+            >
+              yet
+            </Text>
+            <Text style={{ color: colors.coral }}>.</Text>
           </Text>
-          <PillButton
-            label="Add a booking"
-            variant="soft"
+
+          <Text
+            style={[
+              Type.body13,
+              {
+                color: colors.inkMute,
+                textAlign: 'center',
+                marginTop: 8,
+                lineHeight: 19,
+                maxWidth: 260,
+              },
+            ]}
+          >
+            Forward your confirmations and we&apos;ll add them automatically — or add one manually.
+          </Text>
+
+          <Pressable
             onPress={onAddBooking}
-            style={{ marginTop: 16 }}
-          />
+            style={({ pressed }) => ({
+              marginTop: 18,
+              paddingHorizontal: 22,
+              paddingVertical: 12,
+              borderRadius: 999,
+              backgroundColor: colors.coral,
+              shadowColor: colors.coral,
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.4,
+              shadowRadius: 18,
+              elevation: 6,
+              opacity: pressed ? 0.9 : 1,
+            })}
+          >
+            <Text
+              style={{
+                fontFamily: FontFamily.bold,
+                fontSize: 13,
+                fontWeight: '700',
+                color: '#FFFFFF',
+              }}
+            >
+              Add booking manually
+            </Text>
+          </Pressable>
         </View>
       )}
 
-      {/* Timeline groups */}
-      {groups.map(([dateKey, items]) => (
-        <View key={dateKey} style={styles.group}>
-          <SectionKicker style={styles.dateKicker}>
-            {formatGroupDate(dateKey)}
-          </SectionKicker>
-          <View style={styles.rows}>
-            {items.map((b) => {
-              const timeLabel = formatTimeLabel(b.startDate);
-              const venueStr = b.location ?? b.provider ?? undefined;
-              return (
-                <BookingRow
-                  key={b._id}
-                  type={b.type}
-                  title={b.title}
-                  venue={venueStr}
-                  timeLabel={timeLabel || undefined}
-                  onPress={() => onBookingPress(toDetailData(b))}
-                />
-              );
-            })}
+      {/* "Add another booking" CTA — visible whenever there's at least one
+          booking so users can keep adding. The empty-state has its own
+          button, so we only render this when filtered has items. */}
+      {filtered.length > 0 ? (
+        <Pressable
+          onPress={onAddBooking}
+          style={({ pressed }) => [
+            styles.addCta,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.coral,
+              opacity: pressed ? 0.88 : 1,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.addCtaIcon,
+              { backgroundColor: colors.coral },
+            ]}
+          >
+            <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />
           </View>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                Type.kickerSm,
+                { color: colors.coralDeep, fontSize: 9, letterSpacing: 9 * 0.18 },
+              ]}
+            >
+              ADD ANOTHER
+            </Text>
+            <Text
+              style={{
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+                fontSize: 16,
+                fontWeight: '500',
+                color: colors.ink,
+                marginTop: 2,
+                letterSpacing: -16 * 0.012,
+              }}
+            >
+              New booking
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
+
+      {/* Timeline groups — keyed on filter so the entering animation
+          replays whenever the user taps a different chip. */}
+      <Animated.View key={filter} entering={tabSlideIn(filterDirection * 18)}>
+        {groups.map(([dateKey, items]) => {
+          const { month, day, dayName } = formatGroupParts(dateKey);
+          return (
+            <View key={dateKey} style={styles.group}>
+              {/* Editorial date header — italic Fraunces day number with
+                  coral period, mono kicker month + weekday, coral squiggle. */}
+              <View style={styles.dateHeaderRow}>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 22,
+                    lineHeight: 22,
+                    letterSpacing: -22 * 0.022,
+                    fontWeight: '500',
+                    color: colors.ink,
+                  }}
+                >
+                  {day}
+                  <Text style={{ color: colors.coral }}>.</Text>
+                </Text>
+                <View style={{ marginLeft: 8 }}>
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.monoMedium,
+                      fontSize: 9,
+                      fontWeight: '700',
+                      letterSpacing: 9 * 0.22,
+                      textTransform: 'uppercase',
+                      color: colors.inkMute,
+                    }}
+                  >
+                    {month}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.monoMedium,
+                      fontSize: 9,
+                      fontWeight: '700',
+                      letterSpacing: 9 * 0.22,
+                      textTransform: 'uppercase',
+                      color: colors.inkFaint,
+                      marginTop: 1,
+                    }}
+                  >
+                    {dayName}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                  <Squiggle width={48} color={colors.coral} />
+                </View>
+              </View>
+              <View style={styles.rows}>
+                {items.map((b) => {
+                  const detail = toDetailData(b);
+                  return (
+                    <BookingRow
+                      key={b._id}
+                      type={b.type}
+                      title={b.title}
+                      startDate={b.startDate}
+                      endDate={b.endDate}
+                      typeDetails={detail.typeDetails}
+                      cost={b.cost}
+                      currency={b.currency}
+                      confirmationNumber={b.confirmationNumber}
+                      onPress={() => onBookingPress(detail)}
+                    />
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })}
+      </Animated.View>
+
+      {/* Forward-to-email tip strip — paper-bg dashed border, mail icon,
+          coral COPY action. Only shown when there's at least one booking. */}
+      {filtered.length > 0 ? (
+        <View
+          style={[
+            styles.forwardStrip,
+            { borderColor: colors.lineMid, backgroundColor: 'transparent' },
+          ]}
+        >
+          <Mail size={14} color={colors.teal} strokeWidth={1.8} />
+          <Text
+            style={[
+              Type.body12_5,
+              { color: colors.inkSoft, fontSize: 12, flex: 1 },
+            ]}
+            numberOfLines={2}
+          >
+            Forward to{' '}
+            <Text style={{ fontWeight: '700', color: colors.ink }}>
+              trips@visa.atlas
+            </Text>{' '}
+            for auto-import
+          </Text>
+          <Text
+            style={[
+              Type.kickerSm,
+              {
+                color: colors.coralDeep,
+                fontSize: 9,
+                letterSpacing: 9 * 0.18,
+                fontWeight: '700',
+              },
+            ]}
+          >
+            COPY
+          </Text>
         </View>
-      ))}
+      ) : null}
     </View>
   );
 }
@@ -206,15 +478,72 @@ const styles = StyleSheet.create({
   group: {
     gap: 8,
   },
-  dateKicker: {
-    marginBottom: 2,
+  dateHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    marginBottom: 4,
   },
   rows: {
     gap: 8,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 32,
     paddingHorizontal: 20,
+  },
+  forwardStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  addCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  addCtaIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  passStack: {
+    width: 160,
+    height: 110,
+    marginTop: 12,
+  },
+  passCardBack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 14,
+    borderWidth: 1,
+    transform: [{ rotate: '-5deg' }],
+  },
+  passCardFront: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    transform: [{ rotate: '2deg' }],
   },
 });

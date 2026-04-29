@@ -5,6 +5,7 @@ export type TravelInfo = {
   bestMonths: number[];
   bestTimeNote: string;
   iataCode: string;
+  safetyScore: number; // 0.0–10.0 — realistic tourist safety based on Global Peace Index
 };
 
 export const travelData: Record<string, TravelInfo> = {
@@ -16,6 +17,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (cool & dry season)",
     iataCode: "DEL",
+    safetyScore: 6.0,
   },
   BTN: {
     costLevel: 2,
@@ -24,6 +26,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 9, 10, 11],
     bestTimeNote: "Mar-May & Sep-Nov (clear skies)",
     iataCode: "PBH",
+    safetyScore: 8.5,
   },
   NPL: {
     costLevel: 1,
@@ -32,6 +35,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3, 4],
     bestTimeNote: "Oct-Apr (dry season & trekking)",
     iataCode: "KTM",
+    safetyScore: 7.0,
   },
   LKA: {
     costLevel: 1,
@@ -40,6 +44,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3],
     bestTimeNote: "Dec-Mar (west coast dry season)",
     iataCode: "CMB",
+    safetyScore: 6.8,
   },
   PAK: {
     costLevel: 1,
@@ -48,6 +53,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 3, 4],
     bestTimeNote: "Oct-Nov & Mar-Apr (mild weather)",
     iataCode: "ISB",
+    safetyScore: 4.5,
   },
   BGD: {
     costLevel: 1,
@@ -56,6 +62,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (cool & dry season)",
     iataCode: "DAC",
+    safetyScore: 5.5,
   },
   MDV: {
     costLevel: 3,
@@ -64,6 +71,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry northeast monsoon)",
     iataCode: "MLE",
+    safetyScore: 8.0,
   },
 
   // ─── Southeast Asia ───────────────────────────────────────────
@@ -74,6 +82,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (cool & dry season)",
     iataCode: "BKK",
+    safetyScore: 7.0,
   },
   KHM: {
     costLevel: 1,
@@ -82,6 +91,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (dry season)",
     iataCode: "PNH",
+    safetyScore: 6.5,
   },
   LAO: {
     costLevel: 1,
@@ -90,6 +100,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (cool & dry season)",
     iataCode: "VTE",
+    safetyScore: 7.5,
   },
   VNM: {
     costLevel: 1,
@@ -98,6 +109,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [2, 3, 4, 10, 11],
     bestTimeNote: "Feb-Apr & Oct-Nov (varies by region)",
     iataCode: "SGN",
+    safetyScore: 7.8,
   },
   MMR: {
     costLevel: 1,
@@ -106,6 +118,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (cool & dry season)",
     iataCode: "RGN",
+    safetyScore: 3.5,
   },
   MYS: {
     costLevel: 1,
@@ -114,6 +127,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 9, 10],
     bestTimeNote: "Mar-May & Sep-Oct (drier periods)",
     iataCode: "KUL",
+    safetyScore: 7.5,
   },
   PHL: {
     costLevel: 1,
@@ -122,6 +136,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4, 5],
     bestTimeNote: "Dec-May (dry season)",
     iataCode: "MNL",
+    safetyScore: 6.0,
   },
   IDN: {
     costLevel: 1,
@@ -130,6 +145,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (dry season)",
     iataCode: "DPS",
+    safetyScore: 6.8,
   },
   SGP: {
     costLevel: 3,
@@ -138,6 +154,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [2, 3, 4, 5, 6, 7, 8, 9],
     bestTimeNote: "Feb-Sep (less rain)",
     iataCode: "SIN",
+    safetyScore: 9.5,
   },
   TLS: {
     costLevel: 1,
@@ -146,6 +163,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10, 11],
     bestTimeNote: "May-Nov (dry season)",
     iataCode: "DIL",
+    safetyScore: 6.5,
   },
 
   // ─── East Asia ────────────────────────────────────────────────
@@ -156,6 +174,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 9, 10],
     bestTimeNote: "Apr-May & Sep-Oct (mild weather)",
     iataCode: "PEK",
+    safetyScore: 7.5,
   },
   HKG: {
     costLevel: 3,
@@ -164,6 +183,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12],
     bestTimeNote: "Oct-Dec (cool & dry)",
     iataCode: "HKG",
+    safetyScore: 8.5,
   },
   MAC: {
     costLevel: 2,
@@ -172,6 +192,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12],
     bestTimeNote: "Oct-Dec (cool & dry)",
     iataCode: "MFM",
+    safetyScore: 8.5,
   },
   TWN: {
     costLevel: 2,
@@ -180,6 +201,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 10, 11],
     bestTimeNote: "Mar-May & Oct-Nov (pleasant weather)",
     iataCode: "TPE",
+    safetyScore: 9.0,
   },
   JPN: {
     costLevel: 3,
@@ -188,6 +210,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 10, 11],
     bestTimeNote: "Mar-May (cherry blossom) & Oct-Nov (autumn)",
     iataCode: "NRT",
+    safetyScore: 9.5,
   },
   KOR: {
     costLevel: 2,
@@ -196,6 +219,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 9, 10],
     bestTimeNote: "Apr-May & Sep-Oct (mild & colourful)",
     iataCode: "ICN",
+    safetyScore: 9.0,
   },
   MNG: {
     costLevel: 1,
@@ -204,6 +228,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (warm summer)",
     iataCode: "UBN",
+    safetyScore: 7.5,
   },
   PRK: {
     costLevel: 2,
@@ -212,6 +237,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 9, 10],
     bestTimeNote: "Apr-May & Sep-Oct (mild weather)",
     iataCode: "FNJ",
+    safetyScore: 3.0,
   },
 
   // ─── Central Asia & Caucasus ──────────────────────────────────
@@ -222,6 +248,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (warm & sunny)",
     iataCode: "TBS",
+    safetyScore: 7.8,
   },
   AZE: {
     costLevel: 1,
@@ -230,6 +257,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 9, 10],
     bestTimeNote: "Apr-May & Sep-Oct (pleasant weather)",
     iataCode: "GYD",
+    safetyScore: 7.0,
   },
   ARM: {
     costLevel: 1,
@@ -238,6 +266,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 9, 10],
     bestTimeNote: "May-Jun & Sep-Oct (warm & dry)",
     iataCode: "EVN",
+    safetyScore: 7.5,
   },
   UZB: {
     costLevel: 1,
@@ -246,6 +275,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 9, 10],
     bestTimeNote: "Apr-May & Sep-Oct (mild weather)",
     iataCode: "TAS",
+    safetyScore: 7.0,
   },
   KGZ: {
     costLevel: 1,
@@ -254,6 +284,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (summer, trekking season)",
     iataCode: "FRU",
+    safetyScore: 7.0,
   },
   TJK: {
     costLevel: 1,
@@ -262,6 +293,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (warm & accessible)",
     iataCode: "DYU",
+    safetyScore: 6.5,
   },
   KAZ: {
     costLevel: 2,
@@ -270,6 +302,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "NQZ",
+    safetyScore: 7.0,
   },
   TKM: {
     costLevel: 2,
@@ -278,6 +311,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 9, 10],
     bestTimeNote: "Apr-May & Sep-Oct (mild weather)",
     iataCode: "ASB",
+    safetyScore: 5.5,
   },
 
   // ─── Middle East ──────────────────────────────────────────────
@@ -288,6 +322,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 9, 10],
     bestTimeNote: "Apr-Jun & Sep-Oct (warm, not scorching)",
     iataCode: "IST",
+    safetyScore: 6.5,
   },
   JOR: {
     costLevel: 2,
@@ -296,6 +331,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 10, 11],
     bestTimeNote: "Mar-May & Oct-Nov (mild weather)",
     iataCode: "AMM",
+    safetyScore: 7.5,
   },
   ARE: {
     costLevel: 3,
@@ -304,6 +340,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (cooler winter months)",
     iataCode: "DXB",
+    safetyScore: 8.5,
   },
   QAT: {
     costLevel: 3,
@@ -312,6 +349,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (cooler temperatures)",
     iataCode: "DOH",
+    safetyScore: 8.5,
   },
   OMN: {
     costLevel: 2,
@@ -320,6 +358,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (cool winter season)",
     iataCode: "MCT",
+    safetyScore: 8.5,
   },
   BHR: {
     costLevel: 2,
@@ -328,6 +367,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (pleasant temperatures)",
     iataCode: "BAH",
+    safetyScore: 7.5,
   },
   SAU: {
     costLevel: 2,
@@ -336,6 +376,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (cooler winter)",
     iataCode: "RUH",
+    safetyScore: 7.5,
   },
   KWT: {
     costLevel: 2,
@@ -344,6 +385,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (mild winter)",
     iataCode: "KWI",
+    safetyScore: 7.5,
   },
   ISR: {
     costLevel: 3,
@@ -352,6 +394,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 10, 11],
     bestTimeNote: "Mar-May & Oct-Nov (pleasant weather)",
     iataCode: "TLV",
+    safetyScore: 6.5,
   },
   IRQ: {
     costLevel: 1,
@@ -360,6 +403,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 10, 11],
     bestTimeNote: "Mar-Apr & Oct-Nov (mild weather)",
     iataCode: "BGW",
+    safetyScore: 2.5,
   },
   IRN: {
     costLevel: 1,
@@ -368,6 +412,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 9, 10, 11],
     bestTimeNote: "Mar-May & Sep-Nov (mild seasons)",
     iataCode: "IKA",
+    safetyScore: 5.0,
   },
   LBN: {
     costLevel: 2,
@@ -376,6 +421,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 9, 10, 11],
     bestTimeNote: "Apr-May & Sep-Nov (warm & dry)",
     iataCode: "BEY",
+    safetyScore: 4.5,
   },
   SYR: {
     costLevel: 1,
@@ -384,6 +430,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 10, 11],
     bestTimeNote: "Mar-May & Oct-Nov (mild weather)",
     iataCode: "DAM",
+    safetyScore: 2.0,
   },
   YEM: {
     costLevel: 1,
@@ -392,6 +439,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (cooler, drier months)",
     iataCode: "SAH",
+    safetyScore: 1.5,
   },
 
   // ─── Europe - Western ─────────────────────────────────────────
@@ -402,6 +450,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "LHR",
+    safetyScore: 8.5,
   },
   FRA: {
     costLevel: 3,
@@ -410,6 +459,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 9, 10],
     bestTimeNote: "May-Jul & Sep-Oct (pleasant weather)",
     iataCode: "CDG",
+    safetyScore: 7.5,
   },
   DEU: {
     costLevel: 2,
@@ -418,6 +468,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "FRA",
+    safetyScore: 8.5,
   },
   ITA: {
     costLevel: 2,
@@ -426,6 +477,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 9, 10],
     bestTimeNote: "Apr-Jun & Sep-Oct (warm, fewer crowds)",
     iataCode: "FCO",
+    safetyScore: 8.0,
   },
   ESP: {
     costLevel: 2,
@@ -434,6 +486,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 9, 10],
     bestTimeNote: "Apr-Jun & Sep-Oct (warm, not too hot)",
     iataCode: "MAD",
+    safetyScore: 8.0,
   },
   NLD: {
     costLevel: 3,
@@ -442,6 +495,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 7, 8, 9],
     bestTimeNote: "Apr-Sep (mild & long days)",
     iataCode: "AMS",
+    safetyScore: 8.5,
   },
   CHE: {
     costLevel: 3,
@@ -450,6 +504,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9, 12, 1, 2],
     bestTimeNote: "Jun-Sep (summer) & Dec-Feb (ski season)",
     iataCode: "ZRH",
+    safetyScore: 9.0,
   },
   BEL: {
     costLevel: 2,
@@ -458,6 +513,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "BRU",
+    safetyScore: 8.0,
   },
   LUX: {
     costLevel: 3,
@@ -466,6 +522,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (pleasant weather)",
     iataCode: "LUX",
+    safetyScore: 9.0,
   },
   AUT: {
     costLevel: 2,
@@ -474,6 +531,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9, 12, 1, 2],
     bestTimeNote: "Jun-Sep (summer) & Dec-Feb (ski season)",
     iataCode: "VIE",
+    safetyScore: 8.5,
   },
   IRL: {
     costLevel: 3,
@@ -482,6 +540,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warmest & driest)",
     iataCode: "DUB",
+    safetyScore: 8.5,
   },
 
   // ─── Europe - Northern ────────────────────────────────────────
@@ -492,6 +551,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8],
     bestTimeNote: "Jun-Aug (midnight sun & warm)",
     iataCode: "ARN",
+    safetyScore: 9.0,
   },
   NOR: {
     costLevel: 3,
@@ -500,6 +560,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8],
     bestTimeNote: "Jun-Aug (midnight sun & fjords)",
     iataCode: "OSL",
+    safetyScore: 9.3,
   },
   DNK: {
     costLevel: 3,
@@ -508,6 +569,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm & long days)",
     iataCode: "CPH",
+    safetyScore: 9.2,
   },
   FIN: {
     costLevel: 3,
@@ -516,6 +578,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 12, 1, 2],
     bestTimeNote: "Jun-Aug (summer) & Dec-Feb (northern lights)",
     iataCode: "HEL",
+    safetyScore: 9.3,
   },
   ISL: {
     costLevel: 3,
@@ -524,6 +587,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8],
     bestTimeNote: "Jun-Aug (midnight sun & mild)",
     iataCode: "KEF",
+    safetyScore: 9.5,
   },
   EST: {
     costLevel: 2,
@@ -532,6 +596,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8],
     bestTimeNote: "May-Aug (warm summer)",
     iataCode: "TLL",
+    safetyScore: 8.5,
   },
   LVA: {
     costLevel: 1,
@@ -540,6 +605,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8],
     bestTimeNote: "May-Aug (warm & green)",
     iataCode: "RIX",
+    safetyScore: 8.0,
   },
   LTU: {
     costLevel: 1,
@@ -548,6 +614,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8],
     bestTimeNote: "May-Aug (warm summer)",
     iataCode: "VNO",
+    safetyScore: 8.0,
   },
 
   // ─── Europe - Southern / Mediterranean ────────────────────────
@@ -558,6 +625,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 9, 10],
     bestTimeNote: "Apr-Jun & Sep-Oct (warm & dry)",
     iataCode: "LIS",
+    safetyScore: 8.5,
   },
   GRC: {
     costLevel: 2,
@@ -566,6 +634,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 9, 10],
     bestTimeNote: "Apr-Jun & Sep-Oct (warm, not crowded)",
     iataCode: "ATH",
+    safetyScore: 7.8,
   },
   CYP: {
     costLevel: 2,
@@ -574,6 +643,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 9, 10],
     bestTimeNote: "Apr-Jun & Sep-Oct (pleasant warmth)",
     iataCode: "LCA",
+    safetyScore: 7.8,
   },
   HRV: {
     costLevel: 2,
@@ -582,6 +652,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 9, 10],
     bestTimeNote: "May-Jun & Sep-Oct (warm, less busy)",
     iataCode: "ZAG",
+    safetyScore: 8.0,
   },
   MNE: {
     costLevel: 1,
@@ -590,6 +661,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm coast & mountains)",
     iataCode: "TGD",
+    safetyScore: 7.5,
   },
   ALB: {
     costLevel: 1,
@@ -598,6 +670,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm & sunny)",
     iataCode: "TIA",
+    safetyScore: 7.0,
   },
   MKD: {
     costLevel: 1,
@@ -606,6 +679,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 9, 10],
     bestTimeNote: "May-Jun & Sep-Oct (mild weather)",
     iataCode: "SKP",
+    safetyScore: 7.0,
   },
   BIH: {
     costLevel: 1,
@@ -614,6 +688,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm & green)",
     iataCode: "SJJ",
+    safetyScore: 7.0,
   },
   XKX: {
     costLevel: 1,
@@ -622,6 +697,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "PRN",
+    safetyScore: 6.5,
   },
   SRB: {
     costLevel: 1,
@@ -630,6 +706,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm & festival season)",
     iataCode: "BEG",
+    safetyScore: 7.5,
   },
   SVN: {
     costLevel: 2,
@@ -638,6 +715,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm & outdoor season)",
     iataCode: "LJU",
+    safetyScore: 8.5,
   },
   SVK: {
     costLevel: 1,
@@ -646,6 +724,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "BTS",
+    safetyScore: 8.0,
   },
 
   // ─── Europe - Central & Eastern ───────────────────────────────
@@ -656,6 +735,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm & sunny)",
     iataCode: "WAW",
+    safetyScore: 8.0,
   },
   CZE: {
     costLevel: 2,
@@ -664,6 +744,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm & pleasant)",
     iataCode: "PRG",
+    safetyScore: 8.5,
   },
   HUN: {
     costLevel: 1,
@@ -672,6 +753,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 9, 10],
     bestTimeNote: "Apr-Jun & Sep-Oct (mild weather)",
     iataCode: "BUD",
+    safetyScore: 8.0,
   },
   ROU: {
     costLevel: 1,
@@ -680,6 +762,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "OTP",
+    safetyScore: 7.5,
   },
   BGR: {
     costLevel: 1,
@@ -688,6 +771,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm & beaches/mountains)",
     iataCode: "SOF",
+    safetyScore: 7.5,
   },
   MDA: {
     costLevel: 1,
@@ -696,6 +780,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm wine country)",
     iataCode: "KIV",
+    safetyScore: 7.0,
   },
   UKR: {
     costLevel: 1,
@@ -704,6 +789,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "KBP",
+    safetyScore: 2.5,
   },
   BLR: {
     costLevel: 1,
@@ -712,6 +798,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (warm summer)",
     iataCode: "MSQ",
+    safetyScore: 5.0,
   },
   RUS: {
     costLevel: 2,
@@ -720,6 +807,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8],
     bestTimeNote: "Jun-Aug (white nights & warm)",
     iataCode: "SVO",
+    safetyScore: 4.0,
   },
 
   // ─── North Africa ─────────────────────────────────────────────
@@ -730,6 +818,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 10, 11],
     bestTimeNote: "Mar-May & Oct-Nov (warm, not hot)",
     iataCode: "RAK",
+    safetyScore: 7.0,
   },
   TUN: {
     costLevel: 1,
@@ -738,6 +827,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 9, 10, 11],
     bestTimeNote: "Mar-May & Sep-Nov (mild weather)",
     iataCode: "TUN",
+    safetyScore: 7.0,
   },
   EGY: {
     costLevel: 1,
@@ -746,6 +836,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (cooler months)",
     iataCode: "CAI",
+    safetyScore: 6.0,
   },
   DZA: {
     costLevel: 1,
@@ -754,6 +845,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 10, 11],
     bestTimeNote: "Mar-May & Oct-Nov (mild weather)",
     iataCode: "ALG",
+    safetyScore: 5.5,
   },
   LBY: {
     costLevel: 2,
@@ -762,6 +854,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (cooler months)",
     iataCode: "TIP",
+    safetyScore: 2.5,
   },
 
   // ─── East Africa ──────────────────────────────────────────────
@@ -772,6 +865,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (dry season)",
     iataCode: "ADD",
+    safetyScore: 5.0,
   },
   KEN: {
     costLevel: 1,
@@ -780,6 +874,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [7, 8, 9, 10, 1, 2],
     bestTimeNote: "Jul-Oct & Jan-Feb (dry/migration)",
     iataCode: "NBO",
+    safetyScore: 5.5,
   },
   TZA: {
     costLevel: 2,
@@ -788,6 +883,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9, 10, 1, 2],
     bestTimeNote: "Jun-Oct & Jan-Feb (dry season/migration)",
     iataCode: "DAR",
+    safetyScore: 6.5,
   },
   RWA: {
     costLevel: 2,
@@ -796,6 +892,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9, 12, 1, 2],
     bestTimeNote: "Jun-Sep & Dec-Feb (dry seasons)",
     iataCode: "KGL",
+    safetyScore: 7.5,
   },
   UGA: {
     costLevel: 1,
@@ -804,6 +901,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9, 12, 1, 2],
     bestTimeNote: "Jun-Sep & Dec-Feb (dry seasons)",
     iataCode: "EBB",
+    safetyScore: 5.5,
   },
   DJI: {
     costLevel: 2,
@@ -812,6 +910,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (cooler months)",
     iataCode: "JIB",
+    safetyScore: 6.0,
   },
   SOM: {
     costLevel: 1,
@@ -820,6 +919,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2],
     bestTimeNote: "Dec-Feb (dry northeast monsoon)",
     iataCode: "MGQ",
+    safetyScore: 1.5,
   },
   ERI: {
     costLevel: 1,
@@ -828,6 +928,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (dry season)",
     iataCode: "ASM",
+    safetyScore: 3.5,
   },
   BDI: {
     costLevel: 1,
@@ -836,6 +937,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (dry season)",
     iataCode: "BJM",
+    safetyScore: 3.5,
   },
   COM: {
     costLevel: 1,
@@ -844,6 +946,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "HAH",
+    safetyScore: 5.5,
   },
   MDG: {
     costLevel: 1,
@@ -852,6 +955,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 7, 8, 9, 10],
     bestTimeNote: "Apr-Oct (dry season)",
     iataCode: "TNR",
+    safetyScore: 5.5,
   },
   MUS: {
     costLevel: 2,
@@ -860,6 +964,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10, 11],
     bestTimeNote: "May-Nov (dry & cool season)",
     iataCode: "MRU",
+    safetyScore: 8.0,
   },
   SYC: {
     costLevel: 3,
@@ -868,6 +973,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 10, 11],
     bestTimeNote: "Apr-May & Oct-Nov (between monsoons)",
     iataCode: "SEZ",
+    safetyScore: 8.5,
   },
 
   // ─── Southern Africa ──────────────────────────────────────────
@@ -878,6 +984,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [9, 10, 11, 12, 1, 2, 3],
     bestTimeNote: "Sep-Mar (warm dry season)",
     iataCode: "CPT",
+    safetyScore: 5.0,
   },
   BWA: {
     costLevel: 2,
@@ -886,6 +993,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season, best game viewing)",
     iataCode: "GBE",
+    safetyScore: 7.5,
   },
   NAM: {
     costLevel: 2,
@@ -894,6 +1002,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season & wildlife)",
     iataCode: "WDH",
+    safetyScore: 6.5,
   },
   ZMB: {
     costLevel: 1,
@@ -902,6 +1011,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "LUN",
+    safetyScore: 5.5,
   },
   ZWE: {
     costLevel: 1,
@@ -910,6 +1020,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season, Victoria Falls)",
     iataCode: "HRE",
+    safetyScore: 4.5,
   },
   MOZ: {
     costLevel: 1,
@@ -918,6 +1029,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "MPM",
+    safetyScore: 5.0,
   },
   MWI: {
     costLevel: 1,
@@ -926,6 +1038,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "LLW",
+    safetyScore: 5.5,
   },
   LSO: {
     costLevel: 1,
@@ -934,6 +1047,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [3, 4, 5, 9, 10],
     bestTimeNote: "Mar-May & Sep-Oct (mild weather)",
     iataCode: "MSU",
+    safetyScore: 5.5,
   },
   SWZ: {
     costLevel: 1,
@@ -942,6 +1056,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (dry winter season)",
     iataCode: "SHO",
+    safetyScore: 5.5,
   },
   AGO: {
     costLevel: 2,
@@ -950,6 +1065,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (dry cacimbo season)",
     iataCode: "LAD",
+    safetyScore: 4.5,
   },
 
   // ─── West Africa ──────────────────────────────────────────────
@@ -960,6 +1076,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (dry harmattan season)",
     iataCode: "LOS",
+    safetyScore: 4.0,
   },
   GHA: {
     costLevel: 1,
@@ -968,6 +1085,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (dry season)",
     iataCode: "ACC",
+    safetyScore: 6.5,
   },
   SEN: {
     costLevel: 1,
@@ -976,6 +1094,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season)",
     iataCode: "DSS",
+    safetyScore: 6.5,
   },
   CIV: {
     costLevel: 1,
@@ -984,6 +1103,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3],
     bestTimeNote: "Dec-Mar (dry season)",
     iataCode: "ABJ",
+    safetyScore: 5.5,
   },
   GMB: {
     costLevel: 1,
@@ -992,6 +1112,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season & beach)",
     iataCode: "BJL",
+    safetyScore: 6.0,
   },
   GIN: {
     costLevel: 1,
@@ -1000,6 +1121,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season)",
     iataCode: "CKY",
+    safetyScore: 4.5,
   },
   SLE: {
     costLevel: 1,
@@ -1008,6 +1130,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season)",
     iataCode: "FNA",
+    safetyScore: 5.5,
   },
   LBR: {
     costLevel: 1,
@@ -1016,6 +1139,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (dry season)",
     iataCode: "ROB",
+    safetyScore: 4.5,
   },
   TGO: {
     costLevel: 1,
@@ -1024,6 +1148,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (dry season)",
     iataCode: "LFW",
+    safetyScore: 5.5,
   },
   BEN: {
     costLevel: 1,
@@ -1032,6 +1157,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (dry season)",
     iataCode: "COO",
+    safetyScore: 5.5,
   },
   BFA: {
     costLevel: 1,
@@ -1040,6 +1166,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (cool dry season)",
     iataCode: "OUA",
+    safetyScore: 3.5,
   },
   MLI: {
     costLevel: 1,
@@ -1048,6 +1175,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (cool dry season)",
     iataCode: "BKO",
+    safetyScore: 3.0,
   },
   NER: {
     costLevel: 1,
@@ -1056,6 +1184,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (cool dry season)",
     iataCode: "NIM",
+    safetyScore: 3.5,
   },
   MRT: {
     costLevel: 1,
@@ -1064,6 +1193,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (cooler months)",
     iataCode: "NKC",
+    safetyScore: 5.0,
   },
   GNB: {
     costLevel: 1,
@@ -1072,6 +1202,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season)",
     iataCode: "OXB",
+    safetyScore: 4.5,
   },
 
   // ─── Central Africa ───────────────────────────────────────────
@@ -1082,6 +1213,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (dry season)",
     iataCode: "DLA",
+    safetyScore: 4.5,
   },
   GAB: {
     costLevel: 2,
@@ -1090,6 +1222,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (dry season)",
     iataCode: "LBV",
+    safetyScore: 5.5,
   },
   GNQ: {
     costLevel: 2,
@@ -1098,6 +1231,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (dry season)",
     iataCode: "SSG",
+    safetyScore: 4.5,
   },
   COG: {
     costLevel: 2,
@@ -1106,6 +1240,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (dry season)",
     iataCode: "BZV",
+    safetyScore: 5.0,
   },
   COD: {
     costLevel: 1,
@@ -1114,6 +1249,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (dry season)",
     iataCode: "FIH",
+    safetyScore: 3.0,
   },
   CAF: {
     costLevel: 1,
@@ -1122,6 +1258,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3],
     bestTimeNote: "Nov-Mar (dry season)",
     iataCode: "BGF",
+    safetyScore: 2.0,
   },
   TCD: {
     costLevel: 1,
@@ -1130,6 +1267,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (cool dry season)",
     iataCode: "NDJ",
+    safetyScore: 3.0,
   },
   SDN: {
     costLevel: 1,
@@ -1138,6 +1276,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2],
     bestTimeNote: "Nov-Feb (cooler dry months)",
     iataCode: "KRT",
+    safetyScore: 3.0,
   },
   SSD: {
     costLevel: 1,
@@ -1146,6 +1285,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2],
     bestTimeNote: "Dec-Feb (dry season)",
     iataCode: "JUB",
+    safetyScore: 2.0,
   },
 
   // ─── Americas - North ─────────────────────────────────────────
@@ -1156,6 +1296,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 9, 10],
     bestTimeNote: "Apr-Jun & Sep-Oct (spring & autumn)",
     iataCode: "JFK",
+    safetyScore: 7.5,
   },
   CAN: {
     costLevel: 2,
@@ -1164,6 +1305,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (warm summer)",
     iataCode: "YYZ",
+    safetyScore: 9.0,
   },
   MEX: {
     costLevel: 1,
@@ -1172,6 +1314,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season)",
     iataCode: "MEX",
+    safetyScore: 5.5,
   },
 
   // ─── Americas - Central ───────────────────────────────────────
@@ -1182,6 +1325,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season)",
     iataCode: "GUA",
+    safetyScore: 4.5,
   },
   BLZ: {
     costLevel: 2,
@@ -1190,6 +1334,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "BZE",
+    safetyScore: 6.0,
   },
   SLV: {
     costLevel: 1,
@@ -1198,6 +1343,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season)",
     iataCode: "SAL",
+    safetyScore: 5.0,
   },
   HND: {
     costLevel: 1,
@@ -1206,6 +1352,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "SAP",
+    safetyScore: 4.5,
   },
   NIC: {
     costLevel: 1,
@@ -1214,6 +1361,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "MGA",
+    safetyScore: 5.0,
   },
   CRI: {
     costLevel: 2,
@@ -1222,6 +1370,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "SJO",
+    safetyScore: 7.5,
   },
   PAN: {
     costLevel: 2,
@@ -1230,6 +1379,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "PTY",
+    safetyScore: 7.0,
   },
 
   // ─── Americas - Caribbean ─────────────────────────────────────
@@ -1240,6 +1390,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season)",
     iataCode: "HAV",
+    safetyScore: 6.5,
   },
   DOM: {
     costLevel: 2,
@@ -1248,6 +1399,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "PUJ",
+    safetyScore: 5.5,
   },
   JAM: {
     costLevel: 2,
@@ -1256,6 +1408,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "MBJ",
+    safetyScore: 5.0,
   },
   HTI: {
     costLevel: 1,
@@ -1264,6 +1417,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3],
     bestTimeNote: "Dec-Mar (dry season)",
     iataCode: "PAP",
+    safetyScore: 2.5,
   },
   TTO: {
     costLevel: 2,
@@ -1272,6 +1426,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [1, 2, 3, 4, 5],
     bestTimeNote: "Jan-May (dry season & Carnival)",
     iataCode: "POS",
+    safetyScore: 5.5,
   },
   BRB: {
     costLevel: 3,
@@ -1280,6 +1435,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "BGI",
+    safetyScore: 8.0,
   },
   DMA: {
     costLevel: 2,
@@ -1288,6 +1444,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4, 5],
     bestTimeNote: "Dec-May (dry season)",
     iataCode: "DOM",
+    safetyScore: 8.0,
   },
   GRD: {
     costLevel: 2,
@@ -1296,6 +1453,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "GND",
+    safetyScore: 8.0,
   },
   KNA: {
     costLevel: 3,
@@ -1304,6 +1462,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "SKB",
+    safetyScore: 8.0,
   },
   VCT: {
     costLevel: 2,
@@ -1312,6 +1471,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4, 5],
     bestTimeNote: "Dec-May (dry season)",
     iataCode: "SVD",
+    safetyScore: 8.0,
   },
 
   // ─── Americas - South ─────────────────────────────────────────
@@ -1322,6 +1482,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3],
     bestTimeNote: "Dec-Mar (dry season)",
     iataCode: "BOG",
+    safetyScore: 5.5,
   },
   ECU: {
     costLevel: 1,
@@ -1330,6 +1491,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [6, 7, 8, 9],
     bestTimeNote: "Jun-Sep (highlands dry season)",
     iataCode: "UIO",
+    safetyScore: 5.5,
   },
   PER: {
     costLevel: 1,
@@ -1338,6 +1500,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (dry season for Andes/Amazon)",
     iataCode: "LIM",
+    safetyScore: 5.5,
   },
   BOL: {
     costLevel: 1,
@@ -1346,6 +1509,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "LPB",
+    safetyScore: 5.5,
   },
   BRA: {
     costLevel: 2,
@@ -1354,6 +1518,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 7, 8, 9, 10],
     bestTimeNote: "Apr-Oct (dry season, varies by region)",
     iataCode: "GIG",
+    safetyScore: 5.0,
   },
   ARG: {
     costLevel: 1,
@@ -1362,6 +1527,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (southern spring/summer)",
     iataCode: "EZE",
+    safetyScore: 6.5,
   },
   CHL: {
     costLevel: 2,
@@ -1370,6 +1536,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (southern spring/summer)",
     iataCode: "SCL",
+    safetyScore: 7.5,
   },
   URY: {
     costLevel: 2,
@@ -1378,6 +1545,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [10, 11, 12, 1, 2, 3],
     bestTimeNote: "Oct-Mar (warm beach season)",
     iataCode: "MVD",
+    safetyScore: 8.0,
   },
   PRY: {
     costLevel: 1,
@@ -1386,6 +1554,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9],
     bestTimeNote: "May-Sep (cooler dry season)",
     iataCode: "ASU",
+    safetyScore: 5.5,
   },
   VEN: {
     costLevel: 1,
@@ -1394,6 +1563,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (dry season)",
     iataCode: "CCS",
+    safetyScore: 3.0,
   },
   GUY: {
     costLevel: 1,
@@ -1402,6 +1572,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [2, 3, 4, 9, 10, 11],
     bestTimeNote: "Feb-Apr & Sep-Nov (dry periods)",
     iataCode: "GEO",
+    safetyScore: 5.5,
   },
   SUR: {
     costLevel: 1,
@@ -1410,6 +1581,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [2, 3, 8, 9, 10, 11],
     bestTimeNote: "Feb-Mar & Aug-Nov (dry periods)",
     iataCode: "PBM",
+    safetyScore: 6.0,
   },
 
   // ─── Pacific Islands ──────────────────────────────────────────
@@ -1420,6 +1592,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [9, 10, 11, 12, 1, 2],
     bestTimeNote: "Sep-Feb (southern spring/summer)",
     iataCode: "SYD",
+    safetyScore: 9.0,
   },
   NZL: {
     costLevel: 2,
@@ -1428,6 +1601,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3],
     bestTimeNote: "Dec-Mar (southern summer)",
     iataCode: "AKL",
+    safetyScore: 9.2,
   },
   FJI: {
     costLevel: 2,
@@ -1436,6 +1610,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "NAN",
+    safetyScore: 7.5,
   },
   PNG: {
     costLevel: 2,
@@ -1444,6 +1619,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "POM",
+    safetyScore: 4.5,
   },
   VUT: {
     costLevel: 2,
@@ -1452,6 +1628,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [4, 5, 6, 7, 8, 9, 10],
     bestTimeNote: "Apr-Oct (dry season)",
     iataCode: "VLI",
+    safetyScore: 7.5,
   },
   WSM: {
     costLevel: 2,
@@ -1460,6 +1637,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "APW",
+    safetyScore: 8.0,
   },
   FSM: {
     costLevel: 2,
@@ -1468,6 +1646,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [1, 2, 3, 4],
     bestTimeNote: "Jan-Apr (drier months)",
     iataCode: "TKK",
+    safetyScore: 7.5,
   },
   PLW: {
     costLevel: 2,
@@ -1476,6 +1655,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [11, 12, 1, 2, 3, 4],
     bestTimeNote: "Nov-Apr (dry season & diving)",
     iataCode: "ROR",
+    safetyScore: 8.5,
   },
   MHL: {
     costLevel: 2,
@@ -1484,6 +1664,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [12, 1, 2, 3, 4],
     bestTimeNote: "Dec-Apr (drier season)",
     iataCode: "MAJ",
+    safetyScore: 7.5,
   },
   TUV: {
     costLevel: 2,
@@ -1492,6 +1673,7 @@ export const travelData: Record<string, TravelInfo> = {
     bestMonths: [5, 6, 7, 8, 9, 10],
     bestTimeNote: "May-Oct (dry season)",
     iataCode: "FUN",
+    safetyScore: 8.0,
   },
 };
 

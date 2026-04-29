@@ -1,4 +1,5 @@
-// Type scale for Mono redesign.
+// Type scale for Signature v2 redesign.
+// Display = Fraunces serif (with italic variant), UI = Inter, kickers = JetBrains Mono.
 // All tracking values converted from the spec's em units to React Native points
 // (letterSpacing in RN is in points, not em). Formula: points = fontSize * em.
 
@@ -9,16 +10,16 @@ export const Type = {
   kicker: {
     fontFamily: 'JetBrainsMono_500Medium',
     fontSize: 10,
-    letterSpacing: 10 * 0.14, // 0.14em
+    letterSpacing: 10 * 0.18, // 0.18em — matches design
     textTransform: 'uppercase',
-    fontWeight: '500',
+    fontWeight: '600',
   } as TextStyle,
   kickerSm: {
     fontFamily: 'JetBrainsMono_500Medium',
-    fontSize: 9.5,
-    letterSpacing: 9.5 * 0.1,
+    fontSize: 9,
+    letterSpacing: 9 * 0.18,
     textTransform: 'uppercase',
-    fontWeight: '500',
+    fontWeight: '700',
   } as TextStyle,
   mono10: {
     fontFamily: 'JetBrainsMono_500Medium',
@@ -26,61 +27,103 @@ export const Type = {
     letterSpacing: 10 * 0.08,
     fontWeight: '500',
   } as TextStyle,
+  mono9: {
+    fontFamily: 'JetBrainsMono_500Medium',
+    fontSize: 9,
+    letterSpacing: 9 * 0.14,
+    fontWeight: '600',
+  } as TextStyle,
 
-  // Display headings — Inter 700
+  // Display headings — Fraunces serif, italic by default for the signature look
   display40: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Fraunces_500Medium',
     fontSize: 40,
-    lineHeight: 40,
-    letterSpacing: -40 * 0.03,
-    fontWeight: '700',
+    lineHeight: 40 * 1.05,
+    letterSpacing: -40 * 0.022,
+    fontWeight: '500',
+  } as TextStyle,
+  display40Italic: {
+    fontFamily: 'Fraunces_500Medium_Italic',
+    fontStyle: 'italic',
+    fontSize: 40,
+    lineHeight: 40 * 1.05,
+    letterSpacing: -40 * 0.022,
+    fontWeight: '500',
   } as TextStyle,
   display32: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Fraunces_500Medium',
     fontSize: 32,
-    lineHeight: 32 * 1.05,
-    letterSpacing: -32 * 0.03,
-    fontWeight: '700',
+    lineHeight: 32 * 1.0,
+    letterSpacing: -32 * 0.022,
+    fontWeight: '500',
+  } as TextStyle,
+  display32Italic: {
+    fontFamily: 'Fraunces_500Medium_Italic',
+    fontStyle: 'italic',
+    fontSize: 32,
+    lineHeight: 32 * 1.0,
+    letterSpacing: -32 * 0.022,
+    fontWeight: '500',
   } as TextStyle,
   display26: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Fraunces_500Medium',
     fontSize: 26,
     lineHeight: 26 * 1.0,
-    letterSpacing: -26 * 0.03,
-    fontWeight: '700',
+    letterSpacing: -26 * 0.02,
+    fontWeight: '500',
+  } as TextStyle,
+  display26Italic: {
+    fontFamily: 'Fraunces_500Medium_Italic',
+    fontStyle: 'italic',
+    fontSize: 26,
+    lineHeight: 26 * 1.0,
+    letterSpacing: -26 * 0.02,
+    fontWeight: '500',
   } as TextStyle,
   display24: {
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Fraunces_500Medium',
     fontSize: 24,
-    letterSpacing: -24 * 0.02,
-    fontWeight: '600',
+    lineHeight: 24 * 1.05,
+    letterSpacing: -24 * 0.018,
+    fontWeight: '500',
   } as TextStyle,
   display22: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Fraunces_500Medium',
     fontSize: 22,
     lineHeight: 22 * 1.1,
-    letterSpacing: -22 * 0.025,
-    fontWeight: '700',
+    letterSpacing: -22 * 0.018,
+    fontWeight: '500',
+  } as TextStyle,
+  display22Italic: {
+    fontFamily: 'Fraunces_500Medium_Italic',
+    fontStyle: 'italic',
+    fontSize: 22,
+    lineHeight: 22 * 1.1,
+    letterSpacing: -22 * 0.018,
+    fontWeight: '500',
   } as TextStyle,
 
-  // Titles / mid-size
+  // Titles / mid-size — italic Fraunces for headlines, Inter for UI titles
   title20: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Fraunces_500Medium_Italic',
+    fontStyle: 'italic',
     fontSize: 20,
-    letterSpacing: -20 * 0.02,
-    fontWeight: '700',
+    letterSpacing: -20 * 0.018,
+    fontWeight: '500',
   } as TextStyle,
   title18: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Fraunces_500Medium_Italic',
+    fontStyle: 'italic',
     fontSize: 18,
-    letterSpacing: -18 * 0.02,
-    fontWeight: '700',
+    letterSpacing: -18 * 0.014,
+    fontWeight: '500',
   } as TextStyle,
   title17: {
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Fraunces_500Medium_Italic',
+    fontStyle: 'italic',
     fontSize: 17,
-    letterSpacing: -17 * 0.02,
-    fontWeight: '600',
+    letterSpacing: -17 * 0.012,
+    fontWeight: '500',
   } as TextStyle,
   title15: {
     fontFamily: 'Inter_600SemiBold',

@@ -59,7 +59,10 @@ export default function BookingForm({
 }: BookingFormProps) {
   const { colors, isDark } = useTheme();
   const config = BOOKING_TYPES[type];
-  const typeColor = getBookingColor(type, isDark);
+  // Signature v2 — every form uses the coral signature accent regardless of
+  // booking type (no more blue/green/etc per type). The booking type only
+  // shows up in the icon and the kicker label.
+  const typeColor = colors.coral;
   const IconComponent = config.icon;
 
   // ── State ──────────────────────────────────
@@ -96,7 +99,18 @@ export default function BookingForm({
   };
 
   // ── Derived ────────────────────────────────
-  const canSubmit = title.trim().length > 0 && startDate.trim().length > 0;
+  // Flights derive their title from the airport codes — DEP/ARR are the
+  // required signal there. Other types still rely on `title` being filled.
+  const flightDerivedTitle = (() => {
+    if (type !== 'flight') return '';
+    const dep = (typeDetails.departure ?? '').trim().toUpperCase();
+    const arr = (typeDetails.arrival ?? '').trim().toUpperCase();
+    if (!dep || !arr) return '';
+    const fn = (typeDetails.flightNumber ?? '').trim();
+    return fn ? `${dep} → ${arr} ${fn}` : `${dep} → ${arr}`;
+  })();
+  const effectiveTitle = type === 'flight' ? flightDerivedTitle : title.trim();
+  const canSubmit = effectiveTitle.length > 0 && startDate.trim().length > 0;
 
   const submitShadow = useMemo(
     () => (canSubmit ? Shadows.glow(typeColor, 0.3) : undefined),
@@ -106,7 +120,7 @@ export default function BookingForm({
   const handleSubmit = () => {
     if (!canSubmit) return;
     onSubmit({
-      title: title.trim(),
+      title: effectiveTitle,
       startDate: startDate.trim(),
       endDate: endDate.trim(),
       location: location.trim(),
@@ -119,39 +133,55 @@ export default function BookingForm({
     });
   };
 
-  // ── Reusable style objects ─────────────────
-  // White labels + white inputs for visibility on colored sheet background
+  // ── Reusable style objects (Signature v2 — paper bg) ─────
   const labelStyle = {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    color: '#FFFFFF',
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    color: colors.coralDeep,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-    marginBottom: 6,
+    letterSpacing: 9 * 0.18,
+    fontWeight: '600' as const,
   };
 
+  // Italic Fraunces glyphs lean right; explicit width + small right pad
+  // keeps the placeholder/value from clipping past the card edge.
   const inputStyle = {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'transparent',
+    paddingLeft: 0,
+    paddingRight: 6,
+    paddingVertical: 0,
+    fontFamily: FontFamily.displayItalic,
+    fontStyle: 'italic' as const,
+    fontSize: 17,
+    fontWeight: '500' as const,
+    letterSpacing: -17 * 0.014,
+    color: colors.ink,
+    marginTop: 4,
+    width: '100%' as const,
+  };
+
+  const fieldCardStyle = {
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
-    color: colors.foreground,
+    borderColor: colors.line,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    marginBottom: 10,
+    overflow: 'hidden' as const,
   };
 
   const groupedCardStyle = {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
+    borderColor: colors.line,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
   };
 
-  // ── Helper: labeled TextInput ──────────────
+  // ── Helper: labeled TextInput as a paper card with kicker ─
   const renderInput = (
     label: string,
     value: string,
@@ -165,18 +195,31 @@ export default function BookingForm({
       required?: boolean;
     },
   ) => (
-    <View style={[styles.fieldGroup, options?.flex != null && { flex: options.flex }]}>
-      <Text style={labelStyle}>
-        {label}
+    <View
+      style={[
+        fieldCardStyle,
+        options?.flex != null && { flex: options.flex },
+        options?.multiline && { minHeight: options.minHeight ?? 92 },
+      ]}
+    >
+      <Text style={[labelStyle, { color: colors.inkMute }]}>
+        {label.toUpperCase()}
         {options?.required ? ' *' : ''}
       </Text>
       <TextInput
         style={[
           inputStyle,
-          options?.multiline && { minHeight: options.minHeight ?? 80, textAlignVertical: 'top' },
+          options?.multiline && {
+            minHeight: (options.minHeight ?? 80) - 30,
+            textAlignVertical: 'top',
+            // Body multiline reads better in non-italic upright text
+            fontFamily: FontFamily.regular,
+            fontStyle: 'normal',
+            fontSize: 14,
+          },
         ]}
         placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
+        placeholderTextColor={colors.inkFaint}
         value={value}
         onChangeText={onChange}
         keyboardType={options?.keyboardType ?? 'default'}
@@ -203,10 +246,10 @@ export default function BookingForm({
       {/* Airline + Flight Number */}
       <View style={styles.row}>
         <View style={{ flex: 2 }}>
-          {renderInput('Airline', typeDetails.airline ?? '', (v) => updateDetail('airline', v), 'e.g. Emirates')}
+          {renderInput('Airline', typeDetails.airline ?? '', (v) => updateDetail('airline', v), 'Emirates')}
         </View>
         <View style={{ flex: 1 }}>
-          {renderInput('Flight Number', typeDetails.flightNumber ?? '', (v) => updateDetail('flightNumber', v), 'e.g. EK202')}
+          {renderInput('Flight Number', typeDetails.flightNumber ?? '', (v) => updateDetail('flightNumber', v), 'EK202')}
         </View>
       </View>
 
@@ -236,7 +279,7 @@ export default function BookingForm({
   const renderHotelFields = () => (
     <>
       {/* Hotel name (large, prominent) */}
-      {renderInput('Hotel Name', title, setTitle, 'e.g. Park Hyatt Tokyo', { required: true })}
+      {renderInput('Hotel Name', title, setTitle, 'Park Hyatt Tokyo', { required: true })}
 
       {/* Check-in + Check-out */}
       <View style={styles.row}>
@@ -270,14 +313,14 @@ export default function BookingForm({
       </View>
 
       {/* Location */}
-      {renderInput('Location', location, setLocation, 'e.g. Tokyo, Japan')}
+      {renderInput('Location', location, setLocation, 'Tokyo, Japan')}
     </>
   );
 
   const renderExperienceFields = () => (
     <>
       {/* Activity name */}
-      {renderInput('Activity Name', title, setTitle, 'e.g. Mt Fuji Day Hike', { required: true })}
+      {renderInput('Activity Name', title, setTitle, 'Mt Fuji Day Hike', { required: true })}
 
       {/* Date + Duration */}
       <View style={styles.row}>
@@ -290,22 +333,22 @@ export default function BookingForm({
           />
         </View>
         <View style={{ flex: 1 }}>
-          {renderInput('Duration', typeDetails.duration ?? '', (v) => updateDetail('duration', v), 'e.g. 3 hours')}
+          {renderInput('Duration', typeDetails.duration ?? '', (v) => updateDetail('duration', v), '3 hours')}
         </View>
       </View>
 
       {/* Location / Meeting Point */}
-      {renderInput('Location / Meeting Point', location, setLocation, 'e.g. Marina Bay')}
+      {renderInput('Location / Meeting Point', location, setLocation, 'Marina Bay')}
 
       {/* Group size */}
-      {renderInput('Group Size', typeDetails.groupSize ?? '', (v) => updateDetail('groupSize', v), 'e.g. 4', { keyboardType: 'numeric' })}
+      {renderInput('Group Size', typeDetails.groupSize ?? '', (v) => updateDetail('groupSize', v), '4', { keyboardType: 'numeric' })}
     </>
   );
 
   const renderCarRentalFields = () => (
     <>
       {/* Company */}
-      {renderInput('Company', title, setTitle, 'e.g. Hertz', { required: true })}
+      {renderInput('Company', title, setTitle, 'Hertz', { required: true })}
 
       {/* Pickup grouped card */}
       <View style={groupedCardStyle}>
@@ -317,7 +360,7 @@ export default function BookingForm({
           accentColor={typeColor}
         />
         <View style={{ height: 12 }} />
-        {renderInput('Pickup Location', typeDetails.pickupLocation ?? '', (v) => updateDetail('pickupLocation', v), 'e.g. Airport Terminal 3')}
+        {renderInput('Pickup Location', typeDetails.pickupLocation ?? '', (v) => updateDetail('pickupLocation', v), 'Airport Terminal 3')}
       </View>
 
       {/* Dropoff grouped card */}
@@ -330,7 +373,7 @@ export default function BookingForm({
           accentColor={typeColor}
         />
         <View style={{ height: 12 }} />
-        {renderInput('Dropoff Location', typeDetails.dropoffLocation ?? '', (v) => updateDetail('dropoffLocation', v), 'e.g. City Centre')}
+        {renderInput('Dropoff Location', typeDetails.dropoffLocation ?? '', (v) => updateDetail('dropoffLocation', v), 'City Centre')}
       </View>
 
       {/* Car type */}
@@ -349,7 +392,7 @@ export default function BookingForm({
   const renderInsuranceFields = () => (
     <>
       {/* Provider */}
-      {renderInput('Provider', title, setTitle, 'e.g. Allianz', { required: true })}
+      {renderInput('Provider', title, setTitle, 'Allianz', { required: true })}
 
       {/* Start + End */}
       <View style={styles.row}>
@@ -372,17 +415,17 @@ export default function BookingForm({
       </View>
 
       {/* Policy number */}
-      {renderInput('Policy Number', typeDetails.policyNumber ?? '', (v) => updateDetail('policyNumber', v), 'e.g. POL-123456')}
+      {renderInput('Policy Number', typeDetails.policyNumber ?? '', (v) => updateDetail('policyNumber', v), 'POL-123456')}
 
       {/* Coverage */}
-      {renderInput('Coverage', typeDetails.coverage ?? '', (v) => updateDetail('coverage', v), 'e.g. Medical + Cancellation')}
+      {renderInput('Coverage', typeDetails.coverage ?? '', (v) => updateDetail('coverage', v), 'Medical + Cancel')}
     </>
   );
 
   const renderRestaurantFields = () => (
     <>
       {/* Restaurant name */}
-      {renderInput('Restaurant Name', title, setTitle, 'e.g. Sukiyabashi Jiro', { required: true })}
+      {renderInput('Restaurant Name', title, setTitle, 'Sukiyabashi Jiro', { required: true })}
 
       {/* Date + Time */}
       <View style={styles.row}>
@@ -395,15 +438,15 @@ export default function BookingForm({
           />
         </View>
         <View style={styles.rowItem}>
-          {renderInput('Time', typeDetails.time ?? '', (v) => updateDetail('time', v), 'e.g. 7:30 PM')}
+          {renderInput('Time', typeDetails.time ?? '', (v) => updateDetail('time', v), '7:30 PM')}
         </View>
       </View>
 
       {/* Party size */}
-      {renderInput('Party Size', typeDetails.partySize ?? '', (v) => updateDetail('partySize', v), 'e.g. 4', { keyboardType: 'numeric' })}
+      {renderInput('Party Size', typeDetails.partySize ?? '', (v) => updateDetail('partySize', v), '4', { keyboardType: 'numeric' })}
 
       {/* Cuisine */}
-      {renderInput('Cuisine', typeDetails.cuisine ?? '', (v) => updateDetail('cuisine', v), 'e.g. Japanese')}
+      {renderInput('Cuisine', typeDetails.cuisine ?? '', (v) => updateDetail('cuisine', v), 'Japanese')}
     </>
   );
 
@@ -429,7 +472,9 @@ export default function BookingForm({
   // For flight, the title is built from route; for types that use the first
   // field as the title (hotel, experience, car_rental, insurance, restaurant),
   // we render it inside the type section. Flight still needs a standalone title.
-  const needsStandaloneTitle = type === 'flight';
+  // The flight type now derives its title automatically from departure +
+  // arrival airport codes (no standalone TITLE field — matches mockup).
+  const needsStandaloneTitle = false;
 
   // ── Render ─────────────────────────────────
   return (
@@ -439,86 +484,156 @@ export default function BookingForm({
     >
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: Spacing.lg, paddingBottom: Spacing['3xl'] }}
+        contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 12 }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Header ─────────────────────────── */}
+        {/* ── Editorial header — kicker + italic "Add {type}." ─ */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={onBack}
             hitSlop={12}
-            style={styles.backBtn}
+            style={[
+              styles.backBtn,
+              { backgroundColor: colors.surface, borderColor: colors.line },
+            ]}
           >
-            <ArrowLeft size={20} color={colors.foreground} />
+            <ArrowLeft size={18} color={colors.ink} strokeWidth={2} />
           </TouchableOpacity>
 
-          <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-            <IconComponent size={18} color="#FFFFFF" />
+          <View style={styles.headerText}>
+            <Text
+              style={{
+                fontFamily: FontFamily.monoMedium,
+                fontSize: 10,
+                fontWeight: '600',
+                color: colors.coral,
+                letterSpacing: 10 * 0.18,
+                textTransform: 'uppercase',
+              }}
+            >
+              NEW BOOKING · 01
+            </Text>
+            <Text
+              style={{
+                fontFamily: FontFamily.display,
+                fontSize: 26,
+                fontWeight: '500',
+                letterSpacing: -26 * 0.018,
+                color: colors.ink,
+                marginTop: 2,
+                lineHeight: 28,
+              }}
+            >
+              Add{' '}
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                }}
+              >
+                {config.label.toLowerCase()}
+              </Text>
+              <Text style={{ color: colors.coral }}>.</Text>
+            </Text>
           </View>
 
-          <Text style={styles.headerTitle}>
-            Add {config.label}
-          </Text>
+          <View
+            style={[
+              styles.iconCircle,
+              {
+                backgroundColor: colors.coralBg,
+                borderColor: colors.line,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <IconComponent size={16} color={colors.coralDeep} strokeWidth={1.8} />
+          </View>
         </View>
 
         {/* ── Title (only for flight, others embed it) */}
         {needsStandaloneTitle &&
-          renderInput('Title', title, setTitle, 'e.g. LHR to NRT BA005', { required: true })}
+          renderInput('Title', title, setTitle, 'LHR → NRT BA005', { required: true })}
 
         {/* ── Type-specific fields ───────────── */}
         {renderTypeFields()}
 
-        {/* ── More details toggle ────────────── */}
+        {/* ── More details toggle — paper chip with coral kicker text ─── */}
         <TouchableOpacity
           onPress={() => setShowExtras((prev) => !prev)}
-          style={styles.extrasToggle}
+          style={[
+            styles.extrasToggle,
+            { borderColor: colors.line, backgroundColor: colors.surface },
+          ]}
           activeOpacity={0.7}
         >
-          <Text style={[styles.extrasToggleText, { color: '#FFFFFF' }]}>
-            {showExtras ? 'Hide extras' : 'More details'}
+          <Text
+            style={[
+              styles.extrasToggleText,
+              { color: colors.coralDeep, letterSpacing: 11 * 0.18 },
+            ]}
+          >
+            {showExtras ? 'HIDE EXTRAS' : 'MORE DETAILS'}
           </Text>
           {showExtras ? (
-            <ChevronUp size={18} color="#FFFFFF" />
+            <ChevronUp size={14} color={colors.coralDeep} strokeWidth={2.2} />
           ) : (
-            <ChevronDown size={18} color="#FFFFFF" />
+            <ChevronDown size={14} color={colors.coralDeep} strokeWidth={2.2} />
           )}
         </TouchableOpacity>
 
         {/* ── Extras section ─────────────────── */}
         {showExtras && (
           <View>
-            {renderInput('Confirmation Number', confirmationNumber, setConfirmationNumber, 'e.g. ABC123')}
+            {renderInput('Confirmation Number', confirmationNumber, setConfirmationNumber, 'ABC123')}
 
             <View style={styles.row}>
               <View style={{ flex: 2 }}>
-                {renderInput('Cost', cost, setCost, 'e.g. 450.00', { keyboardType: 'numeric' })}
+                {renderInput('Cost', cost, setCost, '450.00', { keyboardType: 'numeric' })}
               </View>
               <View style={{ flex: 1 }}>
-                {renderInput('Currency', currency, setCurrency, 'e.g. USD')}
+                {renderInput('Currency', currency, setCurrency, 'USD')}
               </View>
             </View>
 
-            {renderInput('Notes', notes, setNotes, 'Any additional notes...', {
+            {renderInput('Notes', notes, setNotes, 'Any additional notes…', {
               multiline: true,
               minHeight: 80,
             })}
           </View>
         )}
 
-        {/* ── Submit button ──────────────────── */}
+        {/* ── Submit — italic Fraunces on coral. Disabled state stays
+            present (soft paper bg + muted ink) instead of fading out. ─── */}
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={!canSubmit}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
           style={[
             styles.submitButton,
             {
-              backgroundColor: '#FFFFFF',
-              opacity: canSubmit ? 1 : 0.4,
+              backgroundColor: canSubmit ? colors.coral : colors.surfaceMuted,
+              borderColor: canSubmit ? colors.coral : colors.line,
+              borderWidth: 1,
+              shadowColor: canSubmit ? colors.coral : 'transparent',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: canSubmit ? 0.35 : 0,
+              shadowRadius: 16,
+              elevation: canSubmit ? 6 : 0,
             },
           ]}
         >
-          <Text style={[styles.submitButtonText, { color: typeColor }]}>SAVE BOOKING</Text>
+          <Text
+            style={[
+              styles.submitButtonText,
+              { color: canSubmit ? '#FFFFFF' : colors.inkMute },
+            ]}
+          >
+            {canSubmit ? 'Save booking' : 'Fill in the essentials'}
+            {canSubmit ? (
+              <Text style={{ color: 'rgba(255,255,255,0.7)' }}>{'  →'}</Text>
+            ) : null}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -534,20 +649,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    backgroundColor: '#FFFFFF',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerText: {
+    flex: 1,
+  },
   iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -571,27 +689,33 @@ const styles = StyleSheet.create({
   extrasToggle: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    paddingVertical: Spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
     marginBottom: Spacing.md,
   },
   extrasToggleText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.sm,
-    letterSpacing: 0.3,
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   submitButton: {
-    paddingVertical: 16,
-    borderRadius: Radius.md,
+    paddingVertical: 18,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: Spacing.lg,
   },
   submitButtonText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.base,
-    color: '#FFFFFF',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontFamily: FontFamily.displayItalic,
+    fontStyle: 'italic',
+    fontSize: 17,
+    fontWeight: '500',
+    letterSpacing: -17 * 0.014,
   },
 });

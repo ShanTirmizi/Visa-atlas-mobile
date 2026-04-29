@@ -5,6 +5,7 @@ import { ChevronRight, Clock, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily } from '@/constants/theme';
 import { Flag } from '@/components/ui/Flag';
+import { toAlpha2 } from '@/utils/countryCode';
 
 export type GuideStatus = 'preparing' | 'submitted' | 'approved' | 'rejected';
 
@@ -49,17 +50,6 @@ function resolveStatusVisual(
   }
 }
 
-const A3_TO_A2: Record<string, string> = {
-  AFG: 'AF', ALB: 'AL', AUS: 'AU', AUT: 'AT', BEL: 'BE', BGR: 'BG', BRA: 'BR',
-  CAN: 'CA', CHE: 'CH', CHL: 'CL', CHN: 'CN', COL: 'CO', CZE: 'CZ', DEU: 'DE',
-  DNK: 'DK', EGY: 'EG', ESP: 'ES', FIN: 'FI', FRA: 'FR', GBR: 'GB', GRC: 'GR',
-  HRV: 'HR', HUN: 'HU', IDN: 'ID', IND: 'IN', IRL: 'IE', ISL: 'IS', ITA: 'IT',
-  JPN: 'JP', KOR: 'KR', LUX: 'LU', MAR: 'MA', MEX: 'MX', MYS: 'MY', NLD: 'NL',
-  NOR: 'NO', NPL: 'NP', NZL: 'NZ', PER: 'PE', PHL: 'PH', POL: 'PL', PRT: 'PT',
-  ROU: 'RO', SAU: 'SA', SGP: 'SG', SVK: 'SK', SVN: 'SI', SWE: 'SE', THA: 'TH',
-  TUR: 'TR', UAE: 'AE', ARE: 'AE', USA: 'US', VNM: 'VN', ZAF: 'ZA',
-};
-
 export function GuideApplicationCard({
   countryCode,
   countryName,
@@ -75,7 +65,7 @@ export function GuideApplicationCard({
   const { colors } = useTheme();
   const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
   const visual = resolveStatusVisual(status, pct);
-  const alpha2 = A3_TO_A2[countryCode.toUpperCase()] ?? countryCode.slice(0, 2).toUpperCase();
+  const alpha2 = toAlpha2(countryCode);
   const isInProgress = status === 'preparing' || status === 'submitted';
   const accentColor = pct >= 75 ? colors.visaFree : colors.coral;
 

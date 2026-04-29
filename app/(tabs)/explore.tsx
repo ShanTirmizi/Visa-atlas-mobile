@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/theme-context';
@@ -8,6 +8,7 @@ import { countryMeta } from '@/data/countryMeta';
 import { cityTemperatures } from '@/data/temperatureData';
 import { VisaMap } from '@/components/map/VisaMap';
 import { ExploreSheet, type CountryBrief } from '@/components/explore/ExploreSheet';
+import SurpriseMeSheet, { type SurpriseMeSheetRef } from '@/components/surprise/SurpriseMeSheet';
 import type { Cat } from '@/components/ui/Badge';
 
 // ──────────────────────────────────────────────
@@ -166,6 +167,13 @@ export default function ExploreScreen() {
   // No default selection — user picks via map, carousel, or list.
   const [selectedCode, setSelectedCode] = useState<string>('');
 
+  // "Surprise me" sheet — multi-step picker that lands on a random country.
+  const surpriseRef = useRef<SurpriseMeSheetRef>(null);
+  const handleSurprisePicked = useCallback((code: string) => {
+    setSelectedCode(code);
+    router.push(`/country/${code}`);
+  }, [router]);
+
   // When map taps a country (ISO-3), update selected
   const handleMapCountrySelect = useCallback((code: string) => {
     setSelectedCode(code);
@@ -211,6 +219,15 @@ export default function ExploreScreen() {
         onSelectCountry={handleSheetSelectCountry}
         onViewDetails={handleViewDetails}
         onToggleSave={handleToggleSave}
+        onSurpriseMe={() => surpriseRef.current?.present()}
+      />
+
+      {/* Surprise me — multi-step picker that lands on a random country
+          tailored to the user's vibes/prefs. */}
+      <SurpriseMeSheet
+        ref={surpriseRef}
+        heldVisas={heldVisasSet}
+        onCountrySelected={handleSurprisePicked}
       />
     </View>
   );

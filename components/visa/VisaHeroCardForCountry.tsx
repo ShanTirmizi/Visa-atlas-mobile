@@ -17,8 +17,9 @@ interface Props {
   category: VisaCategory;
   /** Effective max-stay days after held-visa resolution. */
   days?: number;
-  /** User's residence ISO-3 code, used for the visa-free body adjective. */
-  residence?: string;
+  /** User's passport ISO-3 codes, used for the visa-free body adjective.
+   *  Multiple passports are joined with " / " (e.g. "India / United States"). */
+  passports?: string[];
   /** Whether a guide already exists for this country. */
   hasGuide: boolean;
   /** Called when the dark CTA pill is pressed (evisa / required only). */
@@ -58,7 +59,7 @@ export function VisaHeroCardForCountry({
   country,
   category,
   days,
-  residence,
+  passports,
   hasGuide,
   onCreateGuide,
 }: Props) {
@@ -73,9 +74,12 @@ export function VisaHeroCardForCountry({
   const passportValidity = country.passportValidity ?? '6m+';
   const entries = country.entries ?? (heroCat === 'free' ? '∞' : 'single');
 
-  const residenceName = residence
-    ? (staticVisaData.find((c) => c.code === residence)?.name ?? residence)
-    : null;
+  const passportNames =
+    passports && passports.length > 0
+      ? passports
+          .map((code) => staticVisaData.find((c) => c.code === code)?.name ?? code)
+          .join(' / ')
+      : null;
 
   const today = new Date();
 
@@ -89,7 +93,7 @@ export function VisaHeroCardForCountry({
         stamp={{ label: 'APPROVED', date: fmtMonthYear(today) }}
         body={
           <>
-            {residenceName ? (
+            {passportNames ? (
               <>
                 As a{' '}
                 <Text
@@ -99,7 +103,7 @@ export function VisaHeroCardForCountry({
                     fontWeight: '500',
                   }}
                 >
-                  {residenceName} passport holder
+                  {passportNames} passport holder
                 </Text>
                 {' — '}
               </>

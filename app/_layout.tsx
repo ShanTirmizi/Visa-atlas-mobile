@@ -61,8 +61,11 @@ function ThemedApp() {
       segments[0] === 'sign-in' ||
       segments[0] === 'forgot-password';
     const inOnboarding = segments[0] === 'onboarding';
+    const inPublicLegal =
+      segments[0] === 'more' &&
+      (segments[1] === 'terms' || segments[1] === 'privacy-policy');
 
-    if (!isAuthenticated && !inAuthGroup) {
+    if (!isAuthenticated && !inAuthGroup && !inPublicLegal) {
       router.replace('/sign-in');
     } else if (isAuthenticated && inAuthGroup) {
       if (!onboarded) {
@@ -111,7 +114,7 @@ function ThemedApp() {
           <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
           <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
           <Stack.Screen
-            name="trip/[id]"
+            name="trip/[id]/index"
             options={{
               animation: 'slide_from_right',
             }}
@@ -126,6 +129,10 @@ function ThemedApp() {
           />
           <Stack.Screen
             name="chat/[tripId]"
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="visa-chat/[guideId]"
             options={{ animation: 'slide_from_right' }}
           />
           <Stack.Screen name="more/visas" options={{ animation: 'slide_from_right' }} />

@@ -2,8 +2,9 @@ import React, {
   useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo,
 } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Dimensions,
+  View, Text, TouchableOpacity, StyleSheet, Dimensions, Modal, FlatList, TextInput,
 } from 'react-native';
+import { ChevronRight, Search, X } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -28,12 +29,17 @@ import {
 } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import { endpoints } from '@/constants/api';
-import type { CountryVisa, HeldVisaType, VisaCategory } from '@/data/visaData';
-import type { CountryMeta } from '@/data/countryMeta';
-import type { TravelInfo } from '@/data/travelData';
+import { visaData, resolveCountry, type CountryVisa, type HeldVisaType, type VisaCategory } from '@/data/visaData';
+import { countryMeta, type CountryMeta } from '@/data/countryMeta';
+import { travelData, type TravelInfo } from '@/data/travelData';
+import { Flag } from '@/components/ui/Flag';
+import { Squiggle } from '@/components/ui/Squiggle';
+import { AnimalAvatar, ANIMAL_KINDS } from '@/components/ui/AnimalAvatar';
+import { toAlpha2 } from '@/utils/countryCode';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Platform } from 'react-native';
 import { DarkOrb } from '@/components/ui/DarkOrb';
 import { SectionKicker } from '@/components/ui/SectionKicker';
-import { PillButton } from '@/components/ui/PillButton';
 
 // ── Constants ───────────────────────────────────────────────────────────
 const VIBES = [
@@ -170,26 +176,59 @@ function TypingDots({ color }: { color: string }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// AvatarStack — decorative traveler circles
+// AvatarStack — cartoon animal traveler avatars (overlapping circles)
+// with a "+N" overflow chip when count exceeds the visible cap.
 // ════════════════════════════════════════════════════════════════════════
 function AvatarStack({ count }: { count: number }) {
-  const shown = Math.min(count, 3);
+  const VISIBLE_CAP = 3;
+  // Show all avatars when count fits the cap; otherwise show one fewer
+  // animal so the +N chip can take that slot — keeps the strip width fixed.
+  const shown = count <= VISIBLE_CAP ? count : VISIBLE_CAP - 1;
+  const overflow = count - shown;
+  const { colors } = useTheme();
+
   return (
     <View style={{ flexDirection: 'row' }}>
-      {AVATAR_TONES.slice(0, shown).map((tone, i) => (
+      {Array.from({ length: shown }).map((_, i) => (
         <View
           key={i}
           style={{
+            marginLeft: i === 0 ? 0 : -10,
+            borderWidth: 2,
+            borderColor: '#FFFFFF',
+            borderRadius: 18,
+          }}
+        >
+          <AnimalAvatar kind={ANIMAL_KINDS[i % ANIMAL_KINDS.length]} size={32} />
+        </View>
+      ))}
+      {overflow > 0 && (
+        <View
+          style={{
+            marginLeft: shown === 0 ? 0 : -10,
             width: 32,
             height: 32,
             borderRadius: 16,
-            backgroundColor: tone,
             borderWidth: 2,
             borderColor: '#FFFFFF',
-            marginLeft: i === 0 ? 0 : -10,
+            backgroundColor: colors.teal,
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
-        />
-      ))}
+        >
+          <Text
+            style={{
+              fontFamily: FontFamily.bold,
+              fontSize: 11,
+              fontWeight: '700',
+              color: '#FFFFFF',
+              letterSpacing: -0.2,
+            }}
+          >
+            +{overflow}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -208,10 +247,48 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const [error, setError] = useState('');
     const [tick, setTick] = useState(0);
 
+    // ── Country picker state (used when sheet is launched without a
+    // country — e.g. from Trips home's AI button). When a country is
+    // already provided via props, this stays empty and the picker stays
+    // hidden.
+    const propHasCountry = !!country?.code;
+    const [pickedCode, setPickedCode] = useState<string>('');
+    const [showPicker, setShowPicker] = useState(false);
+    const [pickerSearch, setPickerSearch] = useState('');
+
+    const effective = useMemo(() => {
+      // Prefer prop country when present (e.g. opened from country detail).
+      // Otherwise fall back to the picked country from the picker modal.
+      const code = propHasCountry ? country.code : pickedCode;
+      if (!code) return null;
+      const c = visaData.find((x) => x.code === code);
+      if (!c) return null;
+      const m = countryMeta[code] ?? null;
+      const t = travelData[code] ?? null;
+      const r = resolveCountry(c, heldVisas);
+      return { country: c, meta: m, travel: t, resolved: r };
+    }, [propHasCountry, country?.code, pickedCode, heldVisas]);
+
+    const filteredPickerCountries = useMemo(() => {
+      const q = pickerSearch.trim().toLowerCase();
+      return visaData
+        .filter((c) => c.category !== 'home')
+        .filter((c) => !q || c.name.toLowerCase().includes(q))
+        .slice(0, 80);
+    }, [pickerSearch]);
+
     // ── Date state ──────────────────────────────────────────────
     const defaults = defaultDates();
     const [startDate, setStartDate] = useState<Date>(defaults.start);
     const [endDate, setEndDate] = useState<Date>(defaults.end);
+    // Which date card has the picker open. iOS shows an inline modal sheet
+    // anchored to the card; Android uses the native picker dialog.
+    const [datePicker, setDatePicker] = useState<'start' | 'end' | null>(null);
+    // "Dreaming" mode — user hasn't committed to dates yet. Hides the
+    // date cards and just collects how many nights, then saves the trip
+    // with no startDate so it lands in the Dreaming filter.
+    const [dreaming, setDreaming] = useState(false);
+    const [dreamNights, setDreamNights] = useState<number>(7);
 
     // ── Travelers state ─────────────────────────────────────────
     const [travelers, setTravelers] = useState(2);
@@ -227,11 +304,12 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const createTrip = useMutation(api.trips.createTrip);
     const sparkleStyle = usePlaneAnimation(isLoading);
 
-    // ── Days derived from dates ─────────────────────────────────
+    // ── Days derived from dates (or the dreaming nights stepper) ───
     const days = useMemo(() => {
+      if (dreaming) return Math.max(1, dreamNights);
       const diff = endDate.getTime() - startDate.getTime();
       return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
-    }, [startDate, endDate]);
+    }, [dreaming, dreamNights, startDate, endDate]);
 
     // ── Loading ticker ──────────────────────────────────────────
     useEffect(() => {
@@ -259,6 +337,11 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setIsLoading(false);
       setError('');
       setTick(0);
+      setPickedCode('');
+      setPickerSearch('');
+      setShowPicker(false);
+      setDreaming(false);
+      setDreamNights(7);
     }, []);
 
     // ── Imperative handle ───────────────────────────────────────
@@ -302,7 +385,19 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
 
     // ── Generate trip ───────────────────────────────────────────
     const generate = useCallback(async () => {
-      if (!country || !meta || !travel || !resolved) return;
+      // When the sheet has a country prop (opened from country detail) we use
+      // the prop chain. When opened standalone (Trips home) we fall back to
+      // the country picked in the in-sheet picker. Either path must yield a
+      // full effective country before we hit the API.
+      const eff = effective ?? (
+        country && meta && travel && resolved
+          ? { country, meta, travel, resolved }
+          : null
+      );
+      if (!eff) {
+        setError('Pick a destination first.');
+        return;
+      }
       setIsLoading(true);
       setError('');
       try {
@@ -310,7 +405,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            countryCode: country.code,
+            countryCode: eff.country.code,
             duration: days,
             heldVisas: [...heldVisas],
             vibe,
@@ -378,6 +473,10 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           // Images are non-critical — proceed without them
         }
 
+        // When the user is in "Dreaming" mode (no committed dates) we omit
+        // startDate/endDate so the trip lands in the Dreaming filter. When
+        // dates ARE picked we serialise as ISO date strings so they sort
+        // correctly under Upcoming/Past.
         const tripId = await createTrip({
           ...data,
           status: 'planned' as const,
@@ -385,17 +484,23 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           heroImage: heroImageJson,
           dayImages: dayImagesJson,
           activityImages: activityImagesJson,
+          startDate: dreaming ? undefined : startDate.toISOString().slice(0, 10),
+          endDate: dreaming ? undefined : endDate.toISOString().slice(0, 10),
         });
         setTimeout(() => {
           bottomSheetRef.current?.dismiss();
           onTripCreated(String(tripId));
         }, 300);
-      } catch {
-        setError('Failed to generate trip. Please try again.');
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('No destination')) {
+          setError(e.message);
+        } else {
+          setError('Failed to generate trip. Please try again.');
+        }
         setIsLoading(false);
       }
     }, [
-      country, meta, travel, resolved, heldVisas,
+      effective, country, meta, travel, resolved, heldVisas,
       days, vibe, budget, activeVibes, travelers, party,
       createTrip, onTripCreated,
     ]);
@@ -435,65 +540,207 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           {/* ── MAIN FORM ──────────────────────────────────────── */}
           {!isLoading && (
             <View>
-              {/* Header row */}
+              {/* Header row — dark orb + AI PLANNER kicker + squiggle + italic title */}
               <View style={s.headerRow}>
                 <DarkOrb size={38}>
-                  <Sparkles size={17} color="#FFFFFF" />
+                  <Sparkles size={17} color="#FFFFFF" fill="#FFFFFF" />
                 </DarkOrb>
                 <View style={s.headerText}>
-                  <SectionKicker>AI PLANNER</SectionKicker>
-                  <Text style={[s.headerTitle, { color: colors.ink }]}>
-                    {country.name ? `Plan a trip to ${country.name}` : 'Plan your next trip'}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text
+                      style={{
+                        fontFamily: FontFamily.monoMedium,
+                        fontSize: 11,
+                        fontWeight: '700',
+                        letterSpacing: 11 * 0.22,
+                        textTransform: 'uppercase',
+                        color: colors.coralDeep,
+                      }}
+                    >
+                      AI PLANNER
+                    </Text>
+                    <Squiggle width={26} color={colors.coral} />
+                  </View>
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                      fontSize: 22,
+                      lineHeight: 24,
+                      letterSpacing: -22 * 0.018,
+                      fontWeight: '500',
+                      color: colors.ink,
+                      marginTop: 4,
+                    }}
+                  >
+                    {effective ? `Plan a trip to ${effective.country.name}` : 'Plan your next trip'}
+                    <Text style={{ color: colors.coral }}>.</Text>
                   </Text>
                 </View>
               </View>
 
-              {/* Date cards row */}
-              <View style={s.dateRow}>
-                {/* Start date card */}
-                <View style={[s.dateCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>Start</Text>
-                  <Text style={[s.dateCardValue, { color: colors.ink }]}>{formatDate(startDate)}</Text>
-                  <View style={s.stepperRow}>
-                    <TouchableOpacity
-                      onPress={() => shiftStart(-1)}
-                      activeOpacity={0.7}
-                      style={[s.stepBtn, { borderColor: colors.line }]}
-                    >
-                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>−</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => shiftStart(1)}
-                      activeOpacity={0.7}
-                      style={[s.stepBtn, { borderColor: colors.line }]}
-                    >
-                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>+</Text>
-                    </TouchableOpacity>
+              {/* Destination picker — shown when sheet has no country prop.
+                  Once a country is picked the card shows flag + italic name. */}
+              {!propHasCountry && (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setShowPicker(true)}
+                  style={[
+                    s.destinationCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: effective ? colors.coral : colors.line,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>
+                      DESTINATION
+                    </Text>
+                    {effective ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                        <Flag code={toAlpha2(effective.country.code)} size={20} />
+                        <Text
+                          style={{
+                            fontFamily: FontFamily.displayItalic,
+                            fontStyle: 'italic',
+                            fontSize: 18,
+                            fontWeight: '500',
+                            color: colors.ink,
+                            letterSpacing: -18 * 0.014,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {effective.country.name}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text
+                        style={{
+                          fontFamily: FontFamily.displayItalic,
+                          fontStyle: 'italic',
+                          fontSize: 18,
+                          fontWeight: '500',
+                          color: colors.inkMute,
+                          letterSpacing: -18 * 0.014,
+                          marginTop: 4,
+                        }}
+                      >
+                        Where to?
+                      </Text>
+                    )}
                   </View>
-                </View>
+                  <ChevronRight size={18} color={colors.inkMute} />
+                </TouchableOpacity>
+              )}
 
-                {/* End date card */}
-                <View style={[s.dateCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>End</Text>
-                  <Text style={[s.dateCardValue, { color: colors.ink }]}>{formatDate(endDate)}</Text>
-                  <View style={s.stepperRow}>
+              {/* "Pick dates / Just dreaming" toggle — italic Fraunces pills.
+                  Active gets dark ink fill with white italic; inactive paper. */}
+              <View style={s.modeRow}>
+                {(['dates', 'dreaming'] as const).map((mode) => {
+                  const active =
+                    (mode === 'dates' && !dreaming) ||
+                    (mode === 'dreaming' && dreaming);
+                  return (
                     <TouchableOpacity
-                      onPress={() => shiftEnd(-1)}
-                      activeOpacity={0.7}
-                      style={[s.stepBtn, { borderColor: colors.line }]}
+                      key={mode}
+                      onPress={() => setDreaming(mode === 'dreaming')}
+                      activeOpacity={0.85}
+                      style={[
+                        s.modeBtn,
+                        {
+                          backgroundColor: active ? colors.ink : colors.surface,
+                          borderColor: active ? colors.ink : colors.line,
+                        },
+                      ]}
                     >
-                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>−</Text>
+                      <Text
+                        style={{
+                          fontFamily: FontFamily.displayItalic,
+                          fontStyle: 'italic',
+                          fontSize: 14,
+                          fontWeight: '500',
+                          letterSpacing: -14 * 0.014,
+                          color: active ? '#FFFFFF' : colors.ink,
+                        }}
+                      >
+                        {mode === 'dates' ? 'Pick dates' : 'Just dreaming'}
+                      </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => shiftEnd(1)}
-                      activeOpacity={0.7}
-                      style={[s.stepBtn, { borderColor: colors.line }]}
-                    >
-                      <Text style={[s.stepBtnText, { color: colors.inkMute }]}>+</Text>
-                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {dreaming ? (
+                /* Dreaming mode: a single duration card with -/+ stepper */
+                <View
+                  style={[
+                    s.travelersCard,
+                    { backgroundColor: colors.surface, borderColor: colors.line, marginBottom: 10 },
+                  ]}
+                >
+                  <View style={s.travelersLeft}>
+                    <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>NIGHTS</Text>
+                    <Text style={[s.dateCardValue, { color: colors.ink }]}>
+                      {dreamNights} {dreamNights === 1 ? 'night' : 'nights'}
+                    </Text>
+                    <Text style={[s.dateCardSub, { color: colors.inkMute }]}>
+                      Pick dates later — saves to Dreaming
+                    </Text>
+                  </View>
+                  <View style={s.travelersRight}>
+                    <View style={s.travelerStepper}>
+                      <TouchableOpacity
+                        onPress={() => setDreamNights((n) => Math.max(1, n - 1))}
+                        activeOpacity={0.7}
+                        style={[s.stepBtn, { borderColor: colors.line }]}
+                      >
+                        <Text style={[s.stepBtnText, { color: colors.inkMute }]}>−</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setDreamNights((n) => Math.min(60, n + 1))}
+                        activeOpacity={0.7}
+                        style={[s.stepBtn, { borderColor: colors.line }]}
+                      >
+                        <Text style={[s.stepBtnText, { color: colors.inkMute }]}>+</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
+              ) : (
+                /* Picked-dates mode: tap to open the calendar picker */
+                <View style={s.dateRow}>
+                  <TouchableOpacity
+                    onPress={() => setDatePicker('start')}
+                    activeOpacity={0.85}
+                    style={[s.dateCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  >
+                    <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>START</Text>
+                    <Text style={[s.dateCardValue, { color: colors.ink }]}>
+                      {formatDate(startDate)}
+                      <Text style={{ color: colors.coral }}>.</Text>
+                    </Text>
+                    <Text style={[s.dateCardSub, { color: colors.inkMute }]}>
+                      {startDate.getFullYear()} · TAP TO CHANGE
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setDatePicker('end')}
+                    activeOpacity={0.85}
+                    style={[s.dateCard, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  >
+                    <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>END</Text>
+                    <Text style={[s.dateCardValue, { color: colors.ink }]}>
+                      {formatDate(endDate)}
+                      <Text style={{ color: colors.coral }}>.</Text>
+                    </Text>
+                    <Text style={[s.dateCardSub, { color: colors.inkMute }]}>
+                      {days} {days === 1 ? 'NIGHT' : 'NIGHTS'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               {/* Travelers card */}
               <View style={[s.travelersCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
@@ -524,9 +771,23 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                 </View>
               </View>
 
-              {/* Vibes section */}
+              {/* Vibes section — coral squiggle accent + italic Fraunces chips */}
               <View style={s.vibesSection}>
-                <SectionKicker style={{ marginBottom: 8 }}>Vibes</SectionKicker>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.monoMedium,
+                      fontSize: 11,
+                      fontWeight: '700',
+                      letterSpacing: 11 * 0.22,
+                      textTransform: 'uppercase',
+                      color: colors.inkMute,
+                    }}
+                  >
+                    VIBES
+                  </Text>
+                  <Squiggle width={24} color={colors.coral} />
+                </View>
                 <View style={s.chipWrap}>
                   {VIBES.map((v) => {
                     const active = activeVibes.has(v);
@@ -538,13 +799,15 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                         style={[
                           s.vibeChip,
                           active
-                            ? { backgroundColor: colors.ink, borderColor: colors.ink }
+                            ? { backgroundColor: colors.coral, borderColor: colors.coral }
                             : { backgroundColor: colors.surface, borderColor: colors.line },
                         ]}
                       >
                         <Text style={[
                           s.vibeChipText,
-                          { color: active ? '#FFFFFF' : colors.inkSoft },
+                          {
+                            color: active ? '#FFFFFF' : colors.ink,
+                          },
                         ]}>
                           {v}
                         </Text>
@@ -570,17 +833,272 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                 </View>
               )}
 
-              {/* Primary CTA */}
-              <PillButton
-                label="Generate itinerary"
-                onPress={generate}
-                variant="primary"
-                fullWidth
-                icon={<Sparkles size={16} color="#FFFFFF" />}
-                style={s.ctaButton}
-              />
+              {/* Primary CTA — italic Fraunces with coral period when ready,
+                  paper hint when waiting for a destination. */}
+              {(() => {
+                const ready = !!effective || !!(country && meta && travel && resolved);
+                return (
+                  <TouchableOpacity
+                    onPress={ready ? generate : undefined}
+                    activeOpacity={ready ? 0.85 : 1}
+                    disabled={!ready}
+                    style={[
+                      s.ctaButton,
+                      {
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 10,
+                        paddingVertical: 18,
+                        borderRadius: 999,
+                        backgroundColor: ready ? colors.coral : colors.surface,
+                        borderWidth: 1,
+                        borderColor: ready ? colors.coral : colors.line,
+                        shadowColor: ready ? colors.coral : 'transparent',
+                        shadowOffset: { width: 0, height: 8 },
+                        shadowOpacity: ready ? 0.35 : 0,
+                        shadowRadius: 16,
+                        elevation: ready ? 6 : 0,
+                      },
+                    ]}
+                  >
+                    <Sparkles
+                      size={16}
+                      color={ready ? '#FFFFFF' : colors.inkMute}
+                      fill={ready ? '#FFFFFF' : 'transparent'}
+                    />
+                    <Text
+                      style={{
+                        fontFamily: FontFamily.displayItalic,
+                        fontStyle: 'italic',
+                        fontSize: 17,
+                        fontWeight: '500',
+                        letterSpacing: -17 * 0.014,
+                        color: ready ? '#FFFFFF' : colors.inkMute,
+                      }}
+                    >
+                      {ready ? 'Generate itinerary' : 'Pick a destination first'}
+                      {ready ? (
+                        <Text style={{ color: 'rgba(255,255,255,0.7)' }}>{'  →'}</Text>
+                      ) : null}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
           )}
+
+          {/* ── Date picker — calendar grid (iOS) / native dialog (Android) ── */}
+          {datePicker !== null && (
+            <Modal
+              visible
+              transparent
+              animationType="fade"
+              onRequestClose={() => setDatePicker(null)}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => setDatePicker(null)}
+                style={s.dateBackdrop}
+              >
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => {}}
+                  style={[
+                    s.datePickerCard,
+                    { backgroundColor: colors.surface, borderColor: colors.line },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      Type.kicker,
+                      {
+                        color: colors.inkMute,
+                        marginBottom: 4,
+                      },
+                    ]}
+                  >
+                    {datePicker === 'start' ? 'START DATE' : 'END DATE'}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                      fontSize: 22,
+                      fontWeight: '500',
+                      color: colors.ink,
+                      letterSpacing: -22 * 0.018,
+                      marginBottom: 6,
+                    }}
+                  >
+                    Pick a date
+                  </Text>
+                  <DateTimePicker
+                    value={datePicker === 'start' ? startDate : endDate}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    minimumDate={
+                      datePicker === 'end'
+                        ? new Date(startDate.getTime() + 24 * 60 * 60 * 1000)
+                        : new Date()
+                    }
+                    accentColor={colors.coral}
+                    themeVariant="light"
+                    onChange={(_event, picked) => {
+                      if (picked) {
+                        if (datePicker === 'start') {
+                          setStartDate(picked);
+                          // keep end at least 1 day after start
+                          if (picked >= endDate) {
+                            const newEnd = new Date(picked);
+                            newEnd.setDate(newEnd.getDate() + 1);
+                            setEndDate(newEnd);
+                          }
+                        } else {
+                          if (picked > startDate) setEndDate(picked);
+                        }
+                      }
+                      // Android closes after selection; iOS stays open until backdrop tap
+                      if (Platform.OS === 'android') setDatePicker(null);
+                    }}
+                  />
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity
+                      onPress={() => setDatePicker(null)}
+                      style={[
+                        s.datePickerDone,
+                        { backgroundColor: colors.teal },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: FontFamily.bold,
+                          fontSize: 13,
+                          fontWeight: '700',
+                          color: '#FFFFFF',
+                        }}
+                      >
+                        Done
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </Modal>
+          )}
+
+          {/* ── Country picker modal (search) ─────────────────── */}
+          <Modal
+            visible={showPicker}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setShowPicker(false)}
+          >
+            <View
+              style={[
+                s.pickerContainer,
+                { backgroundColor: colors.background, paddingTop: insets.top + 8 },
+              ]}
+            >
+              <View style={s.pickerHeader}>
+                <View style={{ flex: 1 }}>
+                  <SectionKicker>DESTINATION</SectionKicker>
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.display,
+                      fontSize: 22,
+                      fontWeight: '500',
+                      letterSpacing: -22 * 0.018,
+                      color: colors.ink,
+                      marginTop: 2,
+                    }}
+                  >
+                    Where{' '}
+                    <Text
+                      style={{
+                        fontFamily: FontFamily.displayItalic,
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      to
+                    </Text>
+                    <Text style={{ color: colors.coral }}>?</Text>
+                  </Text>
+                  <Squiggle width={70} color={colors.coral} style={{ marginTop: 4 }} />
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowPicker(false)}
+                  hitSlop={12}
+                  style={[s.pickerClose, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                >
+                  <X size={18} color={colors.ink} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={[s.searchRow, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                <Search size={16} color={colors.inkMute} />
+                <TextInput
+                  style={[s.searchInput, { color: colors.ink }]}
+                  placeholder="Search countries"
+                  placeholderTextColor={colors.inkFaint}
+                  value={pickerSearch}
+                  onChangeText={setPickerSearch}
+                  autoFocus
+                  autoCorrect={false}
+                />
+                {pickerSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setPickerSearch('')} hitSlop={8}>
+                    <X size={14} color={colors.inkMute} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <FlatList
+                data={filteredPickerCountries}
+                keyExtractor={(item) => item.code}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setPickedCode(item.code);
+                      setShowPicker(false);
+                      setPickerSearch('');
+                    }}
+                    style={[s.pickerRow, { borderBottomColor: colors.line }]}
+                    activeOpacity={0.6}
+                  >
+                    <Flag code={toAlpha2(item.code)} size={24} />
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontFamily: FontFamily.displayItalic,
+                        fontStyle: 'italic',
+                        fontSize: 16,
+                        fontWeight: '500',
+                        color: colors.ink,
+                        letterSpacing: -16 * 0.012,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {item.name}
+                    </Text>
+                    <ChevronRight size={16} color={colors.inkMute} />
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <Text
+                    style={[
+                      Type.body13,
+                      { color: colors.inkMute, textAlign: 'center', marginTop: 24 },
+                    ]}
+                  >
+                    No countries found
+                  </Text>
+                }
+              />
+            </View>
+          </Modal>
 
           {/* ── LOADING STATE ───────────────────────────────────── */}
           {isLoading && (
@@ -596,7 +1114,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               <Text style={[s.loadingContext, { color: colors.inkMute }]}>
                 Planning your trip to{' '}
                 <Text style={{ fontFamily: FontFamily.semibold, color: colors.ink }}>
-                  {country.name}
+                  {effective?.country.name ?? country.name}
                 </Text>
                 ...
               </Text>
@@ -645,6 +1163,32 @@ const makeStyles = (colors: ThemeColors) =>
     headerTitle: {
       ...Type.title18,
       marginTop: 1,
+    },
+
+    // ── Destination picker (in-sheet country card) ────────────
+    destinationCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 14,
+      paddingHorizontal: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      marginBottom: 10,
+      ...Shadows.subtle,
+    },
+
+    // ── Pick-dates / Dreaming toggle ──────────────────────────
+    modeRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 10,
+    },
+    modeBtn: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 999,
+      borderWidth: 1,
     },
 
     // ── Date cards ────────────────────────────────────────────
@@ -731,8 +1275,11 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
     },
     vibeChipText: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.sm,
+      fontFamily: FontFamily.displayItalic,
+      fontStyle: 'italic',
+      fontSize: 14,
+      fontWeight: '500',
+      letterSpacing: -14 * 0.012,
     },
 
     // ── Error ─────────────────────────────────────────────────
@@ -785,5 +1332,77 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: FontSize.base,
       textAlign: 'center',
       minHeight: 20,
+    },
+
+    // ── Country picker modal ──────────────────────────────────
+    pickerContainer: {
+      flex: 1,
+      paddingHorizontal: 22,
+    },
+    pickerHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      paddingBottom: 14,
+    },
+    pickerClose: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 14,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 1,
+      marginBottom: 12,
+    },
+    searchInput: {
+      flex: 1,
+      fontFamily: FontFamily.regular,
+      fontSize: 14,
+      paddingVertical: 0,
+    },
+    pickerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+
+    // ── Date card sub-label + picker modal ─────────────────────
+    dateCardSub: {
+      ...Type.kickerSm,
+      fontSize: 9,
+      marginTop: 4,
+    },
+    dateBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+    },
+    datePickerCard: {
+      width: '100%',
+      borderRadius: 24,
+      borderWidth: 1,
+      padding: 18,
+      maxWidth: 380,
+      ...Shadows.cardRaised,
+    },
+    datePickerDone: {
+      marginTop: 6,
+      alignSelf: 'stretch',
+      paddingVertical: 12,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
