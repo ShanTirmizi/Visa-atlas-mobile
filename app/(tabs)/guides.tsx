@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,19 @@ import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
+import type { HeldVisaType } from '@/data/visaData';
 import { FontFamily } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
+import {
+  CountryPickerSheet,
+  type CountryPickerSheetRef,
+} from '@/components/ui/CountryPickerSheet';
+import VisaGuideSheet, {
+  type VisaGuideSheetRef,
+} from '@/components/guides/VisaGuideSheet';
 import { GuidesEmptyCard } from '@/components/guides/GuidesEmptyCard';
 import { GuidesStatsRow } from '@/components/guides/GuidesStatsRow';
 import {
@@ -56,6 +65,46 @@ export default function GuidesScreen() {
   );
   const deleteGuide = useMutation(api.visaGuides.deleteGuide);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Country picker → visa guide flow
+  const pickerRef = useRef<CountryPickerSheetRef>(null);
+  const guideSheetRef = useRef<VisaGuideSheetRef>(null);
+  const [pickedCountry, setPickedCountry] = useState<{
+    code: string;
+    name: string;
+  } | null>(null);
+  const { heldVisas } = useVisa();
+  const heldSet = useMemo(
+    () => new Set(heldVisas as HeldVisaType[]),
+    [heldVisas],
+  );
+
+  // Codes the user already has a guide for — exclude from the picker.
+  const existingCodes = useMemo(
+    () => (guides ?? []).map((g) => g.countryCode),
+    [guides],
+  );
+
+  const handleStartApplication = useCallback(() => {
+    pickerRef.current?.open();
+  }, []);
+
+  const handleCountryPicked = useCallback(
+    (code: string, name: string) => {
+      setPickedCountry({ code, name });
+      // The country picker dismiss animation is ~280ms — wait a beat so the
+      // visa-guide sheet can present cleanly without a stacking conflict.
+      setTimeout(() => guideSheetRef.current?.present(), 280);
+    },
+    [],
+  );
+
+  const handleGuideCreated = useCallback(
+    (guideId: string) => {
+      router.push(`/guide/${guideId}` as never);
+    },
+    [router],
+  );
 
   const handleDelete = useCallback(
     (id: Id<'visaGuides'>, countryName: string) => {
@@ -148,9 +197,7 @@ export default function GuidesScreen() {
           </View>
         ) : guides.length === 0 ? (
           // ── Empty state ────────────────────────────────────────────
-          <GuidesEmptyCard
-            onStart={() => router.push('/(tabs)/explore' as never)}
-          />
+          <GuidesEmptyCard onStart={handleStartApplication} />
         ) : (
           // ── With-guides state ─────────────────────────────────────
           <>
@@ -200,6 +247,27 @@ export default function GuidesScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Country picker → opens when "Start application" is tapped */}
+      <CountryPickerSheet
+        ref={pickerRef}
+        kicker="START APPLICATION"
+        title="Pick a country"
+        excludeCodes={existingCodes}
+        heldVisas={heldSet}
+        onSelect={handleCountryPicked}
+      />
+
+      {/* Visa guide generator — only mounted once a country is picked */}
+      {pickedCountry ? (
+        <VisaGuideSheet
+          ref={guideSheetRef}
+          countryCode={pickedCountry.code}
+          countryName={pickedCountry.name}
+          heldVisas={heldSet}
+          onGuideCreated={handleGuideCreated}
+        />
+      ) : null}
     </View>
   );
 }
