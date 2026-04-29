@@ -1,42 +1,60 @@
-// Visa Atlas — Mono Design System
-// Monochrome widget aesthetic. Photography and visa-category pills are the only chroma.
+// Visa Atlas — Signature v2 Design System
+// Editorial paper aesthetic. Italic Fraunces display + coral signature accent
+// + teal primary. Photography and visa-category pills carry their own chroma.
 
 // ──────────────────────────────────────────────
-// Mono palette — ship direction
+// Signature v2 palette — ship direction
 // ──────────────────────────────────────────────
 export const LightColors = {
-  // Backgrounds
-  background: '#F2F2F0',
-  backgroundDeep: '#E8E8E6',
+  // Backgrounds — warm paper
+  background: '#FBFAF7',
+  backgroundDeep: '#F2EFE9',
   surface: '#FFFFFF',
   card: '#FFFFFF',
   surfaceMuted: '#EDEDEB',
 
   // Ink scale (text, strokes, primary fills)
-  ink: '#0E0E0E',
-  inkSoft: '#2A2A2A',
-  inkMute: '#6B6B6B',
-  inkFaint: '#9E9E9E',
+  ink: '#0E0F0F',
+  inkSoft: '#3A3B3B',
+  inkMute: '#7C7D7D',
+  inkFaint: '#B7B8B8',
 
   // Hairlines
-  line: 'rgba(0,0,0,0.06)',
-  lineSoft: 'rgba(0,0,0,0.04)',
+  line: 'rgba(14,15,15,0.06)',
+  lineSoft: 'rgba(14,15,15,0.04)',
+  lineMid: 'rgba(14,15,15,0.10)',
 
-  // Primary / accent — both resolve to ink in Mono
-  primary: '#0E0E0E',
-  primaryDim: '#2A2A2A',
-  primaryGlow: 'rgba(0,0,0,0.08)',
-  primaryBg: 'rgba(0,0,0,0.05)',
+  // Primary — deep teal (active dock pill, primary CTAs)
+  primary: '#0A4A44',
+  primaryDim: '#073833',
+  primaryGlow: 'rgba(10,74,68,0.18)',
+  primaryBg: 'rgba(10,74,68,0.06)',
+  primarySoft: '#C8DED8',
 
-  secondary: '#0E0E0E',
-  secondaryDim: '#2A2A2A',
-  secondaryGlow: 'rgba(0,0,0,0.06)',
-  secondaryBg: 'rgba(0,0,0,0.05)',
+  // Secondary — coral (the brand signature: countdown, periods, squiggles, stamps)
+  secondary: '#E89B7A',
+  secondaryDim: '#C4684A',
+  secondaryGlow: 'rgba(232,155,122,0.40)',
+  secondaryBg: 'rgba(232,155,122,0.12)',
+  secondarySoft: '#FAE2D4',
 
-  accent: '#0E0E0E',
-  accentDim: '#2A2A2A',
-  accentGlow: 'rgba(0,0,0,0.06)',
-  accentBg: 'rgba(0,0,0,0.05)',
+  // Convenience aliases used by the design — coral and teal called by name
+  teal: '#0A4A44',
+  tealDeep: '#073833',
+  tealSoft: '#C8DED8',
+  tealBg: 'rgba(10,74,68,0.06)',
+  tealGlow: 'rgba(10,74,68,0.18)',
+  coral: '#E89B7A',
+  coralDeep: '#C4684A',
+  coralSoft: '#FAE2D4',
+  coralBg: 'rgba(232,155,122,0.12)',
+  coralGlow: 'rgba(232,155,122,0.40)',
+
+  // Accent retained for legacy call sites — resolves to coral
+  accent: '#E89B7A',
+  accentDim: '#C4684A',
+  accentGlow: 'rgba(232,155,122,0.18)',
+  accentBg: 'rgba(232,155,122,0.12)',
 
   gold: '#8A6B1E',
   goldSoft: 'rgba(138,107,30,0.12)',
@@ -48,7 +66,8 @@ export const LightColors = {
   warning: '#B8862B',
   warningBg: 'rgba(184,134,43,0.14)',
   success: '#2E8B63',
-  info: '#0E0E0E',
+  info: '#0A4A44',
+  rose: '#A83A5E',
 
   // Visa categories (load-bearing colour — only chroma in the UI)
   visaFree: '#2E8B63',
@@ -75,9 +94,9 @@ export const LightColors = {
   textMuted: '#6B6B6B',
 
   // Borders
-  border: 'rgba(0,0,0,0.06)',
-  borderSubtle: 'rgba(0,0,0,0.04)',
-  borderStrong: 'rgba(0,0,0,0.10)',
+  border: 'rgba(14,15,15,0.06)',
+  borderSubtle: 'rgba(14,15,15,0.04)',
+  borderStrong: 'rgba(14,15,15,0.10)',
 
   // Glass (floating overlays on photography)
   glass: 'rgba(255,255,255,0.22)',
@@ -115,6 +134,57 @@ export const Colors = LightColors;
 // ──────────────────────────────────────────────
 // Visa category helpers
 // ──────────────────────────────────────────────
+
+// Visa hero card gradients & inks — only used by <VisaHeroCard />
+export const visaCategoryColors = {
+  free: {
+    bgFrom: '#114039',
+    bgTo: '#0B342D',
+    accent: '#E89B7A',
+    ink: '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.82)',
+    inkUnderline: '#FFFFFF',
+    divider: 'rgba(255,255,255,0.16)',
+    guillocheOpacity: 0.13,
+    stampRotation: -3,
+  },
+  arrival: {
+    bgFrom: '#C7872F',
+    bgTo: '#9B5F1A',
+    accent: '#FBE9C8',
+    ink: '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.85)',
+    inkUnderline: '#FFFFFF',
+    divider: 'rgba(255,255,255,0.20)',
+    guillocheOpacity: 0.16,
+    stampRotation: 4,
+  },
+  evisa: {
+    bgFrom: '#ECA486',
+    bgTo: '#C97557',
+    accent: '#3D1810',
+    ink: '#3D1810',
+    inkSoft: 'rgba(61,24,16,0.78)',
+    inkUnderline: '#3D1810',
+    divider: 'rgba(61,24,16,0.18)',
+    guillocheOpacity: 0.14,
+    stampRotation: -3,
+  },
+  required: {
+    bgFrom: '#1F1F1F',
+    bgTo: '#0E0F0F',
+    accent: '#E89B7A',
+    ink: '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.78)',
+    inkUnderline: '#FFFFFF',
+    divider: 'rgba(255,255,255,0.14)',
+    guillocheOpacity: 0.10,
+    stampRotation: -3,
+  },
+} as const;
+
+export type VisaHeroCategory = keyof typeof visaCategoryColors;
+
 export function getVisaCategoryColor(
   category: string,
   colors: ThemeColors,
@@ -140,11 +210,16 @@ export function getVisaCategoryBgColor(
 }
 
 // ──────────────────────────────────────────────
-// Font Family — Inter (UI + display) + JetBrains Mono (kickers)
+// Font Family — Inter (UI) + Fraunces (display, italic) + JetBrains Mono (kickers)
 // ──────────────────────────────────────────────
 export const FontFamily = {
-  // Display and UI both resolve to Inter per spec (no separate display face).
-  display: 'Inter_700Bold',
+  // Display — Fraunces serif (italic + roman), the brand signature face.
+  display: 'Fraunces_500Medium',
+  displayItalic: 'Fraunces_500Medium_Italic',
+  displaySemibold: 'Fraunces_600SemiBold',
+  displaySemiboldItalic: 'Fraunces_600SemiBold_Italic',
+  displayBold: 'Fraunces_700Bold',
+  // UI — Inter
   regular: 'Inter_400Regular',
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
@@ -152,11 +227,11 @@ export const FontFamily = {
   // Mono — kickers, timestamps, step counters
   mono: 'JetBrainsMono_400Regular',
   monoMedium: 'JetBrainsMono_500Medium',
-  // Legacy keys kept pointing at Inter so downstream code keeps compiling.
-  serif: 'Inter_400Regular',
-  serifMedium: 'Inter_500Medium',
-  serifSemibold: 'Inter_600SemiBold',
-  serifBold: 'Inter_700Bold',
+  // Legacy keys — kept pointing at Fraunces so downstream "serif" naming reads correctly.
+  serif: 'Fraunces_500Medium',
+  serifMedium: 'Fraunces_500Medium',
+  serifSemibold: 'Fraunces_600SemiBold',
+  serifBold: 'Fraunces_700Bold',
   condensed: 'Inter_400Regular',
   condensedMedium: 'Inter_500Medium',
   condensedSemibold: 'Inter_600SemiBold',
