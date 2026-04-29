@@ -1,8 +1,10 @@
-import React, { useMemo, useCallback, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { getVisaCategoryColor, type VisaCategory } from '@/constants/categories';
+import { FontFamily } from '@/constants/theme';
 import {
   type VisaCategory as DataVisaCategory,
   resolveCountry,
@@ -12,6 +14,7 @@ import {
 import { getCountriesGeoJSON } from '@/data/countriesGeo';
 import CountryInfoCard from './CountryInfoCard';
 import { MapLegend } from './MapLegend';
+import { LIGHT_STYLE, DARK_STYLE } from './mapStyles';
 
 // ──────────────────────────────────────────────
 // VisaMap
@@ -109,10 +112,6 @@ function featureContainsPoint(lng: number, lat: number, feature: FeatureLike): b
   return false;
 }
 
-// Tile style URLs
-const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
-const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
-
 interface SelectedInfo {
   code: string;
   name: string;
@@ -135,6 +134,21 @@ export function VisaMap({
 }: VisaMapProps) {
   const { colors, isDark } = useTheme();
   const [selected, setSelected] = useState<SelectedInfo | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  // Skeleton fade — sits over the MapView until tiles paint, then fades
+  // out. Prevents the "blank screen" feel on first cold load before
+  // MapLibre finishes its style + tile fetches. After fade-out the view
+  // stays mounted but transparent (no remount cost on re-entry).
+  const skeletonOpacity = useSharedValue(1);
+  useEffect(() => {
+    if (mapReady) {
+      skeletonOpacity.value = withTiming(0, { duration: 280 });
+    }
+  }, [mapReady, skeletonOpacity]);
+  const skeletonStyle = useAnimatedStyle(() => ({
+    opacity: skeletonOpacity.value,
+  }));
 
   // Cast heldVisas to the typed set
   const typedHeldVisas = heldVisas as Set<HeldVisaType>;
@@ -156,7 +170,8 @@ export function VisaMap({
 
   // Build the fillColor expression: ['match', ['get', 'iso_a3'], code1, color1, ..., default]
   const fillColorExpression = useMemo(() => {
-    const defaultColor = isDark ? '#1a3340' : '#e0d5c8';
+    // Unclassified countries use the stone base so the map reads as monochrome
+    const defaultColor = colors.backgroundDeep;
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     for (const [code, entry] of countryLookup) {
       const color = getVisaCategoryColor(entry.categoryKey, colors);
@@ -164,19 +179,19 @@ export function VisaMap({
     }
     expr.push(defaultColor);
     return expr;
-  }, [countryLookup, colors, isDark]);
+  }, [countryLookup, colors]);
 
-  // Build the fillOpacity expression
+  // Build the fillOpacity expression (0.75 for layered depth per Mono spec)
   const fillOpacityExpression = useMemo(() => {
     if (activeFilters.size === 0) {
-      // No filters — all countries at full opacity
-      return 0.9;
+      // No filters — all countries at spec opacity
+      return 0.75;
     }
-    // With filters — matching full, non-matching dimmed
+    // With filters — matching at spec opacity, non-matching dimmed
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     for (const [code, entry] of countryLookup) {
       if (activeFilters.has(entry.categoryKey)) {
-        expr.push(code, 0.9);
+        expr.push(code, 0.75);
       } else {
         expr.push(code, 0.1);
       }
@@ -194,15 +209,16 @@ export function VisaMap({
     return expr;
   }, [selected]);
 
-  // Line color expression: white for selected country, subtle border for others
+  // Line color expression: white for selected country, Mono hairline for others
   const lineColorExpression = useMemo(() => {
-    const defaultLineColor = isDark ? '#2d4a58' : '#aaaaaa';
+    // colors.line = 'rgba(0,0,0,0.06)' — the Mono hairline token
+    const defaultLineColor = colors.line;
     if (!selected) return defaultLineColor;
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     expr.push(selected.code, '#FFFFFF');
     expr.push(defaultLineColor);
     return expr;
-  }, [selected, isDark]);
+  }, [selected, colors.line]);
 
   // Handle tap on a country shape
   const handleShapePress = useCallback(
@@ -252,12 +268,14 @@ export function VisaMap({
           categoryKey: entry.categoryKey,
           maxStay: entry.maxStay,
         });
+        // Notify parent so the Explore sheet can update its featured card.
+        onCountrySelect(iso);
       } else {
         // Country not in visa data
         setSelected(null);
       }
     },
-    [selected, countryLookup],
+    [selected, countryLookup, onCountrySelect],
   );
 
   // Track whether a shape was just pressed (prevents MapView.onPress from dismissing)
@@ -281,11 +299,12 @@ export function VisaMap({
   const mapStyle = isDark ? DARK_STYLE : LIGHT_STYLE;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.backgroundDeep }]}>
       <MapLibreGL.MapView
         style={styles.map}
         mapStyle={mapStyle}
         onPress={handleMapPress}
+        onDidFinishLoadingMap={() => setMapReady(true)}
         attributionEnabled={false}
         logoEnabled={false}
         pitchEnabled={false}
@@ -322,6 +341,29 @@ export function VisaMap({
         </MapLibreGL.ShapeSource>
       </MapLibreGL.MapView>
 
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.skeleton,
+          { backgroundColor: colors.backgroundDeep },
+          skeletonStyle,
+        ]}
+        pointerEvents={mapReady ? 'none' : 'auto'}
+      >
+        <Text
+          style={{
+            fontFamily: FontFamily.displayItalic,
+            fontStyle: 'italic',
+            fontSize: 18,
+            letterSpacing: -18 * 0.012,
+            color: colors.inkSoft,
+          }}
+        >
+          Loading the atlas
+          <Text style={{ color: colors.coral }}>.</Text>
+        </Text>
+      </Animated.View>
+
       <View style={styles.overlay} pointerEvents="box-none">
         {selected != null && sheetCollapsed && (
           <CountryInfoCard
@@ -345,6 +387,11 @@ const styles = StyleSheet.create({
   },
   map: {
     ...StyleSheet.absoluteFillObject,
+  },
+  skeleton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

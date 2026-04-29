@@ -11,7 +11,7 @@ import React, {
 } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { useConvex } from 'convex/react';
+import { useConvex, useConvexAuth } from 'convex/react';
 import { initDatabase, getPendingMutationCount, getSyncMeta } from '@/lib/offline/database';
 import { syncOnReconnect, refreshCache } from '@/lib/offline/sync';
 import { shouldRunPrecache, precacheUpcomingTrips } from '@/lib/offline/precache';
@@ -35,6 +35,13 @@ const OfflineContext = createContext<OfflineContextValue>({
 
 export function OfflineProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const client = useConvex();
+  const { isAuthenticated } = useConvexAuth();
+  // Mirror onto a ref so the long-lived effects below read the latest auth
+  // state without forcing a re-subscribe each time it flips.
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  useEffect(() => {
+    isAuthenticatedRef.current = isAuthenticated;
+  }, [isAuthenticated]);
 
   const [isOffline, setIsOffline] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
@@ -73,6 +80,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }): Re
 
   const performSync = useCallback(async (): Promise<void> => {
     if (isSyncingRef.current) return;
+    if (!isAuthenticatedRef.current) return; // skip sync when signed out
     setIsSyncing(true);
     isSyncingRef.current = true;
     try {
@@ -93,6 +101,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }): Re
 
   const performCacheRefresh = useCallback(async (): Promise<void> => {
     if (isSyncingRef.current) return;
+    if (!isAuthenticatedRef.current) return; // skip refresh when signed out
     setIsSyncing(true);
     isSyncingRef.current = true;
     try {
@@ -190,14 +199,18 @@ export function OfflineProvider({ children }: { children: React.ReactNode }): Re
     const subscription = AppState.addEventListener(
       'change',
       (nextState: AppStateStatus) => {
-        if (nextState === 'active' && !isOfflineRef.current) {
+        if (
+          nextState === 'active'
+          && !isOfflineRef.current
+          && isAuthenticatedRef.current
+        ) {
           performCacheRefresh().catch((err) => {
             console.warn('[OfflineProvider] foreground cache refresh failed:', err);
           });
 
           shouldRunPrecache()
             .then((should) => {
-              if (should && !isOfflineRef.current) {
+              if (should && !isOfflineRef.current && isAuthenticatedRef.current) {
                 return precacheUpcomingTrips(client);
               }
               return Promise.resolve(0);
@@ -220,6 +233,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }): Re
 
   useEffect(() => {
     if (!isInitialized || isOffline) return;
+    if (!isAuthenticated) return; // skip initial sync until user signs in
 
     performCacheRefresh().catch((err) => {
       console.warn('[OfflineProvider] initial cache refresh failed:', err);
@@ -228,9 +242,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }): Re
     precacheUpcomingTrips(client).catch((err) => {
       console.warn('[OfflineProvider] initial precache failed:', err);
     });
-    // Run once when isInitialized first becomes true and we are online.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInitialized]);
+    // Re-run when auth state flips so post-sign-in we kick off the first
+    // cache refresh + precache. eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInitialized, isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------------------
   // After init: 6-hour precache interval

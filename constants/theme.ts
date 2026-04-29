@@ -1,222 +1,270 @@
-// Visa Atlas — Design System with Light/Dark Mode
-// Aligned with HabitQuest brand DNA for cohesive identity
+// Visa Atlas — Signature v2 Design System
+// Editorial paper aesthetic. Italic Fraunces display + coral signature accent
+// + teal primary. Photography and visa-category pills carry their own chroma.
 
 // ──────────────────────────────────────────────
-// Light Theme — "Warm Travel"
-// Shares HabitQuest's warm peach foundation
-// with travel-specific teal/green accents
+// Signature v2 palette — ship direction
 // ──────────────────────────────────────────────
 export const LightColors = {
-  // Backgrounds — warm peach (matches HabitQuest)
-  background: '#F5D9C0',
+  // Backgrounds — warm paper
+  background: '#FBFAF7',
+  backgroundDeep: '#F2EFE9',
   surface: '#FFFFFF',
   card: '#FFFFFF',
-  surfaceLight: '#F9E8D6',
+  surfaceMuted: '#EDEDEB',
 
-  // Primary — bold teal (HabitQuest categoryLife family)
-  primary: '#2AAAA0',
-  primaryDim: '#229088',
-  primaryGlow: 'rgba(42, 170, 160, 0.25)',
-  primaryBg: 'rgba(42, 170, 160, 0.12)',
+  // Ink scale (text, strokes, primary fills)
+  ink: '#0E0F0F',
+  inkSoft: '#3A3B3B',
+  inkMute: '#7C7D7D',
+  inkFaint: '#B7B8B8',
 
-  // Secondary — emerald green (HabitQuest secondary)
-  secondary: '#2EAA6E',
-  secondaryDim: '#25905C',
-  secondaryGlow: 'rgba(46, 170, 110, 0.20)',
-  secondaryBg: 'rgba(46, 170, 110, 0.12)',
+  // Hairlines
+  line: 'rgba(14,15,15,0.06)',
+  lineSoft: 'rgba(14,15,15,0.04)',
+  lineMid: 'rgba(14,15,15,0.10)',
 
-  // Accent — hero orange (HabitQuest primary)
-  accent: '#EB6D3A',
-  accentDim: '#D45E30',
-  accentGlow: 'rgba(235, 109, 58, 0.25)',
-  accentBg: 'rgba(235, 109, 58, 0.12)',
+  // Primary — deep teal (active dock pill, primary CTAs)
+  primary: '#0A4A44',
+  primaryDim: '#073833',
+  primaryGlow: 'rgba(10,74,68,0.18)',
+  primaryBg: 'rgba(10,74,68,0.06)',
+  primarySoft: '#C8DED8',
 
-  // Danger — warm red (HabitQuest danger)
-  danger: '#E05545',
-  dangerDim: '#C43A2E',
-  dangerBg: 'rgba(224, 85, 69, 0.12)',
+  // Secondary — coral (the brand signature: countdown, periods, squiggles, stamps)
+  secondary: '#E89B7A',
+  secondaryDim: '#C4684A',
+  secondaryGlow: 'rgba(232,155,122,0.40)',
+  secondaryBg: 'rgba(232,155,122,0.12)',
+  secondarySoft: '#FAE2D4',
 
-  // Warning — golden amber (HabitQuest accent)
-  warning: '#E5A832',
-  warningBg: 'rgba(229, 168, 50, 0.12)',
+  // Convenience aliases used by the design — coral and teal called by name
+  teal: '#0A4A44',
+  tealDeep: '#073833',
+  tealSoft: '#C8DED8',
+  tealBg: 'rgba(10,74,68,0.06)',
+  tealGlow: 'rgba(10,74,68,0.18)',
+  coral: '#E89B7A',
+  coralDeep: '#C4684A',
+  coralSoft: '#FAE2D4',
+  coralBg: 'rgba(232,155,122,0.12)',
+  coralGlow: 'rgba(232,155,122,0.40)',
 
-  // Text — warm browns (matching HabitQuest)
-  foreground: '#1C1816',
-  textSecondary: '#6B6058',
-  textMuted: '#A09890',
+  // Accent retained for legacy call sites — resolves to coral
+  accent: '#E89B7A',
+  accentDim: '#C4684A',
+  accentGlow: 'rgba(232,155,122,0.18)',
+  accentBg: 'rgba(232,155,122,0.12)',
 
-  // Visa category colors — vibrant & fun
-  visaFree: '#2EAA6E',
-  visaOnArrival: '#E5A832',
-  evisa: '#EB6D3A',
-  visaRequired: '#D95E8A',
+  gold: '#8A6B1E',
+  goldSoft: 'rgba(138,107,30,0.12)',
 
-  // Visa category backgrounds
-  visaFreeBg: 'rgba(46, 170, 110, 0.14)',
-  visaOnArrivalBg: 'rgba(229, 168, 50, 0.14)',
-  evisaBg: 'rgba(235, 109, 58, 0.14)',
-  visaRequiredBg: 'rgba(217, 94, 138, 0.14)',
+  // Semantic
+  danger: '#A83A5E',
+  dangerDim: '#8A2E4C',
+  dangerBg: 'rgba(168,58,94,0.12)',
+  warning: '#B8862B',
+  warningBg: 'rgba(184,134,43,0.14)',
+  success: '#2E8B63',
+  info: '#0A4A44',
+  rose: '#A83A5E',
 
-  // Visa category card colors (punchy, saturated — like HabitQuest category cards)
-  visaFreeCard: '#2AB872',
-  visaOnArrivalCard: '#E29628',
-  evisaCard: '#D45E30',
-  visaRequiredCard: '#D44E82',
+  // Visa categories (load-bearing colour — only chroma in the UI)
+  visaFree: '#2E8B63',
+  visaFreeBg: 'rgba(46,139,99,0.12)',
+  visaOnArrival: '#B8862B',
+  visaOnArrivalBg: 'rgba(184,134,43,0.14)',
+  evisa: '#C2562A',
+  evisaBg: 'rgba(194,86,42,0.12)',
+  visaRequired: '#A83A5E',
+  visaRequiredBg: 'rgba(168,58,94,0.12)',
+
+  // Visa category "card" tokens — retained for existing call sites that render
+  // full-bleed solid-category cards; in Mono these match the pill colours.
+  visaFreeCard: '#2E8B63',
+  visaOnArrivalCard: '#B8862B',
+  evisaCard: '#C2562A',
+  visaRequiredCard: '#A83A5E',
   categoryCardText: '#FFFFFF',
-  categoryCardTextSub: 'rgba(255, 255, 255, 0.80)',
+  categoryCardTextSub: 'rgba(255,255,255,0.80)',
 
-  // Status
-  success: '#2EAA6E',
-  info: '#2AAAA0',
+  // Text tokens (legacy names preserved)
+  foreground: '#0E0E0E',
+  textSecondary: '#2A2A2A',
+  textMuted: '#6B6B6B',
 
-  // Borders — subtle, shadows do the heavy lifting in light mode
-  border: 'rgba(0, 0, 0, 0.04)',
-  borderSubtle: 'rgba(0, 0, 0, 0.03)',
-  borderStrong: 'rgba(0, 0, 0, 0.08)',
+  // Borders
+  border: 'rgba(14,15,15,0.06)',
+  borderSubtle: 'rgba(14,15,15,0.04)',
+  borderStrong: 'rgba(14,15,15,0.10)',
 
-  // Glass — for floating elements
-  glass: 'rgba(255, 255, 255, 0.98)',
-  glassBorder: 'rgba(0, 0, 0, 0.03)',
+  // Glass (floating overlays on photography)
+  glass: 'rgba(255,255,255,0.22)',
+  glassBorder: 'rgba(255,255,255,0.28)',
 
   // Misc
-  overlay: 'rgba(0, 0, 0, 0.30)',
-  shimmer: 'rgba(0, 0, 0, 0.04)',
+  overlay: 'rgba(0,0,0,0.30)',
+  shimmer: 'rgba(0,0,0,0.04)',
 
-  // Button text on primary bg
+  // Button text on primary (ink) bg
   primaryButtonText: '#FFFFFF',
 
-  // Solid card tokens — for white text on solid-colored card backgrounds
+  // Solid-card tokens (white text over coloured / photo bg)
   solidText: '#FFFFFF',
-  solidTextSub: 'rgba(255,255,255,0.70)',
+  solidTextSub: 'rgba(255,255,255,0.80)',
   solidTextMuted: 'rgba(255,255,255,0.60)',
+  solidOverlayFaint: 'rgba(255,255,255,0.06)',
   solidOverlay: 'rgba(255,255,255,0.20)',
   solidOverlayMd: 'rgba(255,255,255,0.25)',
   solidBorder: 'rgba(255,255,255,0.15)',
 
-  // Dark text for elements that always sit on a white/near-white background
-  // regardless of the app's light/dark mode (e.g. photo-overlay badges).
-  textOnLight: '#1A1A1A',
+  // Dark text on light photo overlays (legacy, preserved)
+  textOnLight: '#0E0E0E',
 } as const;
 
-// ──────────────────────────────────────────────
-// Dark Theme — "Midnight" (matches HabitQuest dark)
-// Deep midnight blue with neon accents
-// ──────────────────────────────────────────────
-export const DarkColors = {
-  // Backgrounds — midnight (HabitQuest dark)
-  background: '#060810',
-  surface: '#0D1117',
-  card: '#161B22',
-  surfaceLight: '#1C2333',
+// DarkColors kept as a structural mirror so ThemeProvider still compiles.
+// Dark mode is out of scope for this redesign; these values are placeholders
+// that should never ship to users (ThemeProvider defaults to light).
+export const DarkColors = { ...LightColors } as const;
 
-  // Primary — neon cyan (HabitQuest dark secondary)
-  primary: '#00E5CC',
-  primaryDim: '#00B8A3',
-  primaryGlow: 'rgba(0, 229, 204, 0.35)',
-  primaryBg: 'rgba(0, 229, 204, 0.10)',
-
-  // Secondary — neon green
-  secondary: '#00E676',
-  secondaryDim: '#00C864',
-  secondaryGlow: 'rgba(0, 230, 118, 0.30)',
-  secondaryBg: 'rgba(0, 230, 118, 0.10)',
-
-  // Accent — electric orange (HabitQuest dark primary)
-  accent: '#FF6B2C',
-  accentDim: '#CC5520',
-  accentGlow: 'rgba(255, 107, 44, 0.40)',
-  accentBg: 'rgba(255, 107, 44, 0.12)',
-
-  // Danger — neon red
-  danger: '#FF5252',
-  dangerDim: '#D44040',
-  dangerBg: 'rgba(255, 82, 82, 0.15)',
-
-  // Warning — bright gold (HabitQuest dark accent)
-  warning: '#FFB800',
-  warningBg: 'rgba(255, 184, 0, 0.10)',
-
-  // Text — off-whites
-  foreground: '#E6EDF3',
-  textSecondary: '#8B949E',
-  textMuted: '#6B7280',
-
-  // Visa category colors — neon
-  visaFree: '#00E676',
-  visaOnArrival: '#FFD740',
-  evisa: '#FF6B2C',
-  visaRequired: '#FF5252',
-
-  // Visa category backgrounds
-  visaFreeBg: 'rgba(0, 230, 118, 0.12)',
-  visaOnArrivalBg: 'rgba(255, 215, 64, 0.12)',
-  evisaBg: 'rgba(255, 107, 44, 0.12)',
-  visaRequiredBg: 'rgba(255, 82, 82, 0.12)',
-
-  // Visa category card colors (neon glow)
-  visaFreeCard: '#00C864',
-  visaOnArrivalCard: '#D4A800',
-  evisaCard: '#CC5520',
-  visaRequiredCard: '#D44040',
-  categoryCardText: '#FFFFFF',
-  categoryCardTextSub: 'rgba(255, 255, 255, 0.70)',
-
-  // Status
-  success: '#00E676',
-  info: '#00E5CC',
-
-  // Borders — subtle light edges
-  border: 'rgba(255, 255, 255, 0.08)',
-  borderSubtle: 'rgba(255, 255, 255, 0.04)',
-  borderStrong: 'rgba(255, 255, 255, 0.15)',
-
-  // Glass
-  glass: 'rgba(13, 17, 23, 0.95)',
-  glassBorder: 'rgba(255, 255, 255, 0.06)',
-
-  // Misc
-  overlay: 'rgba(0, 0, 0, 0.65)',
-  shimmer: 'rgba(255, 255, 255, 0.04)',
-
-  // Button text on primary bg
-  primaryButtonText: '#060810',
-
-  // Solid card tokens — for white text on solid-colored card backgrounds
-  solidText: '#FFFFFF',
-  solidTextSub: 'rgba(255,255,255,0.70)',
-  solidTextMuted: 'rgba(255,255,255,0.60)',
-  solidOverlay: 'rgba(255,255,255,0.20)',
-  solidOverlayMd: 'rgba(255,255,255,0.25)',
-  solidBorder: 'rgba(255,255,255,0.15)',
-
-  // Dark text for elements that always sit on a white/near-white background
-  // regardless of the app's light/dark mode (e.g. photo-overlay badges).
-  textOnLight: '#1A1A1A',
-} as const;
-
-// ──────────────────────────────────────────────
-// Types
-// ──────────────────────────────────────────────
-/** Widened so both palettes satisfy the same shape */
 export type ThemeColors = { [K in keyof typeof LightColors]: string };
 export type ThemeMode = 'light' | 'dark';
 
-// Default export (light) — warm is the default
 export const Colors = LightColors;
 
 // ──────────────────────────────────────────────
-// Visa category color helpers
+// Visa category helpers
 // ──────────────────────────────────────────────
+
+// Visa hero card gradients & inks — only used by <VisaHeroCard />
+export const visaCategoryColors = {
+  free: {
+    bgFrom: '#114039',
+    bgTo: '#0B342D',
+    accent: '#E89B7A',
+    ink: '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.82)',
+    inkUnderline: '#FFFFFF',
+    divider: 'rgba(255,255,255,0.16)',
+    guillocheOpacity: 0.13,
+    stampRotation: -3,
+  },
+  arrival: {
+    bgFrom: '#C7872F',
+    bgTo: '#9B5F1A',
+    accent: '#FBE9C8',
+    ink: '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.85)',
+    inkUnderline: '#FFFFFF',
+    divider: 'rgba(255,255,255,0.20)',
+    guillocheOpacity: 0.16,
+    stampRotation: 4,
+  },
+  evisa: {
+    bgFrom: '#ECA486',
+    bgTo: '#C97557',
+    accent: '#3D1810',
+    ink: '#3D1810',
+    inkSoft: 'rgba(61,24,16,0.78)',
+    inkUnderline: '#3D1810',
+    divider: 'rgba(61,24,16,0.18)',
+    guillocheOpacity: 0.14,
+    stampRotation: -3,
+  },
+  required: {
+    bgFrom: '#1F1F1F',
+    bgTo: '#0E0F0F',
+    accent: '#E89B7A',
+    ink: '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.78)',
+    inkUnderline: '#FFFFFF',
+    divider: 'rgba(255,255,255,0.14)',
+    guillocheOpacity: 0.10,
+    stampRotation: -3,
+  },
+} as const;
+
+export type VisaHeroCategory = keyof typeof visaCategoryColors;
+
+// ──────────────────────────────────────────────
+// Booking sheet gradients & inks
+// (only used by <BookingDetailSheet />)
+// ──────────────────────────────────────────────
+export const bookingTypeColors = {
+  restaurant: {
+    bgFrom: '#7E2A2A',
+    bgTo:   '#5C1F1F',
+    accent: '#FBE9C8',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.78)',
+    divider: 'rgba(255,255,255,0.16)',
+    guillocheOpacity: 0.10,
+    secondary: 'rgba(0,0,0,0.18)',
+  },
+  insurance: {
+    bgFrom: '#1F2746',
+    bgTo:   '#161D38',
+    accent: '#F4CB6F',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.78)',
+    divider: 'rgba(255,255,255,0.14)',
+    guillocheOpacity: 0.09,
+    secondary: 'rgba(0,0,0,0.20)',
+  },
+  car: {
+    bgFrom: '#2E4A40',
+    bgTo:   '#1F362E',
+    accent: '#F4CB6F',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.80)',
+    divider: 'rgba(255,255,255,0.16)',
+    guillocheOpacity: 0.10,
+    secondary: 'rgba(0,0,0,0.18)',
+  },
+  experience: {
+    bgFrom: '#A05A2C',
+    bgTo:   '#7E4421',
+    accent: '#FBE9C8',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.82)',
+    divider: 'rgba(255,255,255,0.16)',
+    guillocheOpacity: 0.12,
+    secondary: 'rgba(0,0,0,0.16)',
+  },
+  hotel: {
+    bgFrom: '#3F2F62',
+    bgTo:   '#2E2249',
+    accent: '#D4C5F0',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.78)',
+    divider: 'rgba(255,255,255,0.14)',
+    guillocheOpacity: 0.10,
+    secondary: 'rgba(0,0,0,0.20)',
+  },
+  flight: {
+    bgFrom: '#1F2746',
+    bgTo:   '#161D38',
+    accent: '#F4CB6F',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.82)',
+    divider: 'rgba(255,255,255,0.14)',
+    guillocheOpacity: 0.09,
+    secondary: 'rgba(0,0,0,0.22)',
+  },
+} as const;
+
+export type BookingHeroType = keyof typeof bookingTypeColors;
+
 export function getVisaCategoryColor(
   category: string,
   colors: ThemeColors,
 ): string {
   const c = (category || '').toLowerCase().replace(/[-_ ]/g, '');
-  if (c.includes('free')) return colors.visaFreeCard;
-  if (c.includes('arrival')) return colors.visaOnArrivalCard;
-  if (c.includes('evisa') || c === 'evisa') return colors.evisaCard;
-  if (c.includes('required')) return colors.visaRequiredCard;
-  return colors.primary;
+  if (c.includes('free')) return colors.visaFree;
+  if (c.includes('arrival')) return colors.visaOnArrival;
+  if (c.includes('evisa') || c === 'evisa') return colors.evisa;
+  if (c.includes('required')) return colors.visaRequired;
+  return colors.ink;
 }
 
 export function getVisaCategoryBgColor(
@@ -232,31 +280,36 @@ export function getVisaCategoryBgColor(
 }
 
 // ──────────────────────────────────────────────
-// Font Family — Shared brand identity with HabitQuest
-// Sora for UI, Bebas Neue for travel display headers
+// Font Family — Inter (UI) + Fraunces (display, italic) + JetBrains Mono (kickers)
 // ──────────────────────────────────────────────
 export const FontFamily = {
-  // Display — bold travel poster headers
-  display: 'BebasNeue_400Regular',
-  // Base UI — Sora geometric (shared with HabitQuest)
-  regular: 'Sora_400Regular',
-  medium: 'Sora_500Medium',
-  semibold: 'Sora_600SemiBold',
-  bold: 'Sora_700Bold',
-  // Keep serif for long-form content (itinerary descriptions)
-  serif: 'Lora_400Regular',
-  serifMedium: 'Lora_500Medium',
-  serifSemibold: 'Lora_600SemiBold',
-  serifBold: 'Lora_700Bold',
-  // Condensed for badges, labels, uppercase text
-  condensed: 'BarlowCondensed_400Regular',
-  condensedMedium: 'BarlowCondensed_500Medium',
-  condensedSemibold: 'BarlowCondensed_600SemiBold',
-  condensedBold: 'BarlowCondensed_700Bold',
+  // Display — Fraunces serif (italic + roman), the brand signature face.
+  display: 'Fraunces_500Medium',
+  displayItalic: 'Fraunces_500Medium_Italic',
+  displaySemibold: 'Fraunces_600SemiBold',
+  displaySemiboldItalic: 'Fraunces_600SemiBold_Italic',
+  displayBold: 'Fraunces_700Bold',
+  // UI — Inter
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  // Mono — kickers, timestamps, step counters
+  mono: 'JetBrainsMono_400Regular',
+  monoMedium: 'JetBrainsMono_500Medium',
+  // Legacy keys — kept pointing at Fraunces so downstream "serif" naming reads correctly.
+  serif: 'Fraunces_500Medium',
+  serifMedium: 'Fraunces_500Medium',
+  serifSemibold: 'Fraunces_600SemiBold',
+  serifBold: 'Fraunces_700Bold',
+  condensed: 'Inter_400Regular',
+  condensedMedium: 'Inter_500Medium',
+  condensedSemibold: 'Inter_600SemiBold',
+  condensedBold: 'Inter_700Bold',
 } as const;
 
 // ──────────────────────────────────────────────
-// Spacing (shared with HabitQuest)
+// Spacing (spec-aligned; same numeric scale retained for compat)
 // ──────────────────────────────────────────────
 export const Spacing = {
   xs: 4,
@@ -271,7 +324,7 @@ export const Spacing = {
 } as const;
 
 // ──────────────────────────────────────────────
-// Font Sizes (shared with HabitQuest)
+// Font sizes (spec-aligned)
 // ──────────────────────────────────────────────
 export const FontSize = {
   xs: 11,
@@ -279,66 +332,102 @@ export const FontSize = {
   base: 15,
   lg: 18,
   xl: 22,
-  '2xl': 28,
-  '3xl': 36,
-  '4xl': 48,
-  '5xl': 64,
+  '2xl': 26,
+  '3xl': 32,
+  '4xl': 40,
+  '5xl': 56,
 } as const;
 
 // ──────────────────────────────────────────────
-// Border Radius (shared with HabitQuest)
+// Border radius (spec: 20/22/26/28/999)
 // ──────────────────────────────────────────────
 export const Radius = {
-  xs: 6,
-  sm: 10,
-  md: 14,
-  lg: 18,
-  xl: 24,
-  '2xl': 32,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 22,
+  '2xl': 28,
   full: 9999,
 } as const;
 
-// Bento grid radius (shared with HabitQuest)
-export const BentoRadius = 20;
-export const BentoGap = 14;
+export const BentoRadius = 22;
+export const BentoGap = 10;
 
 // ──────────────────────────────────────────────
-// Shadow presets (warm tones — shared with HabitQuest)
+// Shadows (spec-aligned, black-tone)
 // ──────────────────────────────────────────────
 export const Shadows = {
-  card: {
-    shadowColor: '#8B8178',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 3,
-  },
+  // Large hero cards — "0 14px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.06)"
   cardRaised: {
-    shadowColor: '#8B8178',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    elevation: 6,
-  },
-  glow: (color: string, intensity = 0.25) => ({
-    shadowColor: color,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: intensity,
-    shadowRadius: 16,
-    elevation: 5,
-  }),
-  neonGlow: (color: string) => ({
-    shadowColor: color,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.30,
-    shadowRadius: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.12,
+    shadowRadius: 30,
     elevation: 8,
-  }),
+  },
+  // Medium cards — "0 12px 26px rgba(0,0,0,0.10)"
+  card: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.10,
+    shadowRadius: 26,
+    elevation: 5,
+  },
+  // Warm-toned variant of `card` — for elements sitting in/near the warm
+  // hero cards. Uses #1F1A14 ink instead of pure black per CLAUDE.md.
+  cardWarm: {
+    shadowColor: '#1F1A14',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  // Subtle — 2px lift
   subtle: {
-    shadowColor: '#8B8178',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 1,
   },
+  // CircleBtn glass pill — "0 4px 14px rgba(0,0,0,0.10)"
+  circle: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  // DarkOrb FAB — "0 10px 24px rgba(0,0,0,0.22)"
+  orb: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  // Floating tab bar — "0 14px 40px rgba(0,0,0,0.28)"
+  tabBar: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.28,
+    shadowRadius: 40,
+    elevation: 12,
+  },
+  // Preserved signatures for compat
+  glow: (_color: string, _intensity = 0.25) => ({
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 5,
+  }),
+  neonGlow: (_color: string) => ({
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 8,
+  }),
 } as const;

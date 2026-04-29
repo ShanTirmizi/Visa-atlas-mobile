@@ -9,10 +9,11 @@ import {
   ActionSheetIOS,
   Platform,
 } from 'react-native';
-import { Camera, ImageIcon } from 'lucide-react-native';
+import { Camera, ChevronRight } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { Type } from '@/constants/typography';
 import { endpoints } from '@/constants/api';
 import type { BookingType } from '@/constants/bookings';
 import type { BookingFormData } from './BookingForm';
@@ -109,31 +110,62 @@ export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
 
   return (
     <TouchableOpacity
-      activeOpacity={0.8}
+      activeOpacity={0.85}
       onPress={handlePress}
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.primary,
-          ...Shadows.glow(colors.primary, 0.3),
-        },
-      ]}
+      style={[styles.card, { backgroundColor: colors.ink }]}
     >
       {loading ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator color="#FFFFFF" />
-          <Text style={styles.loadingText}>Analyzing your booking...</Text>
+          <Text style={styles.loadingText}>Analyzing your booking…</Text>
         </View>
       ) : (
         <View style={styles.row}>
-          <View style={styles.iconGroup}>
-            <Camera size={22} color="#FFFFFF" />
-            <ImageIcon size={18} color="rgba(255, 255, 255, 0.6)" />
+          {/* Camera icon in a paper-edged dark square */}
+          <View
+            style={[
+              styles.iconBox,
+              { backgroundColor: 'rgba(255,255,255,0.06)' },
+            ]}
+          >
+            <Camera size={22} color="#FFFFFF" strokeWidth={1.7} />
           </View>
+
           <View style={styles.textGroup}>
-            <Text style={styles.title}>Scan a Confirmation</Text>
-            <Text style={styles.subtitle}>Take a photo or choose from gallery</Text>
+            <Text
+              style={[
+                Type.kickerSm,
+                { color: colors.coral, fontSize: 9, letterSpacing: 9 * 0.18 },
+              ]}
+            >
+              FASTEST
+            </Text>
+            <Text
+              style={{
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+                fontSize: 17,
+                fontWeight: '500',
+                color: '#FFFFFF',
+                letterSpacing: -17 * 0.012,
+                marginTop: 2,
+              }}
+            >
+              Scan a confirmation
+            </Text>
+            <Text
+              style={{
+                fontFamily: FontFamily.regular,
+                fontSize: 12,
+                color: 'rgba(255,255,255,0.65)',
+                marginTop: 2,
+              }}
+            >
+              Photo or screenshot — we&apos;ll fill the form.
+            </Text>
           </View>
+
+          <ChevronRight size={18} color="rgba(255,255,255,0.7)" strokeWidth={2} />
         </View>
       )}
     </TouchableOpacity>
@@ -142,33 +174,23 @@ export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
+    borderRadius: 18,
+    padding: 14,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 14,
   },
-  iconGroup: {
-    flexDirection: 'row',
+  iconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     alignItems: 'center',
-    gap: 6,
-    marginRight: Spacing.md,
+    justifyContent: 'center',
   },
   textGroup: {
     flex: 1,
-  },
-  title: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.base,
-    color: '#FFFFFF',
-  },
-  subtitle: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 2,
   },
   loadingRow: {
     flexDirection: 'row',

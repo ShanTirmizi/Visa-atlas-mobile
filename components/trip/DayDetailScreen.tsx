@@ -1,34 +1,23 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
+  Pressable,
   StyleSheet,
   ScrollView,
-  Dimensions,
   ImageBackground,
-  Pressable,
-  type ColorValue,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Share2,
-  MapPin,
-  Sunrise,
-  Sun,
-  Moon,
-  Clock,
-  Sparkles,
-  type LucideIcon,
-} from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Pencil, Sparkles } from 'lucide-react-native';
+import { FontFamily } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
-import CircleIconButton from '@/components/ui/CircleIconButton';
+import { CircleBtn } from '@/components/ui/CircleBtn';
+import { Photo, type PhotoTone } from '@/components/ui/Photo';
+import { StopList, type Stop } from '@/components/trip/day/StopList';
+import { PullQuote } from '@/components/trip/day/PullQuote';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Type } from '@/constants/typography';
+import { Squiggle } from '@/components/ui/Squiggle';
 
 export interface DayDetailDay {
   day: number;
@@ -40,6 +29,8 @@ export interface DayDetailDay {
   evening: string;
   eveningPlace?: string;
   tip: string;
+  /** Optional: explicit local tip for PullQuote (falls back to `tip`) */
+  localTip?: string;
 }
 
 type DayImage = { url: string; credit?: string; creditUrl?: string } | null;
@@ -57,185 +48,125 @@ interface DayDetailScreenProps {
   tripStartDate?: string;
   onBack: () => void;
   onShare: () => void;
+  onEdit?: () => void;
   onNavigateDay: (newIndex: number) => void;
+  /** Open AI chat scoped to this specific day. */
+  onTweakWithAI?: () => void;
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-// 52% of screen height — large enough to be immersive, leaves breathing room
-// for the overlapping stats row below.
-const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.52);
-const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.22;
-const VELOCITY_THRESHOLD = 550;
-// Landscape activity image — wide cinematic ratio instead of cramped thumbnails.
-const ACTIVITY_IMAGE_HEIGHT = Math.round(SCREEN_WIDTH * 0.52);
+const HERO_HEIGHT = 280;
+const SHEET_TOP = 260;
 
-type TimeSlot = 'morning' | 'afternoon' | 'evening';
+// ── Helpers ──────────────────────────────────────────────────────────
 
-interface TimeSlotConfig {
-  icon: LucideIcon;
-  label: string;
-  hint: string;
+function formatDaySubtitle(
+  startDate: string | undefined,
+  dayIndex: number,
+  stopCount: number,
+): string {
+  const parts: string[] = [];
+
+  if (startDate) {
+    const d = new Date(`${startDate}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      d.setDate(d.getDate() + dayIndex);
+      const month = d.toLocaleDateString('en-US', { month: 'short' });
+      const day = d.getDate();
+      const weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
+      parts.push(`${month} ${day} · ${weekday}`);
+    }
+  }
+
+  if (stopCount > 0) {
+    parts.push(`${stopCount} ${stopCount === 1 ? 'stop' : 'stops'}`);
+  }
+
+  return parts.join(' · ');
 }
 
-const TIME_SLOT_CONFIG: Record<TimeSlot, TimeSlotConfig> = {
-  morning: { icon: Sunrise, label: 'Morning', hint: 'Start the day' },
-  afternoon: { icon: Sun, label: 'Afternoon', hint: 'Peak hours' },
-  evening: { icon: Moon, label: 'Evening', hint: 'Wind down' },
-};
+function deriveDayTitle(day: DayDetailDay): string {
+  if (day.title && day.title.trim().length > 0) return day.title;
 
-function formatDate(start: string | undefined, offset: number): string | undefined {
-  if (!start) return undefined;
-  const d = new Date(`${start}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return undefined;
-  d.setDate(d.getDate() + offset);
-  return d
-    .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-    .toUpperCase();
-}
-
-// ── StatPill ─────────────────────────────────────────────────────────
-// Small badge used in the overlapping stats row. Icon + text on a card
-// background with a soft shadow. Bridges the hero and body visually.
-interface StatPillProps {
-  icon: LucideIcon;
-  label: string;
-  cardColor: ColorValue;
-  iconColor: ColorValue;
-  textColor: ColorValue;
-}
-
-function StatPill({ icon: Icon, label, cardColor, iconColor, textColor }: StatPillProps) {
-  return (
-    <View style={[styles.statPill, Shadows.card, { backgroundColor: cardColor }]}>
-      <Icon size={13} color={iconColor} />
-      <Text style={[styles.statPillText, { color: textColor }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
+  const placeNames = [day.morningPlace, day.afternoonPlace, day.eveningPlace].filter(
+    (p): p is string => Boolean(p && p.trim().length > 0),
   );
+
+  if (placeNames.length >= 2) {
+    return `${placeNames[0]} & ${placeNames[1]}`;
+  }
+  if (placeNames.length === 1) {
+    return placeNames[0];
+  }
+
+  return `Day ${day.day}`;
 }
 
-// ── ActivitySlot ─────────────────────────────────────────────────────
-// Editorial section for one time slot. Icon header, large landscape
-// image, serif description, place chip. Stacks vertically like a
-// magazine layout.
-interface ActivitySlotProps {
-  timeSlot: TimeSlot;
-  description: string;
-  place?: string;
-  imageUrl?: string;
-  cardBg: ColorValue;
-  textColor: ColorValue;
-  mutedColor: ColorValue;
-  iconBg: ColorValue;
-  placeholderBg: ColorValue;
+function buildStops(day: DayDetailDay, morningImg: ActivityImage, afternoonImg: ActivityImage, eveningImg: ActivityImage): Stop[] {
+  const stops: Stop[] = [];
+
+  if (day.morning.trim().length > 0) {
+    stops.push({
+      title: day.morningPlace ?? day.morning.split('.')[0].trim().slice(0, 50),
+      meta: 'Morning',
+      timeLabel: '09:30',
+      detail: day.morning.split('.')[0].trim() === (day.morningPlace ?? '')
+        ? undefined
+        : day.morning.split('.')[0].trim(),
+      thumbUri: morningImg?.thumb || morningImg?.url,
+    });
+  }
+  if (day.afternoon.trim().length > 0) {
+    stops.push({
+      title: day.afternoonPlace ?? day.afternoon.split('.')[0].trim().slice(0, 50),
+      meta: 'Afternoon',
+      timeLabel: '13:00',
+      detail: day.afternoon.split('.')[0].trim() === (day.afternoonPlace ?? '')
+        ? undefined
+        : day.afternoon.split('.')[0].trim(),
+      thumbUri: afternoonImg?.thumb || afternoonImg?.url,
+    });
+  }
+  if (day.evening.trim().length > 0) {
+    stops.push({
+      title: day.eveningPlace ?? day.evening.split('.')[0].trim().slice(0, 50),
+      meta: 'Evening',
+      timeLabel: '18:30',
+      detail: day.evening.split('.')[0].trim() === (day.eveningPlace ?? '')
+        ? undefined
+        : day.evening.split('.')[0].trim(),
+      thumbUri: eveningImg?.thumb || eveningImg?.url,
+    });
+  }
+
+  return stops;
 }
 
-function ActivitySlot({
-  timeSlot,
-  description,
-  place,
-  imageUrl,
-  cardBg,
-  textColor,
-  mutedColor,
-  iconBg,
-  placeholderBg,
-}: ActivitySlotProps) {
-  const { icon: Icon, label, hint } = TIME_SLOT_CONFIG[timeSlot];
+function deriveTip(day: DayDetailDay): string {
+  if (day.localTip && day.localTip.trim().length > 0) return day.localTip;
+  if (day.tip && day.tip.trim().length > 0) return day.tip;
 
-  return (
-    <View style={styles.activityWrapper}>
-      {/* ── Time header row ─── */}
-      <View style={styles.timeHeader}>
-        <View style={[styles.timeIconWrap, { backgroundColor: iconBg }]}>
-          <Icon size={15} color={textColor} />
-        </View>
-        <View style={styles.timeTextBlock}>
-          <Text style={[styles.timeLabel, { color: textColor }]}>{label}</Text>
-          <Text style={[styles.timeHint, { color: mutedColor }]}>{hint}</Text>
-        </View>
-      </View>
-
-      {/* ── Activity card ─── */}
-      <View style={[styles.activityCard, Shadows.card, { backgroundColor: cardBg }]}>
-        {imageUrl ? (
-          <ImageBackground
-            source={{ uri: imageUrl }}
-            style={styles.activityImage}
-            imageStyle={styles.activityImageRadii}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.activityImage, styles.activityImageRadii, { backgroundColor: placeholderBg }]} />
-        )}
-
-        <View style={styles.activityBody}>
-          <Text style={[styles.activityDescription, { color: textColor }]}>
-            {description}
-          </Text>
-          {place ? (
-            <View style={[styles.placeChip, { backgroundColor: iconBg }]}>
-              <MapPin size={11} color={mutedColor} />
-              <Text
-                style={[styles.placeChipText, { color: mutedColor }]}
-                numberOfLines={1}
-              >
-                {place}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </View>
-    </View>
-  );
+  const firstStop = day.morningPlace ?? day.afternoonPlace ?? day.eveningPlace;
+  if (firstStop) {
+    return `Visit ${firstStop} before 9 AM for quiet photos — crowds arrive by 10.`;
+  }
+  return 'Explore local neighbourhoods early in the morning to avoid the crowds.';
 }
 
-// ── DayNavButton ─────────────────────────────────────────────────────
-// Prev / next day navigation. Pressable chip with day number and chevron.
-interface DayNavButtonProps {
-  direction: 'prev' | 'next';
-  dayNumber: number;
-  onPress: () => void;
-  cardBg: ColorValue;
-  textColor: ColorValue;
-  mutedColor: ColorValue;
-}
+// ── Tone for hero placeholder ─────────────────────────────────────────
 
-function DayNavButton({
-  direction,
-  dayNumber,
-  onPress,
-  cardBg,
-  textColor,
-  mutedColor,
-}: DayNavButtonProps) {
-  const isPrev = direction === 'prev';
-  const Icon = isPrev ? ChevronLeft : ChevronRight;
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`Go to day ${dayNumber}`}
-      style={({ pressed }) => [
-        styles.dayNavButton,
-        Shadows.card,
-        { backgroundColor: cardBg, opacity: pressed ? 0.75 : 1 },
-      ]}
-    >
-      {isPrev ? <Icon size={16} color={textColor} /> : null}
-      <View style={styles.dayNavTextBlock}>
-        <Text style={[styles.dayNavHint, { color: mutedColor }]}>
-          {isPrev ? 'Previous' : 'Next'}
-        </Text>
-        <Text style={[styles.dayNavLabel, { color: textColor }]}>{`Day ${dayNumber}`}</Text>
-      </View>
-      {!isPrev ? <Icon size={16} color={textColor} /> : null}
-    </Pressable>
-  );
+const HERO_TONES: PhotoTone[] = ['forest', 'ocean', 'sunset', 'warm', 'mountain'];
+
+function heroToneFromDestination(destination: string | undefined): PhotoTone {
+  if (!destination) return 'forest';
+  let hash = 0;
+  for (let i = 0; i < destination.length; i++) {
+    hash += destination.charCodeAt(i);
+  }
+  return HERO_TONES[hash % HERO_TONES.length];
 }
 
 // ── Main screen ──────────────────────────────────────────────────────
+
 function DayDetailScreen({
   day,
   dayIndex,
@@ -247,448 +178,356 @@ function DayDetailScreen({
   destination,
   tripStartDate,
   onBack,
-  onShare,
+  onEdit,
   onNavigateDay,
+  onTweakWithAI,
 }: DayDetailScreenProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
-  const go = useCallback(
-    (dir: 1 | -1) => {
-      if (numDays <= 1) return;
-      const next = (dayIndex + dir + numDays) % numDays;
-      Haptics.selectionAsync().catch(() => {});
-      onNavigateDay(next);
-    },
-    [dayIndex, numDays, onNavigateDay],
+  const stops = useMemo(
+    () => buildStops(day, morningImage, afternoonImage, eveningImage),
+    [day, morningImage, afternoonImage, eveningImage],
   );
 
-  const pan = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-20, 20])
-        .failOffsetY([-12, 12])
-        .onEnd((e) => {
-          const past = Math.abs(e.translationX) > SWIPE_THRESHOLD;
-          const fast = Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
-          if (past || fast) {
-            const dir: 1 | -1 = e.translationX < 0 ? 1 : -1;
-            runOnJS(go)(dir);
-          }
-        }),
-    [go],
+  const dayTitle = useMemo(() => deriveDayTitle(day), [day]);
+  const subtitle = useMemo(
+    () => formatDaySubtitle(tripStartDate, dayIndex, stops.length),
+    [tripStartDate, dayIndex, stops.length],
   );
-
-  const place = day.morningPlace ?? day.afternoonPlace ?? day.eveningPlace ?? destination;
-  const dateLabel = formatDate(tripStartDate, dayIndex);
-
-  const prevIdx = (dayIndex - 1 + numDays) % numDays;
-  const nextIdx = (dayIndex + 1) % numDays;
-  const showDayNav = numDays > 1;
-
-  // Count of filled time slots — used in the stats pill.
-  const filledSlots = [day.morning, day.afternoon, day.evening].filter((s) => s.trim().length > 0).length;
+  const tip = useMemo(() => deriveTip(day), [day]);
+  const heroTone = useMemo(() => heroToneFromDestination(destination), [destination]);
 
   return (
-    <GestureDetector gesture={pan}>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* ── HERO (fixed, not scrollable) ────────────────────────────── */}
+      <View style={styles.hero}>
+        {heroImage?.url ? (
+          <ImageBackground
+            source={{ uri: heroImage.url }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          >
+            {/* Scrim: dark top + dark bottom, transparent middle for legibility */}
+            <LinearGradient
+              colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.4)']}
+              locations={[0, 0.35, 0.60, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          </ImageBackground>
+        ) : (
+          <Photo
+            tone={heroTone}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+
+        {/* ── Top bar (52px from top, 18px horizontal) ── */}
+        <View style={[styles.topBar, { top: 52 }]}>
+          <CircleBtn
+            solid
+            onPress={onBack}
+            accessibilityLabel="Go back"
+          >
+            <ChevronLeft size={20} color={colors.ink} strokeWidth={2.2} />
+          </CircleBtn>
+
+          {/* Day navigator — chevron buttons flank the count, all in one
+              glass pill so it reads as a single widget. Edge chevrons fade
+              when there's no further day in that direction. */}
+          <View style={styles.dayNav}>
+            <Pressable
+              onPress={() => dayIndex > 0 && onNavigateDay(dayIndex - 1)}
+              disabled={dayIndex <= 0}
+              accessibilityLabel="Previous day"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.dayNavBtn,
+                {
+                  opacity: dayIndex <= 0 ? 0.35 : pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <ChevronLeft size={16} color="#FFFFFF" strokeWidth={2.4} />
+            </Pressable>
+            <View style={styles.dayNavLabel}>
+              <Text style={styles.dayNavText}>{`Day ${dayIndex + 1} of ${numDays}`}</Text>
+            </View>
+            <Pressable
+              onPress={() => dayIndex < numDays - 1 && onNavigateDay(dayIndex + 1)}
+              disabled={dayIndex >= numDays - 1}
+              accessibilityLabel="Next day"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.dayNavBtn,
+                {
+                  opacity: dayIndex >= numDays - 1 ? 0.35 : pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.4} />
+            </Pressable>
+          </View>
+
+          <CircleBtn
+            solid
+            onPress={onEdit}
+            accessibilityLabel="Edit day"
+          >
+            <Pencil size={16} color={colors.ink} strokeWidth={2} />
+          </CircleBtn>
+        </View>
+
+        {/* ── Hero bottom: kicker + italic title + coral squiggle ── */}
+        <View style={styles.heroBottom}>
+          {subtitle.length > 0 ? (
+            <Text
+              style={[
+                Type.kickerSm,
+                {
+                  color: 'rgba(255,255,255,0.92)',
+                  fontSize: 10,
+                  letterSpacing: 10 * 0.18,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {(destination ?? '').toUpperCase()}
+              {destination && subtitle ? ' · ' : ''}
+              {subtitle.split(' · ')[0]?.toUpperCase()}
+            </Text>
+          ) : null}
+          <Text
+            style={{
+              fontFamily: FontFamily.display,
+              fontSize: 30,
+              fontWeight: '500',
+              letterSpacing: -30 * 0.02,
+              color: '#FFFFFF',
+              marginTop: 4,
+              lineHeight: 32,
+            }}
+            numberOfLines={2}
+          >
+            {(() => {
+              const titleWords = dayTitle.split(/\s+/);
+              if (titleWords.length === 1) {
+                return (
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    {dayTitle}
+                  </Text>
+                );
+              }
+              const head = titleWords.slice(0, -1).join(' ');
+              const tail = titleWords[titleWords.length - 1];
+              return (
+                <>
+                  {head}{' '}
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    {tail}
+                  </Text>
+                </>
+              );
+            })()}
+          </Text>
+          <Squiggle width={120} color={colors.coral} style={{ marginTop: 4 }} />
+        </View>
+      </View>
+
+      {/* ── SHEET (overlaps hero from top 260) ─────────────────────── */}
+      <View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: colors.background,
+            top: SHEET_TOP,
+          },
+        ]}
+      >
+        {/* Grab handle */}
+        <View style={styles.grabHandleWrapper}>
+          <View
+            style={[
+              styles.grabHandle,
+              { backgroundColor: colors.inkFaint, opacity: 0.5 },
+            ]}
+          />
+        </View>
+
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          bounces
+          contentContainerStyle={[
+            styles.sheetContent,
+            { paddingBottom: insets.bottom + 40 },
+          ]}
         >
-          {/* ────────────── HERO ────────────── */}
-          <View style={[styles.heroContainer, { height: HERO_HEIGHT }]}>
-            {heroImage?.url ? (
-              <ImageBackground
-                source={{ uri: heroImage.url }}
-                style={StyleSheet.absoluteFill}
-                resizeMode="cover"
-              >
-                {/* Photo-overlay rgba values below are an intentional exception per
-                    the spec — dark scrim for text legibility and a long fade into
-                    the body background for a magazine-style transition. */}
-                <LinearGradient
-                  colors={[
-                    'rgba(0,0,0,0.4)',
-                    'rgba(0,0,0,0)',
-                    'rgba(0,0,0,0)',
-                    'rgba(0,0,0,0.55)',
-                    colors.background,
+          {/* Stop list */}
+          {stops.length > 0 ? <StopList stops={stops} /> : null}
+
+          {/* Pull quote */}
+          <PullQuote tip={tip} />
+
+          {/* Tweak this day — AI chat scoped to this specific day */}
+          {onTweakWithAI ? (
+            <Pressable
+              onPress={onTweakWithAI}
+              style={({ pressed }) => [
+                styles.aiCta,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.line,
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <View style={[styles.aiCtaIcon, { backgroundColor: colors.coralBg }]}>
+                <Sparkles size={16} color={colors.coralDeep} strokeWidth={2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    Type.kickerSm,
+                    { color: colors.coralDeep, fontSize: 9, letterSpacing: 9 * 0.18 },
                   ]}
-                  locations={[0, 0.2, 0.4, 0.82, 1]}
-                  style={StyleSheet.absoluteFill}
-                />
-              </ImageBackground>
-            ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.surfaceLight }]} />
-            )}
-
-            {/* Top nav buttons */}
-            <View style={[styles.topBar, { top: insets.top + 8 }]}>
-              <CircleIconButton
-                icon={ChevronLeft}
-                accessibilityLabel="Go back"
-                onPress={onBack}
-                iconSize={22}
-              />
-              <CircleIconButton
-                icon={Share2}
-                accessibilityLabel="Share day"
-                onPress={onShare}
-                iconSize={18}
-              />
-            </View>
-
-            {/* Hero overlay: day pill, editorial title, place */}
-            <View style={styles.heroOverlay}>
-              <View style={styles.dayPill}>
-                <Text style={[styles.dayPillText, { color: colors.textOnLight }]}>
-                  {dateLabel ? `DAY ${day.day} · ${dateLabel}` : `DAY ${day.day}`}
+                >
+                  AI ASSISTANT
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 16,
+                    fontWeight: '500',
+                    color: colors.ink,
+                    marginTop: 2,
+                    letterSpacing: -16 * 0.012,
+                  }}
+                >
+                  Tweak this day
                 </Text>
               </View>
-              <Text style={styles.heroTitle} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.85}>
-                {day.title}
+              <Text
+                style={[
+                  Type.kickerSm,
+                  { color: colors.inkMute, fontSize: 9 },
+                ]}
+              >
+                CHAT →
               </Text>
-              {place ? (
-                <View style={styles.heroPlaceRow}>
-                  <MapPin size={13} color="#FFFFFF" />
-                  <Text style={styles.heroPlaceText} numberOfLines={1}>
-                    {place}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-
-          {/* ────────────── OVERLAPPING STATS ROW ────────────── */}
-          {/* Floats over the hero/body boundary for a premium magazine transition. */}
-          <View style={styles.statsRow}>
-            <StatPill
-              icon={Clock}
-              label={`Day ${day.day} of ${numDays}`}
-              cardColor={colors.card}
-              iconColor={colors.foreground}
-              textColor={colors.foreground}
-            />
-            {filledSlots > 0 ? (
-              <StatPill
-                icon={Sparkles}
-                label={`${filledSlots} ${filledSlots === 1 ? 'moment' : 'moments'}`}
-                cardColor={colors.card}
-                iconColor={colors.foreground}
-                textColor={colors.foreground}
-              />
-            ) : null}
-            {destination ? (
-              <StatPill
-                icon={MapPin}
-                label={destination}
-                cardColor={colors.card}
-                iconColor={colors.foreground}
-                textColor={colors.foreground}
-              />
-            ) : null}
-          </View>
-
-          {/* ────────────── BODY ────────────── */}
-          <View style={styles.body}>
-            {day.morning.trim().length > 0 ? (
-              <ActivitySlot
-                timeSlot="morning"
-                description={day.morning}
-                place={day.morningPlace}
-                imageUrl={morningImage?.url}
-                cardBg={colors.card}
-                textColor={colors.foreground}
-                mutedColor={colors.textMuted}
-                iconBg={colors.surfaceLight}
-                placeholderBg={colors.surfaceLight}
-              />
-            ) : null}
-            {day.afternoon.trim().length > 0 ? (
-              <ActivitySlot
-                timeSlot="afternoon"
-                description={day.afternoon}
-                place={day.afternoonPlace}
-                imageUrl={afternoonImage?.url}
-                cardBg={colors.card}
-                textColor={colors.foreground}
-                mutedColor={colors.textMuted}
-                iconBg={colors.surfaceLight}
-                placeholderBg={colors.surfaceLight}
-              />
-            ) : null}
-            {day.evening.trim().length > 0 ? (
-              <ActivitySlot
-                timeSlot="evening"
-                description={day.evening}
-                place={day.eveningPlace}
-                imageUrl={eveningImage?.url}
-                cardBg={colors.card}
-                textColor={colors.foreground}
-                mutedColor={colors.textMuted}
-                iconBg={colors.surfaceLight}
-                placeholderBg={colors.surfaceLight}
-              />
-            ) : null}
-
-            {/* ── Local tip pull-quote ── */}
-            {day.tip ? (
-              <View style={styles.tipWrapper}>
-                <View style={[styles.tipAccent, { backgroundColor: colors.foreground }]} />
-                <View style={styles.tipBody}>
-                  <Text style={[styles.tipLabel, { color: colors.textMuted }]}>LOCAL TIP</Text>
-                  <Text style={[styles.tipText, { color: colors.textSecondary ?? colors.foreground }]}>
-                    {day.tip}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-
-            {/* ── Day navigator ── */}
-            {showDayNav ? (
-              <View style={styles.dayNavRow}>
-                <DayNavButton
-                  direction="prev"
-                  dayNumber={prevIdx + 1}
-                  onPress={() => onNavigateDay(prevIdx)}
-                  cardBg={colors.card}
-                  textColor={colors.foreground}
-                  mutedColor={colors.textMuted}
-                />
-                <DayNavButton
-                  direction="next"
-                  dayNumber={nextIdx + 1}
-                  onPress={() => onNavigateDay(nextIdx)}
-                  cardBg={colors.card}
-                  textColor={colors.foreground}
-                  mutedColor={colors.textMuted}
-                />
-              </View>
-            ) : null}
-          </View>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </View>
-    </GestureDetector>
+    </View>
   );
 }
 
 export default React.memo(DayDetailScreen);
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContent: { paddingBottom: 56 },
+  container: {
+    flex: 1,
+  },
 
   // ── Hero ───
-  heroContainer: {
-    width: '100%',
-    position: 'relative',
+  hero: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: HERO_HEIGHT,
   },
   topBar: {
     position: 'absolute',
-    left: Spacing.lg,
-    right: Spacing.lg,
+    left: 18,
+    right: 18,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
-  heroOverlay: {
-    position: 'absolute',
-    left: Spacing.lg,
-    right: Spacing.lg,
-    bottom: 72, // leave room for the overlapping stats row
-  },
-  dayPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 12,
-    marginBottom: 14,
-  },
-  dayPillText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.8,
-  },
-  heroTitle: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 42,
-    lineHeight: 44,
-    color: '#FFFFFF',
-    letterSpacing: -0.8,
-    textShadowColor: 'rgba(0,0,0,0.55)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 14,
-  },
-  heroPlaceRow: {
+  dayNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginTop: 8,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    gap: 2,
   },
-  heroPlaceText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: '#FFFFFF',
-    opacity: 0.96,
-  },
-
-  // ── Stats row (overlaps hero/body) ───
-  statsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: Spacing.lg,
-    marginTop: -28,
-    marginBottom: Spacing.xl,
-  },
-  statPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: Radius.full ?? 999,
-  },
-  statPillText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.4,
-  },
-
-  // ── Body ───
-  body: {
-    paddingHorizontal: Spacing.lg,
-  },
-
-  // ── Activity slot ───
-  activityWrapper: {
-    marginBottom: Spacing.xl,
-  },
-  timeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: Spacing.md,
-  },
-  timeIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  dayNavBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  timeTextBlock: {
-    flex: 1,
+  dayNavLabel: {
+    paddingHorizontal: 4,
   },
-  timeLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.lg,
-    letterSpacing: -0.2,
+  dayNavText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: -0.1,
   },
-  timeHint: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    marginTop: 1,
-    letterSpacing: 0.2,
+  aiCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
   },
-  activityCard: {
-    borderRadius: Radius.xl,
+  aiCtaIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroBottom: {
+    position: 'absolute',
+    left: 22,
+    right: 22,
+    bottom: 18,
+  },
+
+  // ── Sheet ───
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     overflow: 'hidden',
   },
-  activityImage: {
-    width: '100%',
-    height: ACTIVITY_IMAGE_HEIGHT,
-  },
-  activityImageRadii: {
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-  },
-  activityBody: {
-    padding: Spacing.md,
-    gap: Spacing.sm,
-  },
-  activityDescription: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
-    lineHeight: 22,
-  },
-  placeChip: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
+  grabHandleWrapper: {
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Radius.full ?? 999,
-    maxWidth: '100%',
+    paddingTop: 10,
+    paddingBottom: 6,
   },
-  placeChipText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.3,
-    flexShrink: 1,
-  },
-
-  // ── Tip pull-quote ───
-  tipWrapper: {
-    flexDirection: 'row',
-    gap: 14,
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.xl,
-    paddingLeft: 2,
-  },
-  tipAccent: {
-    width: 2.5,
+  grabHandle: {
+    width: 36,
+    height: 4,
     borderRadius: 2,
-    alignSelf: 'stretch',
   },
-  tipBody: {
-    flex: 1,
-    paddingVertical: 2,
-  },
-  tipLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 1.2,
-    marginBottom: 6,
-  },
-  tipText: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
-    lineHeight: 24,
-    fontStyle: 'italic',
-  },
-
-  // ── Day navigator ───
-  dayNavRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: Spacing.sm,
-  },
-  dayNavButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
-    borderRadius: Radius.lg,
-  },
-  dayNavTextBlock: {
-    flex: 1,
-  },
-  dayNavHint: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 9,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  dayNavLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.base,
-    letterSpacing: -0.1,
-    marginTop: 1,
+  sheetContent: {
+    paddingTop: 10,
+    paddingHorizontal: 22,
   },
 });

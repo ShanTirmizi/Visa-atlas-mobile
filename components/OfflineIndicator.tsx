@@ -21,8 +21,10 @@ export function OfflineIndicator() {
 
   if (!isOffline && !isSyncing) return null;
 
-  const backgroundColor = isSyncing ? colors.card : '#F59E0B';
-  const textColor = isSyncing ? colors.foreground : '#000';
+  // Theme-token palette (was using hardcoded #F59E0B orange — out of palette).
+  // Syncing: paper bg + ink text. Offline: warning amber bg + ink text.
+  const backgroundColor = isSyncing ? colors.surface : colors.warningBg;
+  const textColor = isSyncing ? colors.inkSoft : colors.warning;
 
   let message = '';
   if (isSyncing) {

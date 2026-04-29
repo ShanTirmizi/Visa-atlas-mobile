@@ -5,28 +5,29 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   FlatList,
-  ActivityIndicator,
-  Animated,
   Dimensions,
-  LayoutAnimation,
   Platform,
   UIManager,
+  LayoutAnimation,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeftRight, ChevronDown, Search, X, Sparkles, RefreshCw } from 'lucide-react-native';
+import { Search, X, RefreshCw, ArrowLeftRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
-import {
-  FontFamily,
-  FontSize,
-  Spacing,
-  Radius,
-  Shadows,
-  type ThemeColors,
-} from '@/constants/theme';
+import { FontFamily, Shadows } from '@/constants/theme';
+import { Squiggle } from '@/components/ui/Squiggle';
 import { endpoints } from '@/constants/api';
 import {
   visaData,
@@ -37,8 +38,25 @@ import {
   type VisaCategory,
 } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
-import { travelData, type TravelInfo } from '@/data/travelData';
+import { travelData } from '@/data/travelData';
 import { getFlightHours } from '@/utils/flightTime';
+import { Type } from '@/constants/typography';
+import { CircleBtn } from '@/components/ui/CircleBtn';
+import { SectionKicker } from '@/components/ui/SectionKicker';
+import { Flag } from '@/components/ui/Flag';
+import { VisaBadge } from '@/components/ui/Badge';
+import { WinnerList, type WinnerRow } from '@/components/compare/WinnerList';
+import { VsPickerCard } from '@/components/compare/VsPickerCard';
+import { FaceoffRow } from '@/components/compare/FaceoffRow';
+import {
+  CompareCountryCardV2,
+  toAlpha2,
+} from '@/components/compare/CompareCountryCardV2';
+import { CategoryScoresCard } from '@/components/compare/CategoryScoresCard';
+import { VerdictCard } from '@/components/compare/VerdictCard';
+import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
+import { useRouter } from 'expo-router';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 
 // ---------------------------------------------------------------------------
 // Enable LayoutAnimation on Android
@@ -60,7 +78,7 @@ interface AIScores {
   relaxation: number;
   nightlife: number;
   nature: number;
-  value: number;
+  value?: number;
 }
 
 interface AICountryData {
@@ -78,71 +96,57 @@ interface AIComparison {
   valueComparison: string;
 }
 
-const SCORE_CATEGORIES: { key: keyof AIScores; label: string; emoji: string }[] = [
-  { key: 'food', label: 'Food', emoji: '\uD83C\uDF5C' },
-  { key: 'adventure', label: 'Adventure', emoji: '\u26F0\uFE0F' },
-  { key: 'culture', label: 'Culture', emoji: '\uD83C\uDFDB\uFE0F' },
-  { key: 'relaxation', label: 'Relaxation', emoji: '\uD83C\uDFD6\uFE0F' },
-  { key: 'nightlife', label: 'Nightlife', emoji: '\uD83C\uDF19' },
-  { key: 'nature', label: 'Nature', emoji: '\uD83C\uDF32' },
-  { key: 'value', label: 'Value', emoji: '\uD83D\uDCB0' },
-];
-
-const LOADING_MESSAGES = [
-  'Comparing destinations...',
-  'Analysing visa requirements...',
-  'Evaluating costs...',
-  'Rating local experiences...',
-  'Crunching the numbers...',
+const SCORE_CATEGORIES: { key: keyof AIScores; label: string }[] = [
+  { key: 'food',       label: 'FOOD' },
+  { key: 'adventure',  label: 'ADVENTURE' },
+  { key: 'culture',    label: 'CULTURE' },
+  { key: 'relaxation', label: 'RELAXATION' },
+  { key: 'nightlife',  label: 'NIGHTLIFE' },
+  { key: 'nature',     label: 'NATURE' },
 ];
 
 // ---------------------------------------------------------------------------
-// ISO alpha-3 to flag emoji
+// Popular face-offs
+// ---------------------------------------------------------------------------
+const POPULAR_FACEOFFS = [
+  { codeA: 'JPN', nameA: 'Japan',    codeB: 'VNM', nameB: 'Vietnam' },
+  { codeA: 'PRT', nameA: 'Portugal', codeB: 'ESP', nameB: 'Spain' },
+  { codeA: 'THA', nameA: 'Thailand', codeB: 'IDN', nameB: 'Indonesia' },
+];
+
+// ---------------------------------------------------------------------------
+// ISO alpha-3 → alpha-2 (for Flag component and isoToFlagEmoji)
 // ---------------------------------------------------------------------------
 
+/* prettier-ignore */
 const ALPHA3_TO_ALPHA2: Record<string, string> = {
-  AFG: 'AF', ALB: 'AL', DZA: 'DZ', AND: 'AD', AGO: 'AO',
-  ATG: 'AG', ARG: 'AR', ARM: 'AM', AUS: 'AU', AUT: 'AT',
-  AZE: 'AZ', BHS: 'BS', BHR: 'BH', BGD: 'BD', BRB: 'BB',
-  BLR: 'BY', BEL: 'BE', BLZ: 'BZ', BEN: 'BJ', BTN: 'BT',
-  BOL: 'BO', BIH: 'BA', BWA: 'BW', BRA: 'BR', BRN: 'BN',
-  BGR: 'BG', BFA: 'BF', BDI: 'BI', KHM: 'KH', CMR: 'CM',
-  CAN: 'CA', CPV: 'CV', CAF: 'CF', TCD: 'TD', CHL: 'CL',
-  CHN: 'CN', COL: 'CO', COM: 'KM', COG: 'CG', COD: 'CD',
-  CRI: 'CR', CIV: 'CI', HRV: 'HR', CUB: 'CU', CYP: 'CY',
-  CZE: 'CZ', DNK: 'DK', DJI: 'DJ', DMA: 'DM', DOM: 'DO',
-  ECU: 'EC', EGY: 'EG', SLV: 'SV', GNQ: 'GQ', ERI: 'ER',
-  EST: 'EE', SWZ: 'SZ', ETH: 'ET', FJI: 'FJ', FIN: 'FI',
-  FRA: 'FR', GAB: 'GA', GMB: 'GM', GEO: 'GE', DEU: 'DE',
-  GHA: 'GH', GRC: 'GR', GRD: 'GD', GTM: 'GT', GIN: 'GN',
-  GNB: 'GW', GUY: 'GY', HTI: 'HT', HND: 'HN', HUN: 'HU',
-  ISL: 'IS', IND: 'IN', IDN: 'ID', IRN: 'IR', IRQ: 'IQ',
-  IRL: 'IE', ISR: 'IL', ITA: 'IT', JAM: 'JM', JPN: 'JP',
-  JOR: 'JO', KAZ: 'KZ', KEN: 'KE', KIR: 'KI', PRK: 'KP',
-  KOR: 'KR', KWT: 'KW', KGZ: 'KG', LAO: 'LA', LVA: 'LV',
-  LBN: 'LB', LSO: 'LS', LBR: 'LR', LBY: 'LY', LIE: 'LI',
-  LTU: 'LT', LUX: 'LU', MDG: 'MG', MWI: 'MW', MYS: 'MY',
-  MDV: 'MV', MLI: 'ML', MLT: 'MT', MHL: 'MH', MRT: 'MR',
-  MUS: 'MU', MEX: 'MX', FSM: 'FM', MDA: 'MD', MCO: 'MC',
-  MNG: 'MN', MNE: 'ME', MAR: 'MA', MOZ: 'MZ', MMR: 'MM',
-  NAM: 'NA', NRU: 'NR', NPL: 'NP', NLD: 'NL', NZL: 'NZ',
-  NIC: 'NI', NER: 'NE', NGA: 'NG', MKD: 'MK', NOR: 'NO',
-  OMN: 'OM', PAK: 'PK', PLW: 'PW', PAN: 'PA', PNG: 'PG',
-  PRY: 'PY', PER: 'PE', PHL: 'PH', POL: 'PL', PRT: 'PT',
-  QAT: 'QA', ROU: 'RO', RUS: 'RU', RWA: 'RW', KNA: 'KN',
-  LCA: 'LC', VCT: 'VC', WSM: 'WS', SMR: 'SM', STP: 'ST',
-  SAU: 'SA', SEN: 'SN', SRB: 'RS', SYC: 'SC', SLE: 'SL',
-  SGP: 'SG', SVK: 'SK', SVN: 'SI', SLB: 'SB', SOM: 'SO',
-  ZAF: 'ZA', ESP: 'ES', LKA: 'LK', SDN: 'SD', SUR: 'SR',
-  SWE: 'SE', CHE: 'CH', SYR: 'SY', TWN: 'TW', TJK: 'TJ',
-  TZA: 'TZ', THA: 'TH', TLS: 'TL', TGO: 'TG', TON: 'TO',
-  TTO: 'TT', TUN: 'TN', TUR: 'TR', TKM: 'TM', TUV: 'TV',
-  UGA: 'UG', UKR: 'UA', ARE: 'AE', GBR: 'GB', USA: 'US',
-  URY: 'UY', UZB: 'UZ', VUT: 'VU', VEN: 'VE', VNM: 'VN',
-  YEM: 'YE', ZMB: 'ZM', ZWE: 'ZW', PSE: 'PS', XKX: 'XK',
+  AFG:'AF',ALB:'AL',DZA:'DZ',AND:'AD',AGO:'AO',ATG:'AG',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',
+  AZE:'AZ',BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
+  BOL:'BO',BIH:'BA',BWA:'BW',BRA:'BR',BRN:'BN',BGR:'BG',BFA:'BF',BDI:'BI',KHM:'KH',CMR:'CM',
+  CAN:'CA',CPV:'CV',CAF:'CF',TCD:'TD',CHL:'CL',CHN:'CN',COL:'CO',COM:'KM',COG:'CG',COD:'CD',
+  CRI:'CR',CIV:'CI',HRV:'HR',CUB:'CU',CYP:'CY',CZE:'CZ',DNK:'DK',DJI:'DJ',DMA:'DM',DOM:'DO',
+  ECU:'EC',EGY:'EG',SLV:'SV',GNQ:'GQ',ERI:'ER',EST:'EE',SWZ:'SZ',ETH:'ET',FJI:'FJ',FIN:'FI',
+  FRA:'FR',GAB:'GA',GMB:'GM',GEO:'GE',DEU:'DE',GHA:'GH',GRC:'GR',GRD:'GD',GTM:'GT',GIN:'GN',
+  GNB:'GW',GUY:'GY',HTI:'HT',HND:'HN',HUN:'HU',ISL:'IS',IND:'IN',IDN:'ID',IRN:'IR',IRQ:'IQ',
+  IRL:'IE',ISR:'IL',ITA:'IT',JAM:'JM',JPN:'JP',JOR:'JO',KAZ:'KZ',KEN:'KE',KIR:'KI',PRK:'KP',
+  KOR:'KR',KWT:'KW',KGZ:'KG',LAO:'LA',LVA:'LV',LBN:'LB',LSO:'LS',LBR:'LR',LBY:'LY',LIE:'LI',
+  LTU:'LT',LUX:'LU',MDG:'MG',MWI:'MW',MYS:'MY',MDV:'MV',MLI:'ML',MLT:'MT',MHL:'MH',MRT:'MR',
+  MUS:'MU',MEX:'MX',FSM:'FM',MDA:'MD',MCO:'MC',MNG:'MN',MNE:'ME',MAR:'MA',MOZ:'MZ',MMR:'MM',
+  NAM:'NA',NRU:'NR',NPL:'NP',NLD:'NL',NZL:'NZ',NIC:'NI',NER:'NE',NGA:'NG',MKD:'MK',NOR:'NO',
+  OMN:'OM',PAK:'PK',PLW:'PW',PAN:'PA',PNG:'PG',PRY:'PY',PER:'PE',PHL:'PH',POL:'PL',PRT:'PT',
+  QAT:'QA',ROU:'RO',RUS:'RU',RWA:'RW',KNA:'KN',LCA:'LC',VCT:'VC',WSM:'WS',SMR:'SM',STP:'ST',
+  SAU:'SA',SEN:'SN',SRB:'RS',SYC:'SC',SLE:'SL',SGP:'SG',SVK:'SK',SVN:'SI',SLB:'SB',SOM:'SO',
+  ZAF:'ZA',ESP:'ES',LKA:'LK',SDN:'SD',SUR:'SR',SWE:'SE',CHE:'CH',SYR:'SY',TWN:'TW',TJK:'TJ',
+  TZA:'TZ',THA:'TH',TLS:'TL',TGO:'TG',TON:'TO',TTO:'TT',TUN:'TN',TUR:'TR',TKM:'TM',TUV:'TV',
+  UGA:'UG',UKR:'UA',ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VUT:'VU',VEN:'VE',VNM:'VN',
+  YEM:'YE',ZMB:'ZM',ZWE:'ZW',PSE:'PS',XKX:'XK',
 };
 
-function isoToFlag(code: string): string {
+function alpha3ToAlpha2(code: string): string {
+  return ALPHA3_TO_ALPHA2[code.toUpperCase()] ?? code.slice(0, 2).toUpperCase();
+}
+
+function isoToFlagEmoji(code: string): string {
   const a2 = ALPHA3_TO_ALPHA2[code.toUpperCase()];
   if (!a2) return '';
   return a2
@@ -152,35 +156,134 @@ function isoToFlag(code: string): string {
     .join('');
 }
 
-function getCategoryColor(category: VisaCategory, colors: ThemeColors): string {
-  switch (category) {
-    case 'visa-free': return colors.visaFree;
-    case 'visa-on-arrival': return colors.visaOnArrival;
-    case 'evisa': return colors.evisa;
-    case 'visa-required': return colors.visaRequired;
-    default: return colors.textMuted;
-  }
-}
+// ---------------------------------------------------------------------------
+// Visa category helpers
+// ---------------------------------------------------------------------------
 
-function getCategoryBgColor(category: VisaCategory, colors: ThemeColors): string {
+function getCategoryColor(
+  category: VisaCategory,
+  colors: { visaFree: string; visaOnArrival: string; evisa: string; visaRequired: string; inkMute: string },
+): string {
   switch (category) {
-    case 'visa-free': return colors.visaFreeBg;
-    case 'visa-on-arrival': return colors.visaOnArrivalBg;
-    case 'evisa': return colors.evisaBg;
-    case 'visa-required': return colors.visaRequiredBg;
-    default: return colors.shimmer;
+    case 'visa-free':
+      return colors.visaFree;
+    case 'visa-on-arrival':
+      return colors.visaOnArrival;
+    case 'evisa':
+      return colors.evisa;
+    case 'visa-required':
+      return colors.visaRequired;
+    default:
+      return colors.inkMute;
   }
 }
 
 function getCategoryLabel(category: VisaCategory): string {
   switch (category) {
-    case 'visa-free': return 'Visa Free';
-    case 'visa-on-arrival': return 'On Arrival';
-    case 'evisa': return 'eVisa';
-    case 'visa-required': return 'Required';
-    case 'home': return 'Home';
-    default: return category;
+    case 'visa-free':
+      return 'Visa Free';
+    case 'visa-on-arrival':
+      return 'On Arrival';
+    case 'evisa':
+      return 'eVisa';
+    case 'visa-required':
+      return 'Required';
+    case 'home':
+      return 'Home';
+    default:
+      return category;
   }
+}
+
+function toCat(category: VisaCategory): 'free' | 'arrival' | 'evisa' | 'required' {
+  switch (category) {
+    case 'visa-free':
+      return 'free';
+    case 'visa-on-arrival':
+      return 'arrival';
+    case 'evisa':
+      return 'evisa';
+    default:
+      return 'required';
+  }
+}
+
+const CATEGORY_RANK: Record<VisaCategory, number> = {
+  'visa-free': 0,
+  'visa-on-arrival': 1,
+  evisa: 2,
+  'visa-required': 3,
+  home: -1,
+};
+
+// ---------------------------------------------------------------------------
+// Skeleton shimmer for loading state
+// ---------------------------------------------------------------------------
+
+function SkeletonBar({ widthPct }: { widthPct: number }) {
+  const { colors } = useTheme();
+  const opacity = useSharedValue(0.4);
+
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 700 }),
+        withTiming(0.4, { duration: 700 }),
+      ),
+      -1,
+      false,
+    );
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.surfaceMuted,
+    flex: widthPct,
+  }));
+
+  return <Animated.View style={animStyle} />;
+}
+
+function LoadingState() {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.surface, borderColor: colors.line },
+      ]}
+    >
+      <SectionKicker style={{ marginBottom: 14 }}>GENERATING COMPARISON</SectionKicker>
+      <Text style={[Type.body13, { color: colors.inkMute, marginBottom: 18 }]}>
+        Analysing visa requirements, costs, and experiences…
+      </Text>
+      {SCORE_CATEGORIES.map((cat) => (
+        <View key={cat.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <SkeletonBar widthPct={4} />
+          <View style={{ width: 80, alignItems: 'center' }}>
+            <Text style={[styles.skeletonCatLabel, { color: colors.inkMute }]}>{cat.label}</Text>
+          </View>
+          <SkeletonBar widthPct={4} />
+        </View>
+      ))}
+      <View style={{ marginTop: 12, gap: 8 }}>
+        <View style={{ flexDirection: 'row' }}>
+          <SkeletonBar widthPct={9} />
+          <View style={{ flex: 1 }} />
+        </View>
+        <View style={{ flexDirection: 'row' }}>
+          <SkeletonBar widthPct={7} />
+          <View style={{ flex: 3 }} />
+        </View>
+        <View style={{ flexDirection: 'row' }}>
+          <SkeletonBar widthPct={8} />
+          <View style={{ flex: 2 }} />
+        </View>
+      </View>
+    </View>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,79 +296,98 @@ function CountryPickerModal({
   onSelect,
   excludeCode,
   heldVisasSet,
-  colors,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (code: string) => void;
   excludeCode: string;
   heldVisasSet: Set<HeldVisaType>;
-  colors: ThemeColors;
 }) {
+  const { colors } = useTheme();
   const [search, setSearch] = useState('');
   const insets = useSafeAreaInsets();
 
-  const filtered = useMemo(() => {
-    return visaData
-      .filter((c) => c.category !== 'home' && c.code !== excludeCode)
-      .filter((c) => {
-        if (!search) return true;
-        return c.name.toLowerCase().includes(search.toLowerCase());
-      });
-  }, [search, excludeCode]);
+  const filtered = useMemo(
+    () =>
+      visaData
+        .filter((c) => c.category !== 'home' && c.code !== excludeCode)
+        .filter((c) => !search || c.name.toLowerCase().includes(search.toLowerCase())),
+    [search, excludeCode],
+  );
 
-  const handleSelect = useCallback((code: string) => {
-    onSelect(code);
-    onClose();
-    setSearch('');
-  }, [onSelect, onClose]);
+  const handleSelect = useCallback(
+    (code: string) => {
+      onSelect(code);
+      onClose();
+      setSearch('');
+    },
+    [onSelect, onClose],
+  );
 
-  const renderItem = useCallback(({ item }: { item: CountryVisa }) => {
-    const resolved = resolveCountry(item, heldVisasSet);
-    const catColor = getCategoryColor(resolved.category, colors);
-    return (
-      <TouchableOpacity
-        style={[styles.pickerItem, { borderBottomColor: colors.borderSubtle }]}
-        onPress={() => handleSelect(item.code)}
-        activeOpacity={0.6}
-      >
-        <Text style={styles.pickerFlag}>{isoToFlag(item.code)}</Text>
-        <Text style={[styles.pickerName, { color: colors.foreground }]} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <View style={[styles.pickerBadge, { backgroundColor: catColor }]}>
-          <Text style={[styles.pickerBadgeText, { color: '#FFFFFF' }]}>
-            {getCategoryLabel(resolved.category)}
+  const renderItem = useCallback(
+    ({ item }: { item: CountryVisa }) => {
+      const resolved = resolveCountry(item, heldVisasSet);
+      const catColor = getCategoryColor(resolved.category, colors);
+      return (
+        <TouchableOpacity
+          style={[styles.pickerItem, { borderBottomColor: colors.line }]}
+          onPress={() => handleSelect(item.code)}
+          activeOpacity={0.6}
+        >
+          <Text style={styles.pickerFlag}>{isoToFlagEmoji(item.code)}</Text>
+          <Text style={[styles.pickerName, { color: colors.ink }]} numberOfLines={1}>
+            {item.name}
           </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [colors, heldVisasSet, handleSelect]);
+          <View style={[styles.pickerBadge, { backgroundColor: catColor }]}>
+            <Text style={[styles.pickerBadgeText, { color: '#FFFFFF' }]}>
+              {getCategoryLabel(resolved.category)}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [colors, heldVisasSet, handleSelect],
+  );
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
       <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-        {/* Handle bar */}
+        {/* Handle */}
         <View style={styles.modalHandle}>
-          <View style={[styles.handleBar, { backgroundColor: colors.textMuted }]} />
+          <View style={[styles.handleBar, { backgroundColor: colors.inkMute }]} />
         </View>
 
         {/* Header */}
-        <View style={[styles.modalHeader, { paddingTop: Platform.OS === 'android' ? insets.top + Spacing.sm : Spacing.md }]}>
-          <Text style={[styles.modalTitle, { color: colors.foreground }]}>Select Country</Text>
+        <View
+          style={[
+            styles.modalHeader,
+            { paddingTop: Platform.OS === 'android' ? insets.top + 14 : 14 },
+          ]}
+        >
+          <Text style={[Type.title18, { color: colors.ink }]}>Select Country</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <X size={22} color={colors.textMuted} />
+            <X size={22} color={colors.inkMute} />
           </TouchableOpacity>
         </View>
 
         {/* Search */}
-        <View style={[styles.searchRow, { borderBottomColor: colors.borderSubtle }]}>
-          <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Search size={16} color={colors.textMuted} />
+        <View style={[styles.searchRow, { borderBottomColor: colors.line }]}>
+          <View
+            style={[
+              styles.searchBox,
+              { backgroundColor: colors.surface, borderColor: colors.line },
+            ]}
+          >
+            <Search size={16} color={colors.inkMute} />
             <TextInput
-              style={[styles.searchInput, { color: colors.foreground }]}
+              style={[styles.searchInput, { color: colors.ink }]}
               placeholder="Search countries..."
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={colors.inkFaint}
               value={search}
               onChangeText={setSearch}
               autoFocus
@@ -273,7 +395,7 @@ function CountryPickerModal({
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={() => setSearch('')}>
-                <X size={14} color={colors.textMuted} />
+                <X size={14} color={colors.inkMute} />
               </TouchableOpacity>
             )}
           </View>
@@ -284,149 +406,16 @@ function CountryPickerModal({
           data={filtered}
           keyExtractor={(item) => item.code}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.xl }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.emptySearch}>
-              <Text style={[styles.emptySearchText, { color: colors.textMuted }]}>
-                No countries found
-              </Text>
+              <Text style={[Type.body13, { color: colors.inkMute }]}>No countries found</Text>
             </View>
           }
         />
       </View>
     </Modal>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Score Bar
-// ---------------------------------------------------------------------------
-
-function ScoreBar({
-  label,
-  emoji,
-  scoreA,
-  scoreB,
-  colors,
-}: {
-  label: string;
-  emoji: string;
-  scoreA: number;
-  scoreB: number;
-  colors: ThemeColors;
-}) {
-  const barWidth = (SCREEN_WIDTH - Spacing.lg * 2 - Spacing.md * 2 - 80) / 2;
-  const aWins = scoreA > scoreB;
-  const bWins = scoreB > scoreA;
-
-  const animA = useRef(new Animated.Value(0)).current;
-  const animB = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(animA, {
-        toValue: scoreA / 10,
-        duration: 600,
-        useNativeDriver: false,
-      }),
-      Animated.timing(animB, {
-        toValue: scoreB / 10,
-        duration: 600,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [scoreA, scoreB]);
-
-  return (
-    <View style={styles.scoreRow}>
-      {/* A side */}
-      <View style={styles.scoreBarSide}>
-        <Text style={[styles.scoreNum, { color: '#FFFFFF' }]}>
-          {scoreA}
-        </Text>
-        <View style={[styles.barTrack, { backgroundColor: 'rgba(255,255,255,0.15)', width: barWidth - 26 }]}>
-          <Animated.View
-            style={[
-              styles.barFillRight,
-              {
-                backgroundColor: colors.primary,
-                opacity: aWins ? 1 : 0.45,
-                width: animA.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0%', '100%'],
-                }),
-              },
-            ]}
-          />
-        </View>
-      </View>
-
-      {/* Category label */}
-      <View style={styles.scoreLabelBox}>
-        <Text style={styles.scoreLabelEmoji}>{emoji}</Text>
-        <Text style={[styles.scoreLabelText, { color: 'rgba(255,255,255,0.70)' }]}>{label}</Text>
-      </View>
-
-      {/* B side */}
-      <View style={styles.scoreBarSideB}>
-        <View style={[styles.barTrack, { backgroundColor: 'rgba(255,255,255,0.15)', width: barWidth - 26 }]}>
-          <Animated.View
-            style={[
-              styles.barFillLeft,
-              {
-                backgroundColor: colors.accent,
-                opacity: bWins ? 1 : 0.45,
-                width: animB.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0%', '100%'],
-                }),
-              },
-            ]}
-          />
-        </View>
-        <Text style={[styles.scoreNum, { color: '#FFFFFF' }]}>
-          {scoreB}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Loading State
-// ---------------------------------------------------------------------------
-
-function LoadingState({ colors }: { colors: ThemeColors }) {
-  const [msgIndex, setMsgIndex] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
-        setMsgIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
-        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-      });
-    }, 2200);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <View style={[styles.loadingCard, { backgroundColor: colors.secondary, borderColor: 'transparent' }]}>
-      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginBottom: Spacing.md }} />
-      <Animated.Text style={[styles.loadingText, { color: 'rgba(255,255,255,0.85)', opacity: fadeAnim }]}>
-        {LOADING_MESSAGES[msgIndex]}
-      </Animated.Text>
-
-      {/* Skeleton bars */}
-      {[0, 1, 2, 3, 4].map((i) => (
-        <View key={i} style={[styles.skeletonRow, { marginTop: i === 0 ? Spacing.lg : Spacing.sm }]}>
-          <View style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.20)', flex: 1 }]} />
-          <View style={[styles.skeletonDot, { backgroundColor: 'rgba(255,255,255,0.20)' }]} />
-          <View style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.20)', flex: 1 }]} />
-        </View>
-      ))}
-    </View>
   );
 }
 
@@ -437,21 +426,21 @@ function LoadingState({ colors }: { colors: ThemeColors }) {
 export default function CompareScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { heldVisas, residence } = useVisa();
+  const plannerRef = useRef<TripPlannerSheetRef>(null);
+  const [planTarget, setPlanTarget] = useState<'a' | 'b'>('a');
 
+  // No defaults — clean empty state
   const [countryA, setCountryA] = useState('');
   const [countryB, setCountryB] = useState('');
   const [pickerTarget, setPickerTarget] = useState<'a' | 'b' | null>(null);
   const [aiData, setAiData] = useState<AIComparison | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const fetchRef = useRef<AbortController | null>(null);
 
-  const heldVisasSet = useMemo(
-    () => new Set(heldVisas as HeldVisaType[]),
-    [heldVisas],
-  );
+  const heldVisasSet = useMemo(() => new Set(heldVisas as HeldVisaType[]), [heldVisas]);
 
   const selectedA = useMemo(() => visaData.find((c) => c.code === countryA), [countryA]);
   const selectedB = useMemo(() => visaData.find((c) => c.code === countryB), [countryB]);
@@ -460,7 +449,12 @@ export default function CompareScreen() {
   const travelA = countryA ? travelData[countryA] : null;
   const travelB = countryB ? travelData[countryB] : null;
 
-  // Auto-fetch comparison when both countries selected
+  const resolvedA = selectedA ? resolveCountry(selectedA, heldVisasSet) : null;
+  const resolvedB = selectedB ? resolveCountry(selectedB, heldVisasSet) : null;
+
+  const bothSelected = !!selectedA && !!selectedB;
+
+  // ── AI comparison fetch ──────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedA || !selectedB || !metaA || !metaB || !travelA || !travelB) {
       setAiData(null);
@@ -476,8 +470,8 @@ export default function CompareScreen() {
     setError(null);
     setAiData(null);
 
-    const resolvedA = resolveCountry(selectedA, heldVisasSet);
-    const resolvedB = resolveCountry(selectedB, heldVisasSet);
+    const rA = resolveCountry(selectedA, heldVisasSet);
+    const rB = resolveCountry(selectedB, heldVisasSet);
 
     const payload = {
       countryA: {
@@ -487,9 +481,10 @@ export default function CompareScreen() {
         currency: metaA.currency,
         language: metaA.language,
         dailyBudget: travelA.dailyBudget,
-        flightHours: getFlightHours(residence ?? 'GBR', selectedA.code) ?? travelA.flightHoursFromLondon,
+        flightHours:
+          getFlightHours(residence ?? 'GBR', selectedA.code) ?? travelA.flightHoursFromLondon,
         costLevel: travelA.costLevel,
-        visaCategory: categoryLabels[resolvedA.category],
+        visaCategory: categoryLabels[rA.category],
         bestTimeNote: travelA.bestTimeNote,
       },
       countryB: {
@@ -499,9 +494,10 @@ export default function CompareScreen() {
         currency: metaB.currency,
         language: metaB.language,
         dailyBudget: travelB.dailyBudget,
-        flightHours: getFlightHours(residence ?? 'GBR', selectedB.code) ?? travelB.flightHoursFromLondon,
+        flightHours:
+          getFlightHours(residence ?? 'GBR', selectedB.code) ?? travelB.flightHoursFromLondon,
         costLevel: travelB.costLevel,
-        visaCategory: categoryLabels[resolvedB.category],
+        visaCategory: categoryLabels[rB.category],
         bestTimeNote: travelB.bestTimeNote,
       },
     };
@@ -514,7 +510,7 @@ export default function CompareScreen() {
     })
       .then((res) => {
         if (!res.ok) throw new Error('API error');
-        return res.json();
+        return res.json() as Promise<AIComparison>;
       })
       .then((data) => {
         if (!controller.signal.aborted) {
@@ -522,9 +518,11 @@ export default function CompareScreen() {
           setLoading(false);
         }
       })
-      .catch((err) => {
+      .catch((err: Error) => {
         if (!controller.signal.aborted) {
-          setError(err.name === 'AbortError' ? null : 'Failed to generate comparison. Tap to retry.');
+          setError(
+            err.name === 'AbortError' ? null : 'Failed to generate comparison. Tap to retry.',
+          );
           setLoading(false);
         }
       });
@@ -532,11 +530,11 @@ export default function CompareScreen() {
     return () => controller.abort();
   }, [countryA, countryB, heldVisasSet]);
 
+  // ── Swap handler ─────────────────────────────────────────────────────────
   const swap = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const tmp = countryA;
     setCountryA(countryB);
-    setCountryB(tmp);
+    setCountryB(countryA);
   }, [countryA, countryB]);
 
   const retry = useCallback(() => {
@@ -546,20 +544,109 @@ export default function CompareScreen() {
     setTimeout(() => setCountryA(tmp), 50);
   }, [countryA]);
 
-  const toggleSection = useCallback((key: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
+  // ── Build card data ───────────────────────────────────────────────────────
 
-  const bothSelected = !!selectedA && !!selectedB;
+  function buildFlightHours(code: string): number | null {
+    const travel = travelData[code];
+    return getFlightHours(residence ?? 'GBR', code) ?? travel?.flightHoursFromLondon ?? null;
+  }
+
+  function buildBudget(code: string): string {
+    return travelData[code]?.dailyBudget ?? '—';
+  }
+
+  function buildBestTime(code: string): string {
+    return travelData[code]?.bestTimeNote?.split(' ')[0] ?? '—';
+  }
+
+  // ── Compute winners ───────────────────────────────────────────────────────
+
+  const winners: WinnerRow[] = useMemo(() => {
+    if (!selectedA || !selectedB || !resolvedA || !resolvedB) return [];
+
+    const tA = travelData[selectedA.code];
+    const tB = travelData[selectedB.code];
+
+    let cheapestWinner = '—';
+    if (tA && tB) {
+      cheapestWinner = tA.costLevel <= tB.costLevel ? selectedA.name : selectedB.name;
+    }
+
+    const rankA = CATEGORY_RANK[resolvedA.category] ?? 3;
+    const rankB = CATEGORY_RANK[resolvedB.category] ?? 3;
+    const easyWinner = rankA < rankB ? selectedA.name : rankB < rankA ? selectedB.name : '—';
+
+    const fA = getFlightHours(residence ?? 'GBR', selectedA.code) ?? tA?.flightHoursFromLondon ?? 99;
+    const fB = getFlightHours(residence ?? 'GBR', selectedB.code) ?? tB?.flightHoursFromLondon ?? 99;
+    const flightWinner = fA <= fB ? selectedA.name : selectedB.name;
+
+    return [
+      { label: 'Cheapest', winner: cheapestWinner },
+      { label: 'Easiest visa', winner: easyWinner },
+      { label: 'Shortest flight', winner: flightWinner },
+    ];
+  }, [selectedA, selectedB, resolvedA, resolvedB, residence]);
+
+  // ── Determine overall winner (for card badge) ─────────────────────────────
+
+  const overallWinner = useMemo<'a' | 'b' | null>(() => {
+    if (!aiData || !selectedA || !selectedB) return null;
+    const scoresA = SCORE_CATEGORIES.map((c) => aiData.countryA.scores[c.key] ?? 5);
+    const scoresB = SCORE_CATEGORIES.map((c) => aiData.countryB.scores[c.key] ?? 5);
+    const sumA = scoresA.reduce((a, b) => a + b, 0);
+    const sumB = scoresB.reduce((a, b) => a + b, 0);
+    if (sumA === sumB) return null;
+    return sumA > sumB ? 'a' : 'b';
+  }, [aiData, selectedA, selectedB]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  // Dynamic header title
+  const titleNode = bothSelected && selectedA && selectedB ? (
+    <Text
+      style={{
+        fontFamily: FontFamily.display,
+        fontSize: 32,
+        fontWeight: '500',
+        letterSpacing: -32 * 0.022,
+        lineHeight: 34,
+        color: colors.ink,
+        marginTop: 4,
+      }}
+    >
+      <Text style={{ fontFamily: FontFamily.displayItalic, fontStyle: 'italic' }}>
+        {selectedA.name}
+      </Text>
+      {' vs '}
+      <Text style={{ fontFamily: FontFamily.displayItalic, fontStyle: 'italic' }}>
+        {selectedB.name}
+      </Text>
+      <Text style={{ color: colors.coral }}>.</Text>
+    </Text>
+  ) : (
+    <Text
+      style={{
+        fontFamily: FontFamily.display,
+        fontSize: 38,
+        fontWeight: '500',
+        letterSpacing: -38 * 0.022,
+        lineHeight: 40,
+        color: colors.ink,
+        marginTop: 4,
+      }}
+    >
+      Compare{' '}
+      <Text style={{ fontFamily: FontFamily.displayItalic, fontStyle: 'italic' }}>
+        two
+      </Text>
+      <Text style={{ color: colors.coral }}>.</Text>
+    </Text>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <TopSafeAreaBlur />
+
       {/* Country Picker Modal */}
       <CountryPickerModal
         visible={pickerTarget !== null}
@@ -570,255 +657,453 @@ export default function CompareScreen() {
         }}
         excludeCode={pickerTarget === 'a' ? countryB : countryA}
         heldVisasSet={heldVisasSet}
-        colors={colors}
       />
 
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + Spacing.md, paddingBottom: insets.bottom + 100 },
+          { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <Text style={[styles.heading, { color: colors.foreground }]}>Compare</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Pick two countries to compare
-        </Text>
-
-        {/* Selectors */}
-        <View style={styles.selectorRow}>
-          {/* Country A picker */}
-          <TouchableOpacity
-            style={[
-              styles.selectorBtn,
-              {
-                backgroundColor: selectedA ? colors.primary : colors.card,
-                borderColor: selectedA ? colors.primary : colors.border,
-                borderWidth: 1,
-              },
-            ]}
-            onPress={() => setPickerTarget('a')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.selectorLabel, { color: selectedA ? 'rgba(255,255,255,0.70)' : colors.textMuted }]}>COUNTRY A</Text>
-            {selectedA ? (
-              <View style={styles.selectorSelected}>
-                <Text style={styles.selectorFlag}>{isoToFlag(selectedA.code)}</Text>
-                <Text style={[styles.selectorName, { color: '#FFFFFF' }]} numberOfLines={1}>
-                  {selectedA.name}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.selectorPlaceholderRow}>
-                <Text style={[styles.selectorPlaceholder, { color: colors.textMuted }]}>
-                  Select...
-                </Text>
-                <ChevronDown size={14} color={colors.textMuted} />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* Swap button */}
-          <TouchableOpacity
-            style={[styles.swapBtn, { backgroundColor: colors.warning, borderColor: colors.warning }]}
-            onPress={swap}
-            activeOpacity={0.7}
-          >
-            <ArrowLeftRight size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          {/* Country B picker */}
-          <TouchableOpacity
-            style={[
-              styles.selectorBtn,
-              {
-                backgroundColor: selectedB ? colors.accent : colors.card,
-                borderColor: selectedB ? colors.accent : colors.border,
-                borderWidth: 1,
-              },
-            ]}
-            onPress={() => setPickerTarget('b')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.selectorLabel, { color: selectedB ? 'rgba(255,255,255,0.70)' : colors.textMuted }]}>COUNTRY B</Text>
-            {selectedB ? (
-              <View style={styles.selectorSelected}>
-                <Text style={styles.selectorFlag}>{isoToFlag(selectedB.code)}</Text>
-                <Text style={[styles.selectorName, { color: '#FFFFFF' }]} numberOfLines={1}>
-                  {selectedB.name}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.selectorPlaceholderRow}>
-                <Text style={[styles.selectorPlaceholder, { color: colors.textMuted }]}>
-                  Select...
-                </Text>
-                <ChevronDown size={14} color={colors.textMuted} />
-              </View>
-            )}
-          </TouchableOpacity>
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <View style={styles.header}>
+          <Text style={[Type.kicker, { color: colors.inkMute }]}>SIDE BY SIDE</Text>
+          {titleNode}
+          <Squiggle
+            width={bothSelected ? 160 : 110}
+            color={colors.coral}
+            style={{ marginTop: 6 }}
+          />
         </View>
 
-        {/* Empty state */}
+        {/* ════════════════════════════════════════════════════════════════
+            LANDING STATE — no countries selected
+        ════════════════════════════════════════════════════════════════ */}
         {!bothSelected && (
-          <View style={[styles.emptyCard, { backgroundColor: colors.info, borderColor: 'transparent' }]}>
-            <ArrowLeftRight size={36} color="rgba(255,255,255,0.40)" style={{ marginBottom: Spacing.md }} />
-            <Text style={[styles.emptyText, { color: 'rgba(255,255,255,0.80)' }]}>
-              Select two countries above to get an AI-powered comparison
-            </Text>
-          </View>
-        )}
+          <>
+            {/* VsPickerCard */}
+            <VsPickerCard
+              onPickFirst={() => setPickerTarget('a')}
+              onPickSecond={() => setPickerTarget('b')}
+              firstLabel={selectedA?.name}
+              secondLabel={selectedB?.name}
+            />
 
-        {/* Loading state */}
-        {bothSelected && loading && <LoadingState colors={colors} />}
-
-        {/* Error state */}
-        {bothSelected && error && (
-          <TouchableOpacity
-            style={[styles.errorCard, { backgroundColor: colors.card, borderColor: colors.danger }]}
-            onPress={retry}
-            activeOpacity={0.7}
-          >
-            <RefreshCw size={20} color={colors.danger} style={{ marginBottom: Spacing.sm }} />
-            <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Comparison results */}
-        {bothSelected && aiData && (
-          <View style={styles.resultsContainer}>
-            {/* Score Bars */}
-            <View style={[styles.card, { backgroundColor: colors.secondary, borderColor: 'transparent' }]}>
-              {/* Score header */}
-              <View style={[styles.scoreHeader, { borderBottomColor: 'rgba(255,255,255,0.20)' }]}>
-                <Text style={[styles.scoreHeaderName, { color: '#FFFFFF' }]} numberOfLines={1}>
-                  {selectedA!.name}
+            {/* Popular face-offs */}
+            <View style={styles.faceoffSection}>
+              <View style={styles.faceoffHeader}>
+                <Text style={[Type.kicker, { color: colors.inkMute }]}>
+                  Popular face-offs
                 </Text>
-                <Text style={[styles.scoreHeaderLabel, { color: 'rgba(255,255,255,0.70)' }]}>SCORE</Text>
-                <Text style={[styles.scoreHeaderName, { color: '#FFFFFF', textAlign: 'right' }]} numberOfLines={1}>
-                  {selectedB!.name}
-                </Text>
+                <Squiggle width={80} color={colors.coral} style={{ marginTop: 3 }} />
               </View>
-
-              {SCORE_CATEGORIES.map((cat) => (
-                <ScoreBar
-                  key={cat.key}
-                  label={cat.label}
-                  emoji={cat.emoji}
-                  scoreA={aiData.countryA.scores[cat.key]}
-                  scoreB={aiData.countryB.scores[cat.key]}
-                  colors={colors}
-                />
-              ))}
-            </View>
-
-            {/* Hero Cards - Country A */}
-            <View style={[styles.card, { backgroundColor: colors.primary, borderColor: 'transparent' }]}>
-              <View style={styles.heroHeader}>
-                <Text style={styles.heroFlag}>{isoToFlag(selectedA!.code)}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.heroName, { color: '#FFFFFF' }]}>{selectedA!.name}</Text>
-                  <Text style={[styles.heroPitch, { color: 'rgba(255,255,255,0.70)' }]}>{aiData.countryA.pitch}</Text>
-                </View>
-              </View>
-              <View style={[styles.heroBestFor, { backgroundColor: 'rgba(255,255,255,0.20)', borderColor: 'rgba(255,255,255,0.15)' }]}>
-                <Text style={[styles.heroBestForText, { color: '#FFFFFF' }]}>Best for: {aiData.countryA.bestFor}</Text>
-              </View>
-              {aiData.countryA.highlights.map((h, i) => (
-                <View key={i} style={styles.highlightRow}>
-                  <View style={[styles.highlightDot, { backgroundColor: 'rgba(255,255,255,0.80)' }]} />
-                  <Text style={[styles.highlightText, { color: 'rgba(255,255,255,0.80)' }]}>{h}</Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Hero Cards - Country B */}
-            <View style={[styles.card, { backgroundColor: colors.accent, borderColor: 'transparent' }]}>
-              <View style={styles.heroHeader}>
-                <Text style={styles.heroFlag}>{isoToFlag(selectedB!.code)}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.heroName, { color: '#FFFFFF' }]}>{selectedB!.name}</Text>
-                  <Text style={[styles.heroPitch, { color: 'rgba(255,255,255,0.70)' }]}>{aiData.countryB.pitch}</Text>
-                </View>
-              </View>
-              <View style={[styles.heroBestFor, { backgroundColor: 'rgba(255,255,255,0.20)', borderColor: 'rgba(255,255,255,0.15)' }]}>
-                <Text style={[styles.heroBestForText, { color: '#FFFFFF' }]}>Best for: {aiData.countryB.bestFor}</Text>
-              </View>
-              {aiData.countryB.highlights.map((h, i) => (
-                <View key={i} style={styles.highlightRow}>
-                  <View style={[styles.highlightDot, { backgroundColor: 'rgba(255,255,255,0.80)' }]} />
-                  <Text style={[styles.highlightText, { color: 'rgba(255,255,255,0.80)' }]}>{h}</Text>
-                </View>
-              ))}
-            </View>
-
-            {/* The Verdict */}
-            <View style={[styles.verdictCard, { backgroundColor: colors.primary, borderColor: 'transparent' }]}>
-              <View style={[styles.verdictAccent, { backgroundColor: 'rgba(255,255,255,0.30)' }]} />
-              <View style={styles.verdictHeader}>
-                <Sparkles size={16} color={'#FFFFFF'} />
-                <Text style={[styles.verdictTitle, { color: '#FFFFFF' }]}>The Verdict</Text>
-              </View>
-              <Text style={[styles.verdictBody, { color: '#FFFFFF' }]}>{aiData.verdict}</Text>
-              {aiData.valueComparison ? (
-                <View style={[styles.verdictDivider, { borderTopColor: 'rgba(255,255,255,0.20)' }]}>
-                  <Text style={[styles.verdictValue, { color: 'rgba(255,255,255,0.70)' }]}>
-                    {aiData.valueComparison}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Practical Details (collapsible) */}
-            {metaA && metaB && travelA && travelB && (
-              <View style={[styles.card, { backgroundColor: colors.warning, borderColor: 'transparent' }]}>
-                <TouchableOpacity
-                  style={styles.sectionToggle}
-                  onPress={() => toggleSection('practical')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.sectionToggleText, { color: 'rgba(255,255,255,0.70)' }]}>
-                    Practical Details
-                  </Text>
-                  <ChevronDown
-                    size={16}
-                    color={'rgba(255,255,255,0.70)'}
-                    style={{
-                      transform: [{ rotate: expandedSections.has('practical') ? '180deg' : '0deg' }],
+              <View
+                style={[
+                  styles.faceoffCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.line,
+                  },
+                ]}
+              >
+                {POPULAR_FACEOFFS.map((fo, i) => (
+                  <FaceoffRow
+                    key={`${fo.codeA}-${fo.codeB}`}
+                    codeA={fo.codeA}
+                    nameA={fo.nameA}
+                    codeB={fo.codeB}
+                    nameB={fo.nameB}
+                    hasDivider={i > 0}
+                    onOpen={() => {
+                      setCountryA(fo.codeA);
+                      setCountryB(fo.codeB);
                     }}
                   />
+                ))}
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════
+            RESULTS STATE — both countries selected
+        ════════════════════════════════════════════════════════════════ */}
+        {bothSelected && (
+          <>
+            {/* ── Country cards row with swap button ──────────────────── */}
+            <View style={styles.cardsRowWrapper}>
+              <View style={styles.cardsRow}>
+                {/* Card A */}
+                <TouchableOpacity
+                  style={{ flex: 1 }}
+                  onPress={() => setPickerTarget('a')}
+                  activeOpacity={0.85}
+                >
+                  <CompareCountryCardV2
+                    countryName={selectedA!.name}
+                    countryCode={selectedA!.code}
+                    visaCategory={toCat(resolvedA!.category)}
+                    flightHours={buildFlightHours(selectedA!.code)}
+                    dailyBudget={buildBudget(selectedA!.code)}
+                    bestTime={buildBestTime(selectedA!.code)}
+                    isWinner={overallWinner === 'a'}
+                  />
                 </TouchableOpacity>
-                {expandedSections.has('practical') && (
-                  <View style={styles.detailsGrid}>
-                    {[
-                      { label: 'Capital', a: metaA.capital, b: metaB.capital },
-                      { label: 'Currency', a: `${metaA.currencyCode}`, b: `${metaB.currencyCode}` },
-                      { label: 'Language', a: metaA.language, b: metaB.language },
-                      { label: 'Timezone', a: metaA.timezone, b: metaB.timezone },
-                      { label: 'Region', a: metaA.region, b: metaB.region },
-                      { label: 'Budget', a: travelA.dailyBudget, b: travelB.dailyBudget },
-                      { label: 'Best Time', a: travelA.bestTimeNote, b: travelB.bestTimeNote },
-                    ].map((row, i) => (
-                      <View key={i} style={[styles.detailRow, i > 0 && { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.20)' }]}>
-                        <Text style={[styles.detailVal, { color: 'rgba(255,255,255,0.80)', textAlign: 'right' }]} numberOfLines={2}>
-                          {row.a}
-                        </Text>
-                        <View style={styles.detailLabelBox}>
-                          <Text style={[styles.detailLabel, { color: 'rgba(255,255,255,0.70)' }]}>{row.label}</Text>
-                        </View>
-                        <Text style={[styles.detailVal, { color: 'rgba(255,255,255,0.80)' }]} numberOfLines={2}>
-                          {row.b}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+
+                {/* Swap button — centered absolutely between cards */}
+                <View style={styles.swapBtnContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.swapBtn,
+                      { backgroundColor: colors.ink },
+                    ]}
+                    onPress={swap}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Swap countries"
+                  >
+                    <ArrowLeftRight size={13} color="#FFFFFF" strokeWidth={2} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Card B */}
+                <TouchableOpacity
+                  style={{ flex: 1 }}
+                  onPress={() => setPickerTarget('b')}
+                  activeOpacity={0.85}
+                >
+                  <CompareCountryCardV2
+                    countryName={selectedB!.name}
+                    countryCode={selectedB!.code}
+                    visaCategory={toCat(resolvedB!.category)}
+                    flightHours={buildFlightHours(selectedB!.code)}
+                    dailyBudget={buildBudget(selectedB!.code)}
+                    bestTime={buildBestTime(selectedB!.code)}
+                    isWinner={overallWinner === 'b'}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* ── Loading ──────────────────────────────────────────────── */}
+            {loading && (
+              <View style={styles.section}>
+                <LoadingState />
               </View>
             )}
-          </View>
+
+            {/* ── Error ─────────────────────────────────────────────────── */}
+            {error && !loading && (
+              <TouchableOpacity
+                style={[
+                  styles.card,
+                  styles.section,
+                  { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center' },
+                ]}
+                onPress={retry}
+                activeOpacity={0.7}
+              >
+                <RefreshCw size={18} color={colors.inkMute} />
+                <Text style={[Type.body13, { color: colors.inkMute, marginTop: 8, textAlign: 'center' }]}>
+                  {error}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* ── Full comparison results ────────────────────────────── */}
+            {aiData && !loading && (
+              <>
+                {/* ─ Category Scores Card ──────────────────────────────── */}
+                <View style={[styles.section, { paddingHorizontal: 14 }]}>
+                  <CategoryScoresCard
+                    scoresA={SCORE_CATEGORIES.map((c) => aiData.countryA.scores[c.key] ?? 5)}
+                    scoresB={SCORE_CATEGORIES.map((c) => aiData.countryB.scores[c.key] ?? 5)}
+                    nameA={selectedA!.name}
+                    nameB={selectedB!.name}
+                    categories={SCORE_CATEGORIES.map((c) => c.label)}
+                  />
+                </View>
+
+                {/* ─ Verdict Card — dark ink bg ────────────────────────── */}
+                <View style={[styles.section, { paddingHorizontal: 14 }]}>
+                  <VerdictCard text={aiData.verdict} />
+                </View>
+
+                {/* ─ Highlights (2-column) ─────────────────────────────── */}
+                <View style={styles.section}>
+                  <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                    HIGHLIGHTS
+                  </SectionKicker>
+                  <View style={styles.highlightsRow}>
+                    {/* Country A highlights */}
+                    <View style={[styles.highlightCol, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <Flag code={alpha3ToAlpha2(selectedA!.code)} size={16} />
+                        <Text style={[Type.title14, { color: colors.ink }]} numberOfLines={1}>
+                          {selectedA!.name}
+                        </Text>
+                      </View>
+                      {aiData.countryA.highlights.map((h, i) => (
+                        <View key={i} style={styles.bulletRow}>
+                          <View style={[styles.bullet, { backgroundColor: colors.ink }]} />
+                          <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 18, flex: 1 }]}>
+                            {h}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Country B highlights */}
+                    <View style={[styles.highlightCol, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <Flag code={alpha3ToAlpha2(selectedB!.code)} size={16} />
+                        <Text style={[Type.title14, { color: colors.ink }]} numberOfLines={1}>
+                          {selectedB!.name}
+                        </Text>
+                      </View>
+                      {aiData.countryB.highlights.map((h, i) => (
+                        <View key={i} style={styles.bulletRow}>
+                          <View style={[styles.bullet, { backgroundColor: colors.ink }]} />
+                          <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 18, flex: 1 }]}>
+                            {h}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                {/* ─ Best For ──────────────────────────────────────────── */}
+                <View style={styles.section}>
+                  <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                    BEST FOR
+                  </SectionKicker>
+                  <View style={styles.highlightsRow}>
+                    <View style={[styles.bestForCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <Text style={[Type.kicker, { color: colors.inkMute, marginBottom: 6 }]}>
+                        {selectedA!.name}
+                      </Text>
+                      <Text style={[Type.body14, { color: colors.ink, lineHeight: 20 }]}>
+                        {aiData.countryA.bestFor}
+                      </Text>
+                    </View>
+                    <View style={[styles.bestForCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <Text style={[Type.kicker, { color: colors.inkMute, marginBottom: 6 }]}>
+                        {selectedB!.name}
+                      </Text>
+                      <Text style={[Type.body14, { color: colors.ink, lineHeight: 20 }]}>
+                        {aiData.countryB.bestFor}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* ─ Weather Verdict ───────────────────────────────────── */}
+                {(aiData.countryA.weatherVerdict || aiData.countryB.weatherVerdict) && (
+                  <View style={styles.section}>
+                    <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                      WEATHER
+                    </SectionKicker>
+                    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      {aiData.countryA.weatherVerdict ? (
+                        <View style={aiData.countryB.weatherVerdict ? { marginBottom: 12 } : {}}>
+                          <Text style={[Type.meta10_5, { color: colors.inkMute, marginBottom: 4 }]}>
+                            {selectedA!.name}
+                          </Text>
+                          <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 19 }]}>
+                            {aiData.countryA.weatherVerdict}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {aiData.countryA.weatherVerdict && aiData.countryB.weatherVerdict && (
+                        <View style={[styles.sectionDivider, { backgroundColor: colors.line }]} />
+                      )}
+                      {aiData.countryB.weatherVerdict ? (
+                        <View>
+                          <Text style={[Type.meta10_5, { color: colors.inkMute, marginBottom: 4 }]}>
+                            {selectedB!.name}
+                          </Text>
+                          <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 19 }]}>
+                            {aiData.countryB.weatherVerdict}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                )}
+
+                {/* ─ Value Comparison ──────────────────────────────────── */}
+                {aiData.valueComparison && (
+                  <View style={styles.section}>
+                    <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                      VALUE
+                    </SectionKicker>
+                    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <Text style={[Type.body14, { color: colors.ink, lineHeight: 22 }]}>
+                        {aiData.valueComparison}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* ─ Winner by Category ────────────────────────────────── */}
+                {winners.length > 0 && (
+                  <View style={[styles.section, { paddingHorizontal: 14 }]}>
+                    <WinnerList winners={winners} />
+                  </View>
+                )}
+
+                {/* ─ Practical Details ─────────────────────────────────── */}
+                {metaA && metaB && travelA && travelB && (
+                  <View style={styles.section}>
+                    <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                      PRACTICAL DETAILS
+                    </SectionKicker>
+                    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      {[
+                        { label: 'Capital', a: metaA.capital, b: metaB.capital },
+                        { label: 'Currency', a: metaA.currencyCode, b: metaB.currencyCode },
+                        { label: 'Language', a: metaA.language, b: metaB.language },
+                        { label: 'Timezone', a: metaA.timezone, b: metaB.timezone },
+                        { label: 'Budget', a: travelA.dailyBudget, b: travelB.dailyBudget },
+                        { label: 'Best Time', a: travelA.bestTimeNote, b: travelB.bestTimeNote },
+                      ].map((row, i) => (
+                        <View
+                          key={row.label}
+                          style={[
+                            styles.detailRow,
+                            i > 0 && { borderTopWidth: 1, borderTopColor: colors.line },
+                          ]}
+                        >
+                          <Text
+                            style={[Type.body13, { color: colors.inkSoft, flex: 1, textAlign: 'right' }]}
+                            numberOfLines={2}
+                          >
+                            {row.a}
+                          </Text>
+                          <View style={styles.detailLabelBox}>
+                            <Text style={[Type.kicker, { color: colors.inkMute, textAlign: 'center' }]}>
+                              {row.label}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[Type.body13, { color: colors.inkSoft, flex: 1 }]}
+                            numberOfLines={2}
+                          >
+                            {row.b}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* ─ Plan-a-trip CTAs ───────────────────────────────────── */}
+                {selectedA && selectedB && (
+                  <View style={styles.planRow}>
+                    <Pressable
+                      onPress={() => {
+                        setPlanTarget('a');
+                        plannerRef.current?.present();
+                      }}
+                      style={({ pressed }) => [
+                        styles.planBtn,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.line,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
+                        PLAN
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: FontFamily.displayItalic,
+                          fontStyle: 'italic',
+                          fontSize: 15,
+                          fontWeight: '500',
+                          color: colors.ink,
+                          marginTop: 2,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {selectedA.name}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        setPlanTarget('b');
+                        plannerRef.current?.present();
+                      }}
+                      style={({ pressed }) => [
+                        styles.planBtn,
+                        {
+                          backgroundColor: colors.coral,
+                          borderColor: colors.coral,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[Type.kickerSm, { color: 'rgba(255,255,255,0.85)', fontSize: 9 }]}>
+                        PLAN
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: FontFamily.displayItalic,
+                          fontStyle: 'italic',
+                          fontSize: 15,
+                          fontWeight: '500',
+                          color: '#FFFFFF',
+                          marginTop: 2,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {selectedB.name}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {/* ─ Bottom action bar: swap + refresh ─────────────────── */}
+                <View style={[styles.actionBar, { paddingBottom: 8 }]}>
+                  <CircleBtn size={44} onPress={swap} accessibilityLabel="Swap countries">
+                    <ArrowLeftRight size={18} color={colors.ink} />
+                  </CircleBtn>
+                  <CircleBtn
+                    size={44}
+                    onPress={retry}
+                    accessibilityLabel="Regenerate comparison"
+                  >
+                    <RefreshCw size={18} color={colors.ink} />
+                  </CircleBtn>
+                </View>
+              </>
+            )}
+          </>
         )}
       </ScrollView>
+
+      {/* ── Planner sheet — opens for whichever side was tapped ─── */}
+      {(() => {
+        const c = planTarget === 'a' ? selectedA : selectedB;
+        const m = planTarget === 'a' ? metaA : metaB;
+        const t = planTarget === 'a' ? travelA : travelB;
+        const r = planTarget === 'a' ? resolvedA : resolvedB;
+        if (!c || !r) return null;
+        return (
+          <TripPlannerSheet
+            ref={plannerRef}
+            country={c}
+            meta={m}
+            travel={t}
+            resolved={r}
+            heldVisas={heldVisasSet}
+            onTripCreated={(tripId) => router.push(`/trip/${tripId}` as never)}
+          />
+        );
+      })()}
     </View>
   );
 }
@@ -832,351 +1117,154 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingHorizontal: Spacing.lg,
-  },
-  heading: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize['3xl'],
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
-    marginBottom: Spacing.xl,
+    // horizontal padding applied per section
   },
 
-  // Selectors
-  selectorRow: {
+  // Header
+  header: {
+    paddingHorizontal: 22,
+    marginBottom: 24,
+  },
+
+  // Country cards wrapper (with overflow: visible for TOP PICK badge)
+  cardsRowWrapper: {
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    paddingTop: 14, // space for badge
+  },
+  cardsRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: Spacing.sm,
-    marginBottom: Spacing.xl,
+    alignItems: 'stretch',
+    gap: 10,
+    position: 'relative',
   },
-  selectorBtn: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: Spacing.md,
-    minHeight: 72,
-  },
-  selectorLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.5,
-    marginBottom: Spacing.xs + 2,
-  },
-  selectorSelected: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  selectorFlag: {
-    fontSize: 20,
-  },
-  selectorName: {
-    fontFamily: FontFamily.serifSemibold,
-    fontSize: FontSize.base,
-    flex: 1,
-  },
-  selectorPlaceholderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  selectorPlaceholder: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
+
+  // Swap button between cards
+  swapBtnContainer: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    marginLeft: -14,
+    marginTop: -14,
+    zIndex: 20,
   },
   swapBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.xs,
   },
 
-  // Empty state
-  emptyCard: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing['3xl'],
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
-    textAlign: 'center',
-    lineHeight: 20,
+  // Section wrapper
+  section: {
+    marginTop: 8,
+    marginBottom: 8,
   },
 
-  // Loading
-  loadingCard: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.xl,
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
-  },
-  skeletonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    width: '100%',
-  },
-  skeletonBar: {
-    height: 8,
-    borderRadius: 4,
-  },
-  skeletonDot: {
-    width: 30,
-    height: 10,
-    borderRadius: 5,
-  },
-
-  // Error
-  errorCard: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.xl,
-    alignItems: 'center',
-  },
-  errorText: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
-    textAlign: 'center',
-  },
-
-  // Results
-  resultsContainer: {
-    gap: Spacing.md,
-  },
+  // Generic card
   card: {
+    marginHorizontal: 14,
     borderRadius: 20,
     borderWidth: 1,
-    padding: Spacing.lg,
-    ...Shadows.card,
+    padding: 18,
+    ...Shadows.subtle,
   },
 
-  // Score bars
-  scoreHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: Spacing.sm,
-    marginBottom: Spacing.sm,
-    borderBottomWidth: 1,
+  // Popular face-offs section
+  faceoffSection: {
+    paddingHorizontal: 22,
   },
-  scoreHeaderName: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize.sm,
-    flex: 1,
+  faceoffHeader: {
+    marginBottom: 12,
   },
-  scoreHeaderLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.5,
-    textAlign: 'center',
-    width: 50,
-  },
-  scoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.xs + 2,
-  },
-  scoreBarSide: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 4,
-  },
-  scoreBarSideB: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  barTrack: {
-    height: 7,
-    borderRadius: 3.5,
-    overflow: 'hidden',
-  },
-  barFillRight: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 3.5,
-  },
-  barFillLeft: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 3.5,
-  },
-  scoreNum: {
-    fontFamily: FontFamily.condensedBold,
-    fontSize: FontSize.xs,
-    minWidth: 16,
-    textAlign: 'center',
-  },
-  scoreLabelBox: {
-    width: 60,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: 2,
-  },
-  scoreLabelEmoji: {
-    fontSize: 10,
-  },
-  scoreLabelText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 9,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-
-  // Hero cards
-  heroHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  heroFlag: {
-    fontSize: 28,
-    marginTop: 2,
-  },
-  heroName: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize.xl,
-    marginBottom: 2,
-  },
-  heroPitch: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
-    fontStyle: 'italic',
-    lineHeight: 18,
-  },
-  heroBestFor: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    marginBottom: Spacing.sm,
-  },
-  heroBestForText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    lineHeight: 16,
-  },
-  highlightRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-    marginBottom: Spacing.xs + 2,
-  },
-  highlightDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginTop: 6,
-  },
-  highlightText: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
-    lineHeight: 18,
-    flex: 1,
-  },
-
-  // Verdict
-  verdictCard: {
+  faceoffCard: {
     borderRadius: 20,
-    borderWidth: 1.5,
-    padding: Spacing.lg,
+    borderWidth: 1,
     overflow: 'hidden',
-    ...Shadows.card,
-  },
-  verdictAccent: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-  },
-  verdictHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  verdictTitle: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize.lg,
-  },
-  verdictBody: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
-    lineHeight: 22,
-    marginBottom: Spacing.xs,
-  },
-  verdictDivider: {
-    borderTopWidth: 1,
-    paddingTop: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  verdictValue: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
-    lineHeight: 20,
+    ...Shadows.subtle,
+    shadowColor: '#1F1A14',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
   },
 
-  // Practical Details
-  sectionToggle: {
+  // Highlights 2-column layout
+  highlightsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.xs,
+    gap: 8,
+    paddingHorizontal: 14,
   },
-  sectionToggleText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  highlightCol: {
+    flex: 1,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 14,
+    ...Shadows.subtle,
   },
-  detailsGrid: {
-    marginTop: Spacing.sm,
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 8,
   },
+  bullet: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginTop: 7,
+    opacity: 0.5,
+  },
+
+  // Best For cards
+  bestForCard: {
+    flex: 1,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 14,
+    ...Shadows.subtle,
+  },
+
+  // Section divider
+  sectionDivider: {
+    height: 1,
+    marginVertical: 12,
+  },
+
+  // Practical details
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
-  },
-  detailVal: {
-    flex: 1,
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.xs,
-    lineHeight: 16,
+    paddingVertical: 10,
   },
   detailLabelBox: {
-    width: 65,
+    width: 72,
     alignItems: 'center',
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: 4,
   },
-  detailLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-    textAlign: 'center',
+
+  // Plan CTAs
+  planRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 14,
+    marginTop: 8,
+  },
+  planBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+
+  // Action bar
+  actionBar: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 16,
+    marginBottom: 8,
   },
 
   // Modal
@@ -1185,8 +1273,8 @@ const styles = StyleSheet.create({
   },
   modalHandle: {
     alignItems: 'center',
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.xs,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
   handleBar: {
     width: 36,
@@ -1198,66 +1286,67 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  modalTitle: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize.xl,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
   },
   searchRow: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
     borderBottomWidth: 1,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: Radius.sm,
+    borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: Spacing.sm + 2,
-    gap: Spacing.sm,
+    paddingHorizontal: 10,
+    gap: 8,
     height: 40,
   },
   searchInput: {
     flex: 1,
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
     paddingVertical: 0,
   },
   pickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    gap: Spacing.sm,
+    gap: 8,
   },
   pickerFlag: {
     fontSize: 22,
   },
   pickerName: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 15,
     flex: 1,
   },
   pickerBadge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 9999,
   },
   pickerBadgeText: {
-    fontFamily: FontFamily.condensedSemibold,
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
   emptySearch: {
-    padding: Spacing.xl,
+    padding: 28,
     alignItems: 'center',
   },
-  emptySearchText: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.sm,
+
+  // Skeleton cat label
+  skeletonCatLabel: {
+    fontFamily: 'JetBrainsMono_500Medium',
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: 9 * 0.14,
+    fontWeight: '600',
   },
 });

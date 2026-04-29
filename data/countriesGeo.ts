@@ -243,6 +243,11 @@ function splitAntimeridianCrossings(
   return { ...fc, features };
 }
 
+// The full pipeline (topojson → rewind → antimeridian split → rewind) is
+// 100–300 ms of synchronous work on a real device. Memoize the result so
+// the prewarm pass on app boot and the real `VisaMap` mount share it.
+let _cachedGeoJSON: FeatureCollection<Polygon | MultiPolygon> | null = null;
+
 /**
  * Returns a GeoJSON FeatureCollection of world countries
  * with ISO alpha-3 codes as the `iso_a3` property on each feature.
@@ -250,8 +255,13 @@ function splitAntimeridianCrossings(
  * The geometry is post-processed to:
  * 1. Fix polygon winding order for MapLibre GL (RFC 7946 CCW outer rings)
  * 2. Split polygons at the antimeridian (Russia, Fiji, Antarctica)
+ *
+ * Result is cached at module scope — first call computes, subsequent calls
+ * return the cached FeatureCollection.
  */
 export function getCountriesGeoJSON(): FeatureCollection<Polygon | MultiPolygon> {
+  if (_cachedGeoJSON) return _cachedGeoJSON;
+
   const countriesObject = worldTopology.objects.countries;
   if (!countriesObject) throw new Error('No countries object in topology');
 
@@ -278,5 +288,6 @@ export function getCountriesGeoJSON(): FeatureCollection<Polygon | MultiPolygon>
     };
   }
 
+  _cachedGeoJSON = split;
   return split;
 }

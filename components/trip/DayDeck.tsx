@@ -1,21 +1,22 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Dimensions, Text } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, Dimensions, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   runOnJS,
-  interpolate,
-  Extrapolation,
   type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import DayDeckCard, { type DayImage } from './DayDeckCard';
-import DayDeckDots from './DayDeckDots';
+import { DAY_DECK_PHYSICS } from './DayDeck.constants';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing } from '@/constants/theme';
+import { Type } from '@/constants/typography';
+import { FontFamily } from '@/constants/theme';
+import { PillButton } from '@/components/ui/PillButton';
+import { Squiggle } from '@/components/ui/Squiggle';
 
 export interface DayDeckDay {
   day: number;
@@ -37,51 +38,18 @@ interface DayDeckProps {
   tripHeroImage?: DayImage;
   tripStartDate?: string;
   destination?: string;
+  /** Tap handler for the inline edit pencil on each day card. The active
+   *  index is the JS-side activeIdx, so this always edits the centre day. */
+  onEditDay?: (index: number) => void;
 }
 
 // ── Sizing ────────────────────────────────────────────────────────────
-// Card size is unchanged — the visual hierarchy that works. Only the
-// commit mechanics change in this pass.
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.77), 340);
 const CARD_HEIGHT = Math.round(CARD_WIDTH * 1.3);
-const CARD_STRIDE = Math.round(CARD_WIDTH * 0.11);
-const STACK_DROP = 5;
-
-// Lower threshold — commits trigger at 40% of a stride instead of 140%.
-// Combined with rubber-band clamping, this means a short deliberate swipe
-// commits cleanly while an aimless wiggle snaps back.
-const SWIPE_THRESHOLD = CARD_STRIDE * 0.4;
-const VELOCITY_THRESHOLD = 500;
-
-// Commit spring — the NATURAL settle animation that runs after the atomic
-// activeIndex update. No overshoot, no bounce — just a premium decelerating
-// glide to the new rest position. This is what Revolut/Wallet feel like.
-const COMMIT_SPRING = {
-  damping: 26,
-  stiffness: 180,
-  mass: 0.9,
-  overshootClamping: false,
-  restDisplacementThreshold: 0.1,
-  restSpeedThreshold: 1,
-} as const;
-
-// Snap-back spring for incomplete drags (lighter, a touch of bounce).
-const SNAPBACK_SPRING = {
-  damping: 20,
-  stiffness: 200,
-  mass: 0.9,
-} as const;
-
-// Maximum drag distance (absolute). Users can physically pull past this,
-// but each pixel beyond gets exponentially damped, so the cards feel like
-// they're on an elastic cord. Prevents the "dragged 300px then card slides
-// backwards to STRIDE" problem the previous version had.
-const DRAG_CLAMP = CARD_STRIDE * 1.4;
 
 function formatDayDate(startDate: string | undefined, dayOffset: number): string | undefined {
   if (!startDate) return undefined;
-  // startDate is YYYY-MM-DD — append T00:00:00 so Date() parses it as local time.
   const d = new Date(`${startDate}T00:00:00`);
   if (Number.isNaN(d.getTime())) return undefined;
   d.setDate(d.getDate() + dayOffset);
@@ -92,107 +60,113 @@ function pickPlace(day: DayDeckDay): string | undefined {
   return day.morningPlace ?? day.afternoonPlace ?? day.eveningPlace;
 }
 
-// Rubber-band resistance beyond the soft clamp. Linearly applied for 40px
-// past the clamp, then asymptotic — users can physically pull further but
-// each additional pixel does less and less.
-function rubberBand(raw: number, clamp: number): number {
-  'worklet';
-  if (Math.abs(raw) <= clamp) return raw;
-  const excess = Math.abs(raw) - clamp;
-  const damped = (excess * 40) / (excess + 40);
-  return Math.sign(raw) * (clamp + damped);
-}
-
 // ── DeckCardItem ──────────────────────────────────────────────────────
-// One per day. Stable React key = dayIdx, never remounts. Every visual
-// change during a swipe happens inside the worklet with no JS round-trip.
+// Renders one card. Only the center card (offset === 0) has a live pan gesture.
+// Side cards use spec physics: translateX = offset*50, scale = 1-|o|*0.07,
+// opacity = 1-|o|*0.3. The center card also applies drag-based translateX and rotation.
 interface DeckCardItemProps {
   dayIdx: number;
-  numDays: number;
   day: DayDeckDay;
   image: DayImage;
   date?: string;
   place?: string;
-  activeIndex: SharedValue<number>;
+  activeIdxJS: number; // JS-side active index, used to compute integer offset
   dragX: SharedValue<number>;
+  onCommit: (newIdx: number) => void;
+  onTap: () => void;
+  numDays: number;
 }
 
 function DeckCardItem({
   dayIdx,
-  numDays,
   day,
   image,
   date,
   place,
-  activeIndex,
+  activeIdxJS,
   dragX,
+  onCommit,
+  onTap,
+  numDays,
 }: DeckCardItemProps) {
+  // Integer offset from center (computed on JS side for render decisions)
+  const offset = dayIdx - activeIdxJS;
+  const isCenter = offset === 0;
+  const absOffset = Math.abs(offset);
+
+  const fireHaptic = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
+
+  // Animated style using spec-exact formulas
   const animatedStyle = useAnimatedStyle(() => {
-    // Wrap-aware signed distance from the active card.
-    let slot = dayIdx - activeIndex.value;
-    const half = numDays / 2;
-    if (slot > half) slot -= numDays;
-    if (slot <= -half) slot += numDays;
-
-    // Visual offset from center, continuous during drag and animations.
-    // Critically: because the commit does an atomic `activeIndex += dir,
-    // dragX += dir*STRIDE` swap, visualOffset stays continuous across the
-    // commit — no jumps, no pops.
-    const visualOffset = slot + dragX.value / CARD_STRIDE;
-    const abs = Math.abs(visualOffset);
-
-    // Anything past slot ±2.5 is invisible so wrap-around is seamless.
-    if (abs > 2.5) {
-      return {
-        opacity: 0,
-        transform: [
-          { translateX: 0 },
-          { translateY: 0 },
-          { scale: 0.7 },
-          { rotateZ: '0deg' },
-        ],
-        zIndex: 0,
-      };
-    }
-
-    const translateX = visualOffset * CARD_STRIDE;
-    const translateY = abs * STACK_DROP;
-    const scale = interpolate(abs, [0, 1, 2], [1, 0.86, 0.74], Extrapolation.CLAMP);
-    const rotate = interpolate(
-      visualOffset,
-      [-2, -1, 0, 1, 2],
-      [-5, -3, 0, 3, 5],
-      Extrapolation.CLAMP,
-    );
-    const opacity = interpolate(abs, [0, 1, 2], [1, 0.68, 0.2], Extrapolation.CLAMP);
-    const zIndex = Math.round(100 - abs * 10);
+    const o = offset; // integer, stable — this is fine since DeckCardItem remounts per change
+    const translateX = o * DAY_DECK_PHYSICS.offsetTranslate + (isCenter ? dragX.value : 0);
+    const scale = 1 - Math.abs(o) * DAY_DECK_PHYSICS.scalePerOffset;
+    const opacity = 1 - Math.abs(o) * DAY_DECK_PHYSICS.opacityPerOffset;
+    const rotation = isCenter ? dragX.value * DAY_DECK_PHYSICS.rotationPerDragPx : 0;
+    const zIndex = 100 - absOffset;
 
     return {
       transform: [
         { translateX },
-        { translateY },
         { scale },
-        { rotateZ: `${rotate}deg` },
+        { rotateZ: `${rotation}deg` },
       ],
       opacity,
       zIndex,
     };
   });
 
+  // Pan gesture — only active for the center card
+  const pan = Gesture.Pan()
+    .enabled(isCenter)
+    .activeOffsetX([-12, 12])
+    .failOffsetY([-20, 20])
+    .onUpdate((e) => {
+      dragX.value = e.translationX;
+    })
+    .onEnd((e) => {
+      if (Math.abs(e.translationX) > DAY_DECK_PHYSICS.commitThresholdPx && numDays > 1) {
+        // drag LEFT = next day (idx decreases to show higher day number)
+        // drag RIGHT = previous day
+        const dir = Math.sign(e.translationX); // +1 = right (prev), -1 = left (next)
+        const raw = activeIdxJS - dir; // per spec: drag left → next = idx + 1; drag right → prev = idx - 1
+        const newIdx = Math.max(0, Math.min(numDays - 1, raw));
+        dragX.value = withSpring(0, DAY_DECK_PHYSICS.springConfig);
+        runOnJS(onCommit)(newIdx);
+        runOnJS(fireHaptic)();
+      } else {
+        dragX.value = withSpring(0, DAY_DECK_PHYSICS.springConfig);
+      }
+    });
+
+  // Tap gesture — only active for the center card. Opens the day detail.
+  // Composed with pan so dragging still works; the tap only fires on a clean tap.
+  const tap = Gesture.Tap()
+    .enabled(isCenter)
+    .maxDuration(250)
+    .maxDistance(10)
+    .onEnd((_e, success) => {
+      if (success) runOnJS(onTap)();
+    });
+
+  const gesture = Gesture.Exclusive(pan, tap);
+
   return (
-    <Animated.View style={[styles.cardSlot, animatedStyle]}>
-      <DayDeckCard
-        dayNumber={day.day}
-        title={day.title}
-        place={place}
-        date={date}
-        image={image}
-      />
-    </Animated.View>
+    <GestureDetector gesture={gesture}>
+      <Animated.View style={[styles.cardSlot, animatedStyle]}>
+        <DayDeckCard
+          dayNumber={day.day}
+          title={day.title}
+          place={place}
+          date={date}
+          image={image}
+        />
+      </Animated.View>
+    </GestureDetector>
   );
 }
-
-const MemoDeckCardItem = React.memo(DeckCardItem);
 
 // ── DayDeck ───────────────────────────────────────────────────────────
 function DayDeck({
@@ -204,115 +178,113 @@ function DayDeck({
   destination,
 }: DayDeckProps) {
   const { colors } = useTheme();
-
-  // activeIndex lives in TWO places: a shared value for the worklet (atomic
-  // UI-thread updates, no race) and React state for children that re-render
-  // (dots, counter). The worklet is the source of truth; setState is an
-  // after-the-fact echo for JS-visible children.
-  const [activeIndexJS, setActiveIndexJS] = useState(0);
-  const activeIndex = useSharedValue(0);
+  const [activeIdx, setActiveIdx] = useState(0);
   const dragX = useSharedValue(0);
 
   const numDays = days.length;
 
-  const fireHaptic = useCallback(() => {
-    Haptics.selectionAsync().catch(() => {});
+  const handleCommit = useCallback((newIdx: number) => {
+    setActiveIdx(newIdx);
   }, []);
 
   const openDay = useCallback(() => {
-    router.push(`/trip/${tripId}/day/${activeIndexJS}`);
-  }, [tripId, activeIndexJS]);
-
-  const composedGesture = useMemo(() => {
-    const pan = Gesture.Pan()
-      .activeOffsetX([-14, 14])
-      .failOffsetY([-20, 20])
-      .onUpdate((e) => {
-        // Apply rubber-band resistance beyond the soft clamp. This is why
-        // the deck feels physical — you CAN drag past the commit point,
-        // but each pixel past gets exponentially damped like an elastic.
-        dragX.value = rubberBand(e.translationX, DRAG_CLAMP);
-      })
-      .onEnd((e) => {
-        const past = Math.abs(e.translationX) > SWIPE_THRESHOLD;
-        const fast = Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
-
-        if ((past || fast) && numDays > 1) {
-          // ── ATOMIC COMMIT ─────────────────────────────────────────
-          // Instead of animating dragX to ±STRIDE (which can move BACKWARDS
-          // if the user over-dragged), we do the commit as a single atomic
-          // swap: increment activeIndex AND decrement dragX by one stride
-          // in the commit direction. The math of visualOffset = slot +
-          // dragX/STRIDE cancels, so every card's visual position is
-          // EXACTLY identical before and after the swap. No pop.
-          //
-          // Then we spring dragX from its new (smaller) value to 0. The
-          // cards settle into their new rest positions by continuing the
-          // motion the user's finger already started. There is no moment
-          // where the cards move backwards against the drag direction —
-          // which is precisely what was making the old commit feel cheap.
-          const dir: 1 | -1 = e.translationX < 0 ? 1 : -1;
-          const newIdx = (activeIndex.value + dir + numDays) % numDays;
-          activeIndex.value = newIdx;
-          dragX.value = dragX.value + dir * CARD_STRIDE;
-          dragX.value = withSpring(0, COMMIT_SPRING);
-          runOnJS(setActiveIndexJS)(newIdx);
-          runOnJS(fireHaptic)();
-        } else {
-          // Incomplete — spring back to rest.
-          dragX.value = withSpring(0, SNAPBACK_SPRING);
-        }
-      });
-
-    const tap = Gesture.Tap()
-      .maxDistance(14)
-      .onEnd((_e, success) => {
-        if (success) runOnJS(openDay)();
-      });
-
-    return Gesture.Exclusive(pan, tap);
-  }, [numDays, fireHaptic, openDay, activeIndex, dragX]);
+    router.push(`/trip/${tripId}/day/${activeIdx}`);
+  }, [tripId, activeIdx]);
 
   if (numDays === 0) {
     return (
       <View style={styles.empty}>
-        <Text style={[styles.emptyText, { color: colors.textMuted }]}>No itinerary available</Text>
+        <Text style={[styles.emptyText, { color: colors.inkMute }]}>No itinerary available</Text>
       </View>
     );
   }
 
+  // Only render cards within ±visibleSideCards of the active index
+  const visibleRange = DAY_DECK_PHYSICS.visibleSideCards;
+  const visibleCards = days
+    .map((day, idx) => ({ day, idx }))
+    .filter(({ idx }) => Math.abs(idx - activeIdx) <= visibleRange);
+
   return (
     <View style={styles.container}>
-      <View style={styles.counter}>
-        <Text style={[styles.counterLabel, { color: colors.textMuted }]}>YOUR TRIP</Text>
-        <Text style={[styles.counterValue, { color: colors.foreground }]}>
-          {`${activeIndexJS + 1} / ${numDays}`}
+      {/* ── Editorial header ──────────────────────────────────────── */}
+      <View style={styles.header}>
+        <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
+          {numDays} {numDays === 1 ? 'DAY' : 'DAYS'}
         </Text>
+        <Text
+          style={{
+            fontFamily: FontFamily.display,
+            fontSize: 22,
+            fontWeight: '500',
+            letterSpacing: -22 * 0.018,
+            color: colors.ink,
+            marginTop: 2,
+            lineHeight: 24,
+          }}
+        >
+          Drag the{' '}
+          <Text
+            style={{
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+            }}
+          >
+            centre
+          </Text>
+          <Text style={{ color: colors.coral }}>.</Text>
+        </Text>
+        <Squiggle width={120} color={colors.coral} style={{ marginTop: 4 }} />
       </View>
 
-      <GestureDetector gesture={composedGesture}>
-        <View style={styles.deckArea}>
-          {days.map((day, dayIdx) => (
-            <MemoDeckCardItem
-              key={dayIdx}
-              dayIdx={dayIdx}
-              numDays={numDays}
-              day={day}
-              image={dayImages[dayIdx] ?? tripHeroImage ?? null}
-              place={pickPlace(day) ?? destination}
-              date={formatDayDate(tripStartDate, dayIdx)}
-              activeIndex={activeIndex}
-              dragX={dragX}
-            />
-          ))}
+      {/* ── Card Deck ─────────────────────────────────────────────── */}
+      <View style={styles.deckArea}>
+        {visibleCards.map(({ day, idx }) => (
+          <DeckCardItem
+            key={idx}
+            dayIdx={idx}
+            day={day}
+            image={dayImages[idx] ?? tripHeroImage ?? null}
+            place={pickPlace(day) ?? destination}
+            date={formatDayDate(tripStartDate, idx)}
+            activeIdxJS={activeIdx}
+            dragX={dragX}
+            onCommit={handleCommit}
+            onTap={openDay}
+            numDays={numDays}
+          />
+        ))}
+      </View>
+
+      {/* ── Progress dots — coral on active ───────────────────────── */}
+      {numDays > 1 && (
+        <View style={styles.dotsRow}>
+          {Array.from({ length: numDays }).map((_, i) => {
+            const isActive = i === activeIdx;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.dot,
+                  isActive
+                    ? [styles.dotActive, { backgroundColor: colors.coral }]
+                    : [styles.dotInactive, { backgroundColor: colors.lineMid }],
+                ]}
+              />
+            );
+          })}
         </View>
-      </GestureDetector>
+      )}
 
-      <DayDeckDots count={numDays} activeIndex={activeIndexJS} />
-
-      <Text style={[styles.hint, { color: colors.textMuted }]}>
-        swipe to browse days · tap to open
-      </Text>
+      {/* ── Bottom CTA ────────────────────────────────────────────── */}
+      <View style={styles.ctaRow}>
+        <PillButton
+          label={`Open Day ${activeIdx + 1}`}
+          onPress={openDay}
+          variant="primary"
+          fullWidth
+        />
+      </View>
     </View>
   );
 }
@@ -321,26 +293,14 @@ export default React.memo(DayDeck);
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    paddingTop: 14,
-    paddingBottom: 28,
+    alignItems: 'stretch',
+    paddingTop: 0,
+    paddingBottom: 30,
   },
-  counter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.xl,
-    marginBottom: 14,
-  },
-  counterLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.8,
-  },
-  counterValue: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.8,
+  header: {
+    paddingHorizontal: 22,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   deckArea: {
     width: SCREEN_WIDTH,
@@ -355,18 +315,41 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     left: (SCREEN_WIDTH - CARD_WIDTH) / 2,
   },
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 14,
+  },
+  dot: {
+    height: 6,
+    borderRadius: 3,
+  },
+  dotActive: {
+    width: 20,
+  },
+  dotInactive: {
+    width: 6,
+  },
   hint: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
+    marginTop: 14,
+    textAlign: 'center',
+  },
+  ctaRow: {
+    // Spec: absolute bottom 30, left/right 22. In a scroll-view context we
+    // keep it in flow so it doesn't overlap the hint — the parent scroll
+    // surface provides the bottom breathing room via container paddingBottom.
+    alignSelf: 'stretch',
+    marginHorizontal: 22,
     marginTop: 18,
-    letterSpacing: 0.4,
   },
   empty: {
     paddingVertical: 60,
     alignItems: 'center',
   },
   emptyText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
   },
 });

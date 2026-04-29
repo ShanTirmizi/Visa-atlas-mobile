@@ -8,11 +8,6 @@
     "scheme": "visaatlas",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F5D9C0"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tirmazilabs.visaatlas",
@@ -69,7 +64,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F5D9C0"
+        "backgroundColor": "#FBFAF7"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -84,6 +79,15 @@
         "expo-router",
         {
           "origin": "https://visa-atlas.vercel.app"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "resizeMode": "contain",
+          "backgroundColor": "#FBFAF7"
         }
       ],
       "expo-web-browser",

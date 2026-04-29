@@ -1,37 +1,24 @@
 import React from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { Radius, Shadows } from '@/constants/theme';
+import { CircleBtn } from './CircleBtn';
 
 interface BackButtonProps {
   onPress?: () => void;
+  size?: number;
+  solid?: boolean;
 }
 
-export default function BackButton({ onPress }: BackButtonProps) {
+export function BackButton({ onPress, size = 38, solid = true }: BackButtonProps) {
   const router = useRouter();
   const { colors } = useTheme();
-
+  const handle = onPress ?? (() => router.back());
   return (
-    <TouchableOpacity
-      onPress={onPress ?? (() => router.back())}
-      style={styles.container}
-      hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-    >
-      <ArrowLeft color={colors.foreground} size={20} />
-    </TouchableOpacity>
+    <CircleBtn size={size} solid={solid} onPress={handle} accessibilityLabel="Back">
+      <ChevronLeft size={18} color={colors.ink} strokeWidth={2} />
+    </CircleBtn>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.card,
-  },
-});
+export default BackButton;

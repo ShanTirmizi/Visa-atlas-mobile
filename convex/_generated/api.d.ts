@@ -15,6 +15,7 @@ import type * as auth from "../auth.js";
 import type * as bookings from "../bookings.js";
 import type * as emailAccounts from "../emailAccounts.js";
 import type * as emailSync from "../emailSync.js";
+import type * as emailVerification from "../emailVerification.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as tripCollaborators from "../tripCollaborators.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   bookings: typeof bookings;
   emailAccounts: typeof emailAccounts;
   emailSync: typeof emailSync;
+  emailVerification: typeof emailVerification;
   http: typeof http;
   "lib/auth": typeof lib_auth;
   tripCollaborators: typeof tripCollaborators;

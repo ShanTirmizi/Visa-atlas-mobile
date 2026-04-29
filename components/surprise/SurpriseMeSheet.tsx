@@ -15,7 +15,9 @@ import Animated, {
   useAnimatedStyle,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
+  interpolateColor,
   Easing,
   FadeIn,
   FadeOut,
@@ -205,6 +207,79 @@ function TypingDots({ color }: { color: string }) {
       <Animated.View style={[dotStyle, s2]} />
       <Animated.View style={[dotStyle, s3]} />
     </View>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// AnimatedSwitch — iOS-style toggle. Spring-driven thumb slide + cross-fading
+// track between line-mid (off) and teal (on). 24px thumb, 50px track.
+// ════════════════════════════════════════════════════════════════════════
+const SWITCH_W = 50;
+const SWITCH_H = 30;
+const THUMB_SIZE = 24;
+const THUMB_INSET = 3;
+
+function AnimatedSwitch({ value }: { value: boolean }) {
+  const { colors } = useTheme();
+  // 0 = off, 1 = on. Drives both the thumb position and the track color.
+  const progress = useSharedValue(value ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withSpring(value ? 1 : 0, {
+      damping: 18,
+      stiffness: 240,
+      mass: 0.7,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const trackStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      [colors.lineMid, colors.teal],
+    ),
+  }));
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateX:
+          progress.value * (SWITCH_W - THUMB_SIZE - THUMB_INSET * 2),
+      },
+    ],
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width: SWITCH_W,
+          height: SWITCH_H,
+          borderRadius: SWITCH_H / 2,
+          padding: THUMB_INSET,
+          justifyContent: 'center',
+        },
+        trackStyle,
+      ]}
+    >
+      <Animated.View
+        style={[
+          {
+            width: THUMB_SIZE,
+            height: THUMB_SIZE,
+            borderRadius: THUMB_SIZE / 2,
+            backgroundColor: '#FFFFFF',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.18,
+            shadowRadius: 4,
+            elevation: 3,
+          },
+          thumbStyle,
+        ]}
+      />
+    </Animated.View>
   );
 }
 
@@ -403,7 +478,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                 style={[
                   s.nextBtn,
                   {
-                    backgroundColor: selectedVibes.size >= 1 ? colors.primary : colors.surfaceLight,
+                    backgroundColor: selectedVibes.size >= 1 ? colors.primary : colors.surfaceMuted,
                     opacity: selectedVibes.size >= 1 ? 1 : 0.5,
                     ...(selectedVibes.size >= 1 ? Shadows.glow(colors.primary, 0.25) : {}),
                   },
@@ -557,32 +632,20 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                 </View>
               </View>
 
-              {/* Visa-required toggle */}
+              {/* Visa-required — animated iOS-style switch */}
               <View style={[s.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Text style={[s.sectionLabel, { color: colors.textMuted }]}>
                   VISA-REQUIRED
                 </Text>
                 <TouchableOpacity
                   onPress={() => setIncludeVisaReq((prev) => !prev)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.85}
                   style={s.toggleRow}
                 >
                   <Text style={[s.toggleLabel, { color: colors.foreground }]}>
                     Include visa-required countries
                   </Text>
-                  <View style={[
-                    s.togglePill,
-                    {
-                      backgroundColor: includeVisaReq ? colors.accent : colors.surfaceLight,
-                    },
-                  ]}>
-                    <Text style={[
-                      s.togglePillText,
-                      { color: includeVisaReq ? '#FFFFFF' : colors.textMuted },
-                    ]}>
-                      {includeVisaReq ? 'Yes' : 'No'}
-                    </Text>
-                  </View>
+                  <AnimatedSwitch value={includeVisaReq} />
                 </TouchableOpacity>
               </View>
 

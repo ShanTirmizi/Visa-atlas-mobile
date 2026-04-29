@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { View, ActivityIndicator, Share, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useQuery } from 'convex/react';
+import { useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import DayDetailScreen, { type DayDetailDay } from '@/components/trip/DayDetailScreen';
+import EditDaySheet, { type EditDaySheetRef } from '@/components/trip/EditDaySheet';
 import { useTheme } from '@/contexts/theme-context';
 
 type DayImage = { url: string; thumb?: string; credit?: string; creditUrl?: string } | null;
@@ -26,7 +27,11 @@ export default function DayDetailRoute() {
   const tripId = id as Id<'trips'>;
   const dayIndex = Number(idx ?? '0');
 
-  const trip = useQuery(api.trips.getTrip, tripId ? { id: tripId } : 'skip');
+  const { isAuthenticated } = useConvexAuth();
+  const trip = useQuery(
+    api.trips.getTrip,
+    isAuthenticated && tripId ? { id: tripId } : 'skip',
+  );
 
   const itinerary = useMemo<DayDetailDay[]>(
     () => safeParse<DayDetailDay[]>(trip?.itinerary, []),
@@ -57,6 +62,17 @@ export default function DayDetailRoute() {
     }).catch(() => {});
   }, [itinerary, dayIndex]);
 
+  const editSheetRef = useRef<EditDaySheetRef>(null);
+  const onEdit = useCallback(() => {
+    editSheetRef.current?.present();
+  }, []);
+
+  const onTweakWithAI = useCallback(() => {
+    // Pass the day index as a query param so the chat screen can scope the
+    // conversation to this specific day instead of the whole trip.
+    router.push(`/chat/${tripId}?day=${dayIndex}` as never);
+  }, [tripId, dayIndex]);
+
   if (!trip || itinerary.length === 0) {
     return (
       <View style={[styles.loading, { backgroundColor: colors.background }]}>
@@ -69,20 +85,30 @@ export default function DayDetailRoute() {
   const day = itinerary[clampedIndex];
 
   return (
-    <DayDetailScreen
-      day={day}
-      dayIndex={clampedIndex}
-      numDays={itinerary.length}
-      heroImage={dayImages[clampedIndex] ?? null}
-      morningImage={activityImages[clampedIndex * 3] ?? null}
-      afternoonImage={activityImages[clampedIndex * 3 + 1] ?? null}
-      eveningImage={activityImages[clampedIndex * 3 + 2] ?? null}
-      destination={trip.countryName}
-      tripStartDate={trip.startDate}
-      onBack={onBack}
-      onShare={onShare}
-      onNavigateDay={onNavigateDay}
-    />
+    <>
+      <DayDetailScreen
+        day={day}
+        dayIndex={clampedIndex}
+        numDays={itinerary.length}
+        heroImage={dayImages[clampedIndex] ?? null}
+        morningImage={activityImages[clampedIndex * 3] ?? null}
+        afternoonImage={activityImages[clampedIndex * 3 + 1] ?? null}
+        eveningImage={activityImages[clampedIndex * 3 + 2] ?? null}
+        destination={trip.countryName}
+        tripStartDate={trip.startDate}
+        onBack={onBack}
+        onShare={onShare}
+        onEdit={onEdit}
+        onTweakWithAI={onTweakWithAI}
+        onNavigateDay={onNavigateDay}
+      />
+      <EditDaySheet
+        ref={editSheetRef}
+        tripId={tripId}
+        dayIndex={clampedIndex}
+        itinerary={itinerary}
+      />
+    </>
   );
 }
 

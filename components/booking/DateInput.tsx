@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Modal, Pressable } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, View, Text, TouchableOpacity, StyleSheet, Platform, Modal, Pressable } from 'react-native';
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -46,7 +46,52 @@ export default function DateInput({
 }: DateInputProps) {
   const { colors } = useTheme();
   const [showPicker, setShowPicker] = useState(false);
+  const [pickerMounted, setPickerMounted] = useState(false);
   const [tempDate, setTempDate] = useState<Date>(parseValue(value));
+
+  // Two-layer animation so the backdrop fades in while the picker slides
+  // up — matching how AppBottomSheet (and the rest of the app's sheets)
+  // animate. A single `animationType="slide"` would slide both together,
+  // which feels off vs. the trip planner / booking sheets.
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = useRef(new Animated.Value(360)).current;
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    if (showPicker) {
+      setPickerMounted(true);
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: 0,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (pickerMounted) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: 360,
+          duration: 240,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) setPickerMounted(false);
+      });
+    }
+    // backdropOpacity / sheetTranslateY are stable refs; pickerMounted is
+    // managed inside this effect so it doesn't need to be a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPicker]);
 
   const handlePress = () => {
     setTempDate(parseValue(value));
@@ -111,33 +156,53 @@ export default function DateInput({
         />
       )}
 
-      {/* iOS: modal with spinner + Done button */}
+      {/* iOS: modal with spinner + Done button. We drive both layers with
+          Animated values: backdrop fades in, sheet slides up. */}
       {Platform.OS === 'ios' && (
         <Modal
-          visible={showPicker}
+          visible={pickerMounted}
           transparent
-          animationType="slide"
+          animationType="none"
+          onRequestClose={() => setShowPicker(false)}
         >
-          <Pressable style={styles.modalOverlay} onPress={() => setShowPicker(false)}>
-            <Pressable style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setShowPicker(false)}>
-                  <Text style={[styles.modalCancel, { color: colors.textMuted }]}>Cancel</Text>
-                </TouchableOpacity>
-                <Text style={[styles.modalTitle, { color: colors.foreground }]}>{label}</Text>
-                <TouchableOpacity onPress={handleIOSConfirm}>
-                  <Text style={[styles.modalDone, { color: accentColor }]}>Done</Text>
-                </TouchableOpacity>
+          <View style={StyleSheet.absoluteFill}>
+            {/* Fading backdrop */}
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: '#000', opacity: backdropOpacity.interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] }) },
+              ]}
+            >
+              <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowPicker(false)} />
+            </Animated.View>
+
+            {/* Sliding sheet */}
+            <Animated.View
+              style={[
+                styles.sheetWrap,
+                { transform: [{ translateY: sheetTranslateY }] },
+              ]}
+            >
+              <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity onPress={() => setShowPicker(false)}>
+                    <Text style={[styles.modalCancel, { color: colors.textMuted }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.modalTitle, { color: colors.foreground }]}>{label}</Text>
+                  <TouchableOpacity onPress={handleIOSConfirm}>
+                    <Text style={[styles.modalDone, { color: accentColor }]}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={tempDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={handleIOSChange}
+                  style={{ height: 200 }}
+                />
               </View>
-              <DateTimePicker
-                value={tempDate}
-                mode="date"
-                display="spinner"
-                onChange={handleIOSChange}
-                style={{ height: 200 }}
-              />
-            </Pressable>
-          </Pressable>
+            </Animated.View>
+          </View>
         </Modal>
       )}
     </View>
@@ -165,10 +230,11 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
   },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+  sheetWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   modalContent: {
     borderTopLeftRadius: 20,

@@ -8,19 +8,40 @@ import React, {
 } from 'react';
 import { Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { Spacing } from '@/constants/theme';
-import { type BookingType, getBookingColor } from '@/constants/bookings';
+import { type BookingType } from '@/constants/bookings';
 import { findMatchingTrip } from '@/utils/tripMatcher';
 import BookingTypePicker from './BookingTypePicker';
 import BookingForm, { type BookingFormData } from './BookingForm';
 
 // ── Public API ─────────────────────────────────────────────────────────
+export interface BookingForEdit {
+  id: string;
+  type: BookingType;
+  title: string;
+  startDate: string;
+  endDate?: string;
+  location?: string;
+  countryCode?: string;
+  confirmationNumber?: string;
+  cost?: number;
+  currency?: string;
+  notes?: string;
+  typeDetails?: Record<string, string>;
+}
+
 export interface AddBookingSheetRef {
   open: (prelinkedTripId?: string) => void;
+  openForEdit: (booking: BookingForEdit) => void;
   close: () => void;
 }
 
@@ -39,7 +60,7 @@ const detailsKeyForType = (type: BookingType): string => {
 // ════════════════════════════════════════════════════════════════════════
 const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
   ({ onBookingCreated }, ref) => {
-    const { colors, isDark } = useTheme();
+    const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
@@ -51,11 +72,13 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     const [selectedType, setSelectedType] = useState<BookingType | null>(null);
     const [prelinkedTripId, setPrelinkedTripId] = useState<string | undefined>();
     const [prefillData, setPrefillData] = useState<Partial<BookingFormData> | undefined>();
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // ── Convex hooks ─────────────────────────────────────────────────
     const { isAuthenticated } = useConvexAuth();
     const createBooking = useMutation(api.bookings.createBooking);
     const linkBookingToTrip = useMutation(api.bookings.linkBookingToTrip);
+    const updateBooking = useMutation(api.bookings.updateBooking);
     const trips = useQuery(api.trips.listTrips, isAuthenticated ? {} : 'skip');
 
     // ── Reset helper ─────────────────────────────────────────────────
@@ -63,6 +86,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       setStep('type');
       setSelectedType(null);
       setPrefillData(undefined);
+      setEditingId(null);
     }, []);
 
     // ── Imperative handle for parent ─────────────────────────────────
@@ -70,6 +94,25 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       open: (tripId?: string) => {
         resetState();
         setPrelinkedTripId(tripId);
+        bottomSheetRef.current?.present();
+      },
+      openForEdit: (booking) => {
+        resetState();
+        setEditingId(booking.id);
+        setSelectedType(booking.type);
+        setPrefillData({
+          title: booking.title,
+          startDate: booking.startDate,
+          endDate: booking.endDate ?? '',
+          location: booking.location ?? '',
+          countryCode: booking.countryCode ?? '',
+          confirmationNumber: booking.confirmationNumber ?? '',
+          cost: booking.cost != null ? String(booking.cost) : '',
+          currency: booking.currency ?? '',
+          notes: booking.notes ?? '',
+          typeDetails: booking.typeDetails ?? {},
+        });
+        setStep('form');
         bottomSheetRef.current?.present();
       },
       close: () => {
@@ -103,7 +146,27 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
           ? JSON.stringify(data.typeDetails)
           : undefined;
 
-        // Build mutation args
+        if (editingId) {
+          // Edit existing booking — patch only, preserve trip linkage.
+          await updateBooking({
+            id: editingId as any,
+            title: data.title,
+            startDate: data.startDate,
+            endDate: data.endDate || undefined,
+            location: data.location || undefined,
+            countryCode: data.countryCode || undefined,
+            confirmationNumber: data.confirmationNumber || undefined,
+            cost: data.cost ? parseFloat(data.cost) : undefined,
+            currency: data.currency || undefined,
+            notes: data.notes || undefined,
+            [detailsKey]: detailsJson,
+          });
+          bottomSheetRef.current?.dismiss();
+          onBookingCreated?.();
+          return;
+        }
+
+        // Create flow — preserve existing logic
         const bookingId = await createBooking({
           type: selectedType,
           source: 'manual',
@@ -148,9 +211,11 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       },
       [
         selectedType,
+        editingId,
         prelinkedTripId,
         trips,
         createBooking,
+        updateBooking,
         linkBookingToTrip,
         onBookingCreated,
       ],
@@ -162,11 +227,19 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       return trips.find((t) => t._id === prelinkedTripId) ?? null;
     }, [prelinkedTripId, trips]);
 
-    // ── Sheet background: always colorful ──────────────────────────
-    const sheetBg = step === 'form' && selectedType
-      ? getBookingColor(selectedType, isDark)
-      : colors.primary;
-    const handleColor = 'rgba(255,255,255,0.5)';
+    // Dimmed backdrop — matches AppBottomSheet so the trip planner and the
+    // booking sheets feel like the same family of surfaces.
+    const renderBackdrop = useCallback(
+      (props: BottomSheetBackdropProps) => (
+        <BottomSheetBackdrop
+          {...props}
+          appearsOnIndex={0}
+          disappearsOnIndex={-1}
+          opacity={0.4}
+        />
+      ),
+      [],
+    );
 
     // ── Render ───────────────────────────────────────────────────────
     return (
@@ -174,12 +247,16 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         ref={bottomSheetRef}
         enableDynamicSizing={true}
         maxDynamicContentSize={maxSheetHeight}
-        backgroundStyle={{ backgroundColor: sheetBg }}
-        handleIndicatorStyle={{ backgroundColor: handleColor }}
+        backdropComponent={renderBackdrop}
+        // Paper-bg sheet matching the rest of the Signature v2 surfaces;
+        // booking-type color is moved into accents inside the form, not the
+        // entire sheet background.
+        backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
+        handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         onDismiss={resetState}
       >
         <BottomSheetScrollView
-          contentContainerStyle={{ paddingTop: Spacing.sm, paddingBottom: Spacing['3xl'] }}
+          contentContainerStyle={{ paddingTop: Spacing.sm, paddingBottom: 12 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

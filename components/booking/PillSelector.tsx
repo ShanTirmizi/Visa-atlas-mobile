@@ -1,46 +1,58 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { FontFamily, FontSize, Radius } from '@/constants/theme';
+import { View, Pressable, Text, StyleSheet } from 'react-native';
+import { useTheme } from '@/contexts/theme-context';
+import { FontFamily } from '@/constants/theme';
 
 interface PillSelectorProps {
   options: string[];
   selected: string;
   onSelect: (value: string) => void;
-  accentColor: string;
+  /** Coral by default — kept as a prop so callers can theme it later. */
+  accentColor?: string;
 }
 
+/** Compact pill row for one-of-N choices (Class, Room type, Car type, etc).
+ *  Paper-bg friendly: inactive pills are surfaceMuted with ink text; the
+ *  active pill is filled in coral with white text. Italic Fraunces label. */
 export default function PillSelector({
   options,
   selected,
   onSelect,
   accentColor,
 }: PillSelectorProps) {
+  const { colors } = useTheme();
+  const tint = accentColor ?? colors.coral;
+
   return (
     <View style={styles.container}>
       {options.map((option) => {
         const isActive = option === selected;
         return (
-          <TouchableOpacity
+          <Pressable
             key={option}
             onPress={() => onSelect(option)}
-            activeOpacity={0.7}
-            style={[
+            style={({ pressed }) => [
               styles.pill,
               {
-                backgroundColor: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.2)',
-                borderColor: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.35)',
+                backgroundColor: isActive ? tint : colors.surfaceMuted,
+                borderColor: isActive ? tint : colors.line,
+                opacity: pressed ? 0.85 : 1,
               },
             ]}
           >
             <Text
-              style={[
-                styles.pillText,
-                { color: isActive ? accentColor : '#FFFFFF' },
-              ]}
+              style={{
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+                fontSize: 13,
+                fontWeight: '500',
+                letterSpacing: -13 * 0.012,
+                color: isActive ? '#FFFFFF' : colors.ink,
+              }}
             >
               {option}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>
@@ -52,16 +64,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginTop: 8,
   },
   pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: Radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
     borderWidth: 1,
-  },
-  pillText: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: FontSize.xs,
-    textTransform: 'uppercase',
   },
 });

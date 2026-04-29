@@ -1,16 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
+import Svg, { Line } from 'react-native-svg';
 import { Plane } from 'lucide-react-native';
-import { FontFamily, Spacing, Radius } from '@/constants/theme';
+import { useTheme } from '@/contexts/theme-context';
+import { FontFamily } from '@/constants/theme';
 
 interface RouteInputProps {
   departure: string;
   arrival: string;
   onDepartureChange: (value: string) => void;
   onArrivalChange: (value: string) => void;
-  accentColor: string;
+  /** Coral by default — kept as a prop so callers can theme it later. */
+  accentColor?: string;
 }
 
+/** Editorial route input: paper card with mono FROM/TO kickers, italic Fraunces
+ *  IATA codes, and a dashed flight path with a rotated coral plane stamp.
+ *  Used by the flight booking form. */
 export default function RouteInput({
   departure,
   arrival,
@@ -18,59 +24,136 @@ export default function RouteInput({
   onArrivalChange,
   accentColor,
 }: RouteInputProps) {
+  const { colors } = useTheme();
+  const tint = accentColor ?? colors.coral;
+  const [depFocus, setDepFocus] = useState(false);
+  const [arrFocus, setArrFocus] = useState(false);
+
   return (
     <View
       style={[
         styles.card,
-        {
-          backgroundColor: 'rgba(255,255,255,0.9)',
-          borderColor: 'rgba(255,255,255,0.3)',
-        },
+        { backgroundColor: colors.surface, borderColor: colors.line },
       ]}
     >
-      <Text style={[styles.routeLabel, { color: accentColor }]}>
-        ROUTE
-      </Text>
+      {/* Header — kicker + tiny route line */}
+      <View style={styles.headerRow}>
+        <Text
+          style={{
+            fontFamily: FontFamily.monoMedium,
+            fontSize: 9,
+            fontWeight: '700',
+            letterSpacing: 9 * 0.22,
+            textTransform: 'uppercase',
+            color: colors.coralDeep,
+          }}
+        >
+          ROUTE
+        </Text>
+        <View style={[styles.routeLine, { backgroundColor: colors.coral }]} />
+      </View>
 
+      {/* Airports row with center plane stamp + dashed flight path */}
       <View style={styles.row}>
-        {/* Departure */}
+        {/* FROM */}
         <View style={styles.airportBox}>
-          <Text style={[styles.airportLabel, { color: 'rgba(0,0,0,0.45)' }]}>
+          <Text
+            style={{
+              fontFamily: FontFamily.monoMedium,
+              fontSize: 9,
+              fontWeight: '700',
+              letterSpacing: 9 * 0.22,
+              textTransform: 'uppercase',
+              color: colors.inkMute,
+              marginBottom: 4,
+            }}
+          >
             FROM
           </Text>
           <TextInput
-            style={[styles.airportInput, { color: '#111111' }]}
+            style={[
+              styles.airportInput,
+              {
+                color: departure ? colors.ink : colors.inkFaint,
+                borderBottomColor: depFocus ? colors.coral : 'transparent',
+              },
+            ]}
             value={departure}
-            onChangeText={onDepartureChange}
+            onChangeText={(v) => onDepartureChange(v.toUpperCase())}
             autoCapitalize="characters"
+            autoCorrect={false}
             maxLength={4}
-            placeholder="IATA"
-            placeholderTextColor="rgba(0,0,0,0.3)"
+            placeholder="—"
+            placeholderTextColor={colors.inkFaint}
+            onFocus={() => setDepFocus(true)}
+            onBlur={() => setDepFocus(false)}
           />
         </View>
 
-        {/* Center icon */}
-        <View style={[styles.iconCircle, { backgroundColor: accentColor }]}>
-          <Plane
-            size={16}
-            color="#FFFFFF"
-            style={{ transform: [{ rotate: '90deg' }] }}
-          />
+        {/* Flight path — dashed line behind a rotated coral plane stamp */}
+        <View style={styles.pathWrap} pointerEvents="none">
+          <Svg width="100%" height={2} style={styles.dashedLine}>
+            <Line
+              x1="0"
+              y1="1"
+              x2="100%"
+              y2="1"
+              stroke={colors.line}
+              strokeWidth={1}
+              strokeDasharray="3,4"
+            />
+          </Svg>
+          <View
+            style={[
+              styles.planeStamp,
+              {
+                backgroundColor: tint,
+                borderColor: tint,
+              },
+            ]}
+          >
+            <Plane
+              size={14}
+              color="#FFFFFF"
+              strokeWidth={2}
+              fill="#FFFFFF"
+              style={{ transform: [{ rotate: '45deg' }] }}
+            />
+          </View>
         </View>
 
-        {/* Arrival */}
+        {/* TO */}
         <View style={styles.airportBox}>
-          <Text style={[styles.airportLabel, { color: 'rgba(0,0,0,0.45)' }]}>
+          <Text
+            style={{
+              fontFamily: FontFamily.monoMedium,
+              fontSize: 9,
+              fontWeight: '700',
+              letterSpacing: 9 * 0.22,
+              textTransform: 'uppercase',
+              color: colors.inkMute,
+              marginBottom: 4,
+            }}
+          >
             TO
           </Text>
           <TextInput
-            style={[styles.airportInput, { color: '#111111' }]}
+            style={[
+              styles.airportInput,
+              {
+                color: arrival ? colors.ink : colors.inkFaint,
+                borderBottomColor: arrFocus ? colors.coral : 'transparent',
+              },
+            ]}
             value={arrival}
-            onChangeText={onArrivalChange}
+            onChangeText={(v) => onArrivalChange(v.toUpperCase())}
             autoCapitalize="characters"
+            autoCorrect={false}
             maxLength={4}
-            placeholder="IATA"
-            placeholderTextColor="rgba(0,0,0,0.3)"
+            placeholder="—"
+            placeholderTextColor={colors.inkFaint}
+            onFocus={() => setArrFocus(true)}
+            onBlur={() => setArrFocus(false)}
           />
         </View>
       </View>
@@ -81,43 +164,68 @@ export default function RouteInput({
 const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
+    borderRadius: 18,
+    padding: 16,
+    paddingTop: 14,
   },
-  routeLabel: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 10,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
+  routeLine: {
+    height: 1,
+    width: 28,
+    borderRadius: 1,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
   airportBox: {
     flex: 1,
     alignItems: 'center',
   },
-  airportLabel: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: 10,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
   airportInput: {
-    fontFamily: FontFamily.display,
-    fontSize: 28,
+    fontFamily: FontFamily.displayItalic,
+    fontStyle: 'italic',
+    fontSize: 30,
+    lineHeight: 34,
+    letterSpacing: -30 * 0.018,
+    fontWeight: '500',
     textAlign: 'center',
     padding: 0,
+    paddingBottom: 4,
     width: '100%',
+    borderBottomWidth: 1.5,
   },
-  iconCircle: {
+  pathWrap: {
+    width: 80,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    position: 'relative',
+  },
+  dashedLine: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+  },
+  planeStamp: {
     width: 32,
     height: 32,
     borderRadius: 16,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 8,
+    transform: [{ rotate: '-4deg' }],
+    shadowColor: '#1F1A14',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 4,
   },
 });

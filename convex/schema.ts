@@ -23,6 +23,11 @@ export default defineSchema({
     flightHours: v.number(),
     visaCategory: v.string(),
     visaNotes: v.optional(v.string()),
+    visaCost: v.optional(v.string()),
+    visaProcessingTime: v.optional(v.string()),
+    visaForms: v.optional(v.string()),
+    visaPassportValidity: v.optional(v.string()),
+    visaEntries: v.optional(v.string()),
     surpriseMe: v.optional(v.boolean()),
     vibeTag: v.optional(v.string()),
     companions: v.optional(v.string()),
@@ -44,6 +49,9 @@ export default defineSchema({
     isMultiCountry: v.optional(v.boolean()),
     routeTitle: v.optional(v.string()),
     legs: v.optional(v.string()),
+    // User-pinned trip — heart on the trip detail header. Distinct from
+    // country-level favorites (which live in client-side AsyncStorage).
+    starred: v.optional(v.boolean()),
   })
     .index("by_status", ["status"])
     .index("by_country", ["countryCode"])
@@ -58,6 +66,25 @@ export default defineSchema({
     userId: v.optional(v.id("users")),
     userName: v.optional(v.string()),
   }).index("by_trip", ["tripId", "timestamp"]),
+
+  // ── Visa Guide Messages ──
+  visaGuideMessages: defineTable({
+    guideId: v.id("visaGuides"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    timestamp: v.number(),
+    userId: v.optional(v.id("users")),
+  }).index("by_guide", ["guideId", "timestamp"]),
+
+  // ── Email verification codes ──
+  // Post-signin email verification (separate from Convex Auth's signup-time
+  // verify flow which we removed). We send a 6-digit code, store it here,
+  // and clear it once verified.
+  emailVerificationCodes: defineTable({
+    userId: v.id("users"),
+    code: v.string(),
+    expiresAt: v.number(),
+  }).index("by_user", ["userId"]),
 
   // ── Visa Guides ──
   visaGuides: defineTable({

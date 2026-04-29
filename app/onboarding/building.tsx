@@ -1,22 +1,45 @@
+/**
+ * Onboarding — Building Screen (step 3 of 3)
+ *
+ * Data source : visa context (passport + heldVisas + residence) + endpoints.visaMap API
+ * Context     : useVisa() — setVisaMap, setOnboarded
+ * Navigation  : router.replace('/(tabs)')
+ *
+ * Business logic + animations preserved verbatim (globe float, typing dots,
+ * rotating messages, retry). Visual shell replaced with OnboardingScaffold.
+ *
+ * Note: Since the CTA fires only after loading completes, the scaffold's onCta
+ * maps to handleStartExploring. During loading, the CTA is labelled
+ * "Building…" and is visually inert (the press does nothing until done).
+ */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Globe, AlertTriangle } from 'lucide-react-native';
 import Animated, {
-  useSharedValue, useAnimatedStyle,
-  withRepeat, withSequence, withTiming, Easing,
-  FadeIn, FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+  FadeIn,
+  FadeOut,
 } from 'react-native-reanimated';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
-import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
+import { Shadows } from '@/constants/theme';
 import { endpoints } from '@/constants/api';
 import { passportCountries } from '@/data/passportCountries';
+import { OnboardingScaffold } from '@/components/onboarding/OnboardingScaffold';
+import { Type } from '@/constants/typography';
 
-// ── Alpha-3 to flag emoji ────────────────────────────────────────────
+// ── Alpha-3 → flag emoji ─────────────────────────────────────────────────
 const A3_TO_A2: Record<string, string> = {
   AFG:'AF',ALB:'AL',DZA:'DZ',AND:'AD',AGO:'AO',ATG:'AG',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',
   AZE:'AZ',BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
@@ -39,16 +62,13 @@ const A3_TO_A2: Record<string, string> = {
   TUV:'TV',UGA:'UG',UKR:'UA',ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VUT:'VU',VEN:'VE',
   VNM:'VN',YEM:'YE',ZMB:'ZM',ZWE:'ZW',
 };
-
-function getFlag(alpha3: string): string {
-  const a2 = A3_TO_A2[alpha3];
+function getFlag(a3: string): string {
+  const a2 = A3_TO_A2[a3];
   if (!a2) return '';
-  return String.fromCodePoint(
-    ...a2.split('').map((c) => 0x1f1e6 + c.charCodeAt(0) - 65),
-  );
+  return String.fromCodePoint(...a2.split('').map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
-// ── Loading messages ─────────────────────────────────────────────────
+// ── Loading messages ─────────────────────────────────────────────────────
 const LOAD_MSGS = [
   'Checking visa requirements...',
   'Analyzing 195 countries...',
@@ -57,14 +77,14 @@ const LOAD_MSGS = [
   'Almost ready...',
 ];
 
-// ── Summary stats shape ──────────────────────────────────────────────
+// ── Summary stats ────────────────────────────────────────────────────────
 interface SummaryStats {
   visaFree: number;
   onArrival: number;
   evisa: number;
 }
 
-// ── Globe animation (same pattern as VisaGuideSheet's shield) ────────
+// ── Globe animation ──────────────────────────────────────────────────────
 function useGlobeAnimation(isActive: boolean) {
   const translateY = useSharedValue(0);
   const rotate = useSharedValue(0);
@@ -76,16 +96,14 @@ function useGlobeAnimation(isActive: boolean) {
           withTiming(-6, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
           withTiming(6, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
         ),
-        -1,
-        true,
+        -1, true,
       );
       rotate.value = withRepeat(
         withSequence(
           withTiming(-5, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
           withTiming(5, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
         ),
-        -1,
-        true,
+        -1, true,
       );
     } else {
       translateY.value = withTiming(0, { duration: 300 });
@@ -94,14 +112,11 @@ function useGlobeAnimation(isActive: boolean) {
   }, [isActive, translateY, rotate]);
 
   return useAnimatedStyle(() => ({
-    transform: [
-      { translateY: translateY.value },
-      { rotate: `${rotate.value}deg` },
-    ],
+    transform: [{ translateY: translateY.value }, { rotate: `${rotate.value}deg` }],
   }));
 }
 
-// ── Typing dots (same as VisaGuideSheet) ─────────────────────────────
+// ── Typing dots ──────────────────────────────────────────────────────────
 function TypingDots({ color }: { color: string }) {
   const dot1 = useSharedValue(0.4);
   const dot2 = useSharedValue(0.4);
@@ -126,11 +141,10 @@ function TypingDots({ color }: { color: string }) {
   const s1 = useAnimatedStyle(() => ({ transform: [{ scale: dot1.value }], opacity: dot1.value }));
   const s2 = useAnimatedStyle(() => ({ transform: [{ scale: dot2.value }], opacity: dot2.value }));
   const s3 = useAnimatedStyle(() => ({ transform: [{ scale: dot3.value }], opacity: dot3.value }));
-
   const dotStyle = { width: 6, height: 6, borderRadius: 3, backgroundColor: color };
 
   return (
-    <View style={{ flexDirection: 'row', gap: 8, marginTop: Spacing.lg }}>
+    <View style={{ flexDirection: 'row', gap: 8, marginTop: 24 }}>
       <Animated.View style={[dotStyle, s1]} />
       <Animated.View style={[dotStyle, s2]} />
       <Animated.View style={[dotStyle, s3]} />
@@ -138,14 +152,13 @@ function TypingDots({ color }: { color: string }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// Building Screen
-// ══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// Screen
+// ══════════════════════════════════════════════════════════════════════════════
 type ScreenState = 'loading' | 'summary';
 
 export default function BuildingScreen() {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const visa = useVisa();
 
@@ -156,22 +169,20 @@ export default function BuildingScreen() {
 
   const globeStyle = useGlobeAnimation(state === 'loading');
 
-  // Rotate loading messages every 3 seconds
+  // Rotate loading messages every 3 s
   useEffect(() => {
     if (state !== 'loading') return;
     const id = setInterval(() => setTick((t) => t + 1), 3000);
     return () => clearInterval(id);
   }, [state]);
 
-  // Call the visa-map API on mount
+  // Kick off visa-map generation on mount
   useEffect(() => {
     let cancelled = false;
-
     const generate = async () => {
       setState('loading');
       setError('');
       setTick(0);
-
       try {
         const res = await fetch(endpoints.visaMap, {
           method: 'POST',
@@ -184,27 +195,20 @@ export default function BuildingScreen() {
         });
         if (!res.ok) throw new Error('Generation failed');
         const data = await res.json();
-
         if (cancelled) return;
-
-        // Save to context
         visa.setVisaMap(data.countries);
         visa.setOnboarded(true);
-
-        // Compute stats
         const countries = data.countries as Array<{ category: string }>;
-        const visaFree = countries.filter((c) => c.category === 'visa-free').length;
-        const onArrival = countries.filter((c) => c.category === 'visa-on-arrival').length;
-        const evisa = countries.filter((c) => c.category === 'evisa').length;
-        setStats({ visaFree, onArrival, evisa });
+        setStats({
+          visaFree: countries.filter((c) => c.category === 'visa-free').length,
+          onArrival: countries.filter((c) => c.category === 'visa-on-arrival').length,
+          evisa: countries.filter((c) => c.category === 'evisa').length,
+        });
         setState('summary');
       } catch {
-        if (!cancelled) {
-          setError('Failed to build your visa map. Please try again.');
-        }
+        if (!cancelled) setError('Failed to build your visa map. Please try again.');
       }
     };
-
     generate();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,7 +218,6 @@ export default function BuildingScreen() {
     setError('');
     setState('loading');
     setTick(0);
-
     (async () => {
       try {
         const res = await fetch(endpoints.visaMap, {
@@ -228,15 +231,14 @@ export default function BuildingScreen() {
         });
         if (!res.ok) throw new Error('Generation failed');
         const data = await res.json();
-
         visa.setVisaMap(data.countries);
         visa.setOnboarded(true);
-
         const countries = data.countries as Array<{ category: string }>;
-        const visaFree = countries.filter((c) => c.category === 'visa-free').length;
-        const onArrival = countries.filter((c) => c.category === 'visa-on-arrival').length;
-        const evisa = countries.filter((c) => c.category === 'evisa').length;
-        setStats({ visaFree, onArrival, evisa });
+        setStats({
+          visaFree: countries.filter((c) => c.category === 'visa-free').length,
+          onArrival: countries.filter((c) => c.category === 'visa-on-arrival').length,
+          evisa: countries.filter((c) => c.category === 'evisa').length,
+        });
         setState('summary');
       } catch {
         setError('Failed to build your visa map. Please try again.');
@@ -245,66 +247,72 @@ export default function BuildingScreen() {
   }, [visa]);
 
   const handleStartExploring = useCallback(() => {
-    router.replace('/(tabs)');
+    router.replace('/(tabs)/trips' as import('expo-router').Href);
   }, [router]);
 
-  // Passport flag emojis
   const passportFlags = visa.passports.map((code) => getFlag(code)).join('  ');
 
+  const ctaLabel = state === 'loading' ? 'Building your map…' : 'Start Exploring';
+
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: colors.background,
-          paddingTop: insets.top + Spacing.lg,
-          paddingBottom: insets.bottom + Spacing.lg,
-        },
-      ]}
+    <OnboardingScaffold
+      step={3}
+      totalSteps={3}
+      heroTone="forest"
+      title={state === 'loading' ? 'Building your visa map…' : "You're all set!"}
+      body={
+        state === 'loading'
+          ? undefined
+          : `${visa.passports.map((c) => passportCountries.find((p) => p.code === c)?.name ?? c).join(' + ')} passport${visa.passports.length > 1 ? 's' : ''}`
+      }
+      ctaLabel={ctaLabel}
+      onCta={state === 'summary' ? handleStartExploring : () => undefined}
     >
       {/* ── Loading state ── */}
       {state === 'loading' && (
         <View style={styles.centerContent}>
           {/* Animated globe */}
-          <Animated.View style={[styles.iconCircle, { backgroundColor: colors.primaryBg }, globeStyle]}>
-            <Globe size={36} color={colors.primary} />
+          <Animated.View
+            style={[
+              styles.iconCircle,
+              { backgroundColor: colors.surfaceMuted },
+              globeStyle,
+            ]}
+          >
+            <Globe size={36} color={colors.ink} />
           </Animated.View>
-
-          {/* Title */}
-          <Text style={[styles.loadingTitle, { color: colors.foreground }]}>
-            Building your visa map...
-          </Text>
 
           {/* Rotating message */}
           <Animated.Text
             key={tick}
             entering={FadeIn.duration(400)}
             exiting={FadeOut.duration(200)}
-            style={[styles.loadingMsg, { color: colors.textSecondary }]}
+            style={[Type.body14, { color: colors.inkMute, textAlign: 'center', marginTop: 12 }]}
           >
             {LOAD_MSGS[tick % LOAD_MSGS.length]}
           </Animated.Text>
 
-          {/* Typing dots */}
-          <TypingDots color={colors.primary} />
+          <TypingDots color={colors.inkMute} />
 
           {/* Error card */}
           {error !== '' && (
             <View
               style={[
                 styles.errorCard,
-                Shadows.card,
+                Shadows.subtle,
                 { backgroundColor: colors.dangerBg, borderColor: colors.danger },
               ]}
             >
               <AlertTriangle size={18} color={colors.danger} />
-              <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
+              <Text style={[Type.body13, { color: colors.danger, textAlign: 'center' }]}>
+                {error}
+              </Text>
               <TouchableOpacity
                 onPress={handleRetry}
                 activeOpacity={0.7}
                 style={[styles.retryBtn, { backgroundColor: colors.danger }]}
               >
-                <Text style={styles.retryBtnText}>Try Again</Text>
+                <Text style={[Type.title14, { color: '#FFFFFF' }]}>Try Again</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -313,170 +321,102 @@ export default function BuildingScreen() {
 
       {/* ── Summary state ── */}
       {state === 'summary' && (
-        <View style={styles.centerContent}>
-          {/* Title */}
-          <Text style={[styles.summaryTitle, { color: colors.foreground }]}>
-            You're all set!
-          </Text>
-
-          {/* Passport flags */}
+        <View style={styles.summaryContent}>
+          {/* Passport flag emojis */}
           <Text style={styles.passportFlags}>{passportFlags}</Text>
 
-          {/* Passport name(s) */}
-          <Text style={[styles.passportNames, { color: colors.textSecondary }]}>
-            {visa.passports
-              .map((code) => passportCountries.find((c) => c.code === code)?.name ?? code)
-              .join(' + ')}{' '}
-            passport{visa.passports.length > 1 ? 's' : ''}
-          </Text>
-
           {/* Stats row */}
-          <View style={[styles.statsRow, { backgroundColor: colors.card, borderColor: colors.border }, Shadows.card]}>
+          <View
+            style={[
+              styles.statsRow,
+              Shadows.subtle,
+              { backgroundColor: colors.surface, borderColor: colors.line },
+            ]}
+          >
             <View style={styles.statItem}>
-              <Text style={[styles.statNumber, { color: colors.visaFree }]}>{stats.visaFree}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>visa-free</Text>
+              <Text style={[Type.display32, { color: colors.visaFree }]}>
+                {stats.visaFree}
+              </Text>
+              <Text style={[Type.meta11, { color: colors.inkMute, marginTop: 2 }]}>
+                visa-free
+              </Text>
             </View>
-            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
             <View style={styles.statItem}>
-              <Text style={[styles.statNumber, { color: colors.visaOnArrival }]}>{stats.onArrival}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>on arrival</Text>
+              <Text style={[Type.display32, { color: colors.visaOnArrival }]}>
+                {stats.onArrival}
+              </Text>
+              <Text style={[Type.meta11, { color: colors.inkMute, marginTop: 2 }]}>
+                on arrival
+              </Text>
             </View>
-            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
             <View style={styles.statItem}>
-              <Text style={[styles.statNumber, { color: colors.evisa }]}>{stats.evisa}</Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>e-visa</Text>
+              <Text style={[Type.display32, { color: colors.evisa }]}>
+                {stats.evisa}
+              </Text>
+              <Text style={[Type.meta11, { color: colors.inkMute, marginTop: 2 }]}>
+                e-visa
+              </Text>
             </View>
           </View>
-
-          {/* CTA */}
-          <TouchableOpacity
-            onPress={handleStartExploring}
-            activeOpacity={0.7}
-            style={[styles.ctaBtn, { backgroundColor: colors.primary }]}
-          >
-            <Text style={styles.ctaBtnText}>Start Exploring</Text>
-          </TouchableOpacity>
         </View>
       )}
-    </View>
+    </OnboardingScaffold>
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: Spacing.xl,
-  },
   centerContent: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 16,
   },
-
-  // ── Loading ──
   iconCircle: {
     width: 88,
     height: 88,
     borderRadius: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.xl,
-  },
-  loadingTitle: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.xl,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  loadingMsg: {
-    fontFamily: FontFamily.semibold,
-    fontSize: FontSize.sm,
-    textAlign: 'center',
-    minHeight: 20,
   },
   errorCard: {
-    marginTop: Spacing['2xl'],
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: 8,
     width: '100%',
-  },
-  errorText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    textAlign: 'center',
   },
   retryBtn: {
     paddingVertical: 10,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: 20,
-    marginTop: Spacing.xs,
+    paddingHorizontal: 28,
+    borderRadius: 999,
+    marginTop: 4,
   },
-  retryBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.sm,
-    color: '#FFFFFF',
-  },
-
-  // ── Summary ──
-  summaryTitle: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize['5xl'],
-    letterSpacing: 1,
-    textAlign: 'center',
-    marginBottom: Spacing.lg,
+  summaryContent: {
+    alignItems: 'center',
+    gap: 20,
   },
   passportFlags: {
-    fontSize: 56,
+    fontSize: 52,
     textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  passportNames: {
-    fontFamily: FontFamily.serif,
-    fontSize: FontSize.base,
-    textAlign: 'center',
-    marginBottom: Spacing['2xl'],
   },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: Radius.lg,
+    borderRadius: 20,
     borderWidth: 1,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.md,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
     width: '100%',
-    marginBottom: Spacing['2xl'],
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
-  statNumber: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize['3xl'],
-  },
-  statLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xs,
-    marginTop: 2,
-  },
   statDivider: {
     width: 1,
     height: 36,
-  },
-  ctaBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 20,
-    width: '100%',
-  },
-  ctaBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.base,
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
   },
 });

@@ -1,91 +1,36 @@
+/**
+ * Thin adapter shim — maps legacy VisaCategory strings to the canonical
+ * VisaBadge API in components/ui/Badge.tsx.
+ *
+ * Prefer importing VisaBadge directly from '@/components/ui/Badge' for new code.
+ */
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useTheme } from '@/contexts/theme-context';
-import type { ThemeColors } from '@/constants/theme';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { VisaBadge, type Cat } from '@/components/ui/Badge';
 import type { VisaCategory } from '@/data/visaData';
+import type { StyleProp, ViewStyle } from 'react-native';
 
 interface VisaBadgeProps {
   category: VisaCategory;
+  size?: 'sm' | 'md' | 'lg';
+  onDark?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
 
-function getCategoryLabel(category: VisaCategory): string {
+function toCat(category: VisaCategory): Cat {
   switch (category) {
     case 'visa-free':
-      return 'Visa Free';
+      return 'free';
     case 'visa-on-arrival':
-      return 'On Arrival';
+      return 'arrival';
     case 'evisa':
-      return 'eVisa';
+      return 'evisa';
     case 'visa-required':
-      return 'Required';
-    case 'home':
-      return 'Home';
+      return 'required';
     default:
-      return category;
+      return 'free';
   }
 }
 
-function getCategoryColor(category: VisaCategory, colors: ThemeColors): string {
-  switch (category) {
-    case 'visa-free':
-      return colors.visaFree;
-    case 'visa-on-arrival':
-      return colors.visaOnArrival;
-    case 'evisa':
-      return colors.evisa;
-    case 'visa-required':
-      return colors.visaRequired;
-    case 'home':
-      return colors.primary;
-    default:
-      return colors.textMuted;
-  }
+export default function CountryVisaBadge({ category, size = 'md', onDark, style }: VisaBadgeProps) {
+  return <VisaBadge cat={toCat(category)} size={size} onDark={onDark} style={style} />;
 }
-
-function getCategoryBgColor(category: VisaCategory, colors: ThemeColors): string {
-  switch (category) {
-    case 'visa-free':
-      return colors.visaFreeBg;
-    case 'visa-on-arrival':
-      return colors.visaOnArrivalBg;
-    case 'evisa':
-      return colors.evisaBg;
-    case 'visa-required':
-      return colors.visaRequiredBg;
-    case 'home':
-      return colors.primaryBg;
-    default:
-      return colors.shimmer;
-  }
-}
-
-export default function VisaBadge({ category }: VisaBadgeProps) {
-  const { colors } = useTheme();
-  const color = getCategoryColor(category, colors);
-  const bgColor = getCategoryBgColor(category, colors);
-  const label = getCategoryLabel(category);
-
-  return (
-    <View style={[styles.badge, { backgroundColor: bgColor }]}>
-      <Text style={[styles.label, { color }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  badge: {
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: 2,
-    borderRadius: Radius.full,
-    alignSelf: 'flex-start',
-  },
-  label: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-});

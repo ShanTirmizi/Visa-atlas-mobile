@@ -113,3 +113,43 @@ export const deleteGuide = mutation({
     await ctx.db.delete(args.id);
   },
 });
+
+// ===== Visa Guide Chat =====
+
+export const listGuideMessages = query({
+  args: { guideId: v.id("visaGuides") },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    const guide = await ctx.db.get(args.guideId);
+    if (!guide) throw new Error("Guide not found");
+    if (guide.userId !== userId) throw new Error("Not authorized");
+
+    return await ctx.db
+      .query("visaGuideMessages")
+      .withIndex("by_guide", (q) => q.eq("guideId", args.guideId))
+      .order("asc")
+      .collect();
+  },
+});
+
+export const addGuideMessage = mutation({
+  args: {
+    guideId: v.id("visaGuides"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+    const guide = await ctx.db.get(args.guideId);
+    if (!guide) throw new Error("Guide not found");
+    if (guide.userId !== userId) throw new Error("Not authorized");
+
+    return await ctx.db.insert("visaGuideMessages", {
+      guideId: args.guideId,
+      role: args.role,
+      content: args.content,
+      timestamp: Date.now(),
+      userId: args.role === "user" ? userId : undefined,
+    });
+  },
+});

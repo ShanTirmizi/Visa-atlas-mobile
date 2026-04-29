@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, ImageBackground } from 'react-native';
-import { MapPin, ArrowUpRight } from 'lucide-react-native';
+import { View, Text, Pressable, StyleSheet, ImageBackground } from 'react-native';
+import { Pencil } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
+import { FontFamily, Shadows } from '@/constants/theme';
+import { Squiggle } from '@/components/ui/Squiggle';
 
 export type DayImage = { url: string; thumb?: string; credit?: string; creditUrl?: string } | null;
 
@@ -12,15 +13,20 @@ export interface DayDeckCardProps {
   place?: string;
   date?: string;
   image: DayImage;
+  stops?: number;
+  /** Tap handler for the inline edit pencil — small floating button in
+   *  the bottom-right corner of the card. */
+  onEdit?: () => void;
 }
 
-function DayDeckCard({ dayNumber, title, place, date, image }: DayDeckCardProps) {
+function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit }: DayDeckCardProps) {
   const { colors } = useTheme();
+  const dayLabel = String(dayNumber).padStart(2, '0');
 
   return (
     <View style={[styles.card, Shadows.cardRaised, { backgroundColor: colors.card }]}>
-      {/* ── Photo region (top ~62%) ───────────────────────────────── */}
-      <View style={[styles.photoRegion, { backgroundColor: colors.surfaceLight }]}>
+      {/* ── Photo region (top ~60%) ───────────────────────────────── */}
+      <View style={[styles.photoRegion, { backgroundColor: colors.backgroundDeep }]}>
         {image?.url ? (
           <ImageBackground
             source={{ uri: image.url }}
@@ -29,53 +35,131 @@ function DayDeckCard({ dayNumber, title, place, date, image }: DayDeckCardProps)
           />
         ) : null}
 
-        {/* DAY N badge — near-opaque white pill, always legible on any photo.
-            The rgba value below is the plan-sanctioned photo-overlay exception. */}
-        <View style={styles.dayBadge}>
-          <Text style={[styles.dayBadgeText, { color: colors.textOnLight }]}>
-            {`DAY ${dayNumber}`}
-          </Text>
-        </View>
-      </View>
+        {/* Subtle bottom darken so any title bleeding into the photo
+            stays readable on busy images. */}
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              top: '55%',
+              backgroundColor: 'rgba(0,0,0,0.18)',
+            },
+          ]}
+        />
 
-      {/* ── Content region (bottom ~26%) ──────────────────────────── */}
-      <View style={styles.content}>
-        <View style={styles.textBlock}>
-          {date ? (
-            <Text style={[styles.dateLabel, { color: colors.textMuted }]}>
-              {date.toUpperCase()}
-            </Text>
-          ) : null}
-          <Text
-            style={[styles.title, { color: colors.foreground }]}
-            numberOfLines={2}
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}
+        {/* DAY · NN — rotated coral passport stamp (top-left) */}
+        <View
+          style={styles.stampWrap}
+          pointerEvents="none"
+        >
+          <View
+            style={[
+              styles.stampOuter,
+              { borderColor: colors.coralDeep },
+            ]}
           >
-            {title}
-          </Text>
-          {place ? (
-            <View style={styles.placeRow}>
-              <MapPin size={12} color={colors.textMuted} />
-              <Text
-                style={[styles.placeText, { color: colors.textMuted }]}
-                numberOfLines={1}
-              >
-                {place}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* "See day" pill — purely visual; DayDeck's Tap gesture handles the tap */}
-        <View style={styles.buttonRow}>
-          <View style={[styles.seeDayButton, { backgroundColor: colors.foreground }]}>
-            <Text style={[styles.seeDayText, { color: colors.background }]}>See day</Text>
-            <View style={[styles.seeDayIcon, { backgroundColor: colors.background }]}>
-              <ArrowUpRight size={12} color={colors.foreground} />
-            </View>
+            <View
+              style={[
+                styles.stampInner,
+                { borderColor: colors.coralDeep },
+              ]}
+            />
+            <Text
+              style={[
+                styles.stampText,
+                { color: colors.coralDeep, letterSpacing: 11 * 0.22 },
+              ]}
+            >
+              DAY · {dayLabel}
+            </Text>
           </View>
         </View>
+
+        {/* Stops count — glass dark pill, top-right */}
+        {typeof stops === 'number' && stops > 0 ? (
+          <View style={styles.stopsPill}>
+            <Text style={styles.stopsText}>{stops} stops</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* ── Content region (bottom ~40%) ──────────────────────────── */}
+      <View style={styles.content}>
+        {/* Date kicker with a small coral leading dot */}
+        {date ? (
+          <View style={styles.kickerRow}>
+            <View
+              style={[styles.kickerDot, { backgroundColor: colors.coral }]}
+            />
+            <Text
+              style={[
+                styles.kickerText,
+                { color: colors.inkMute, letterSpacing: 10 * 0.22 },
+              ]}
+              numberOfLines={1}
+            >
+              {date.toUpperCase()}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Italic Fraunces title with coral period — fixed size, 2-line wrap.
+            (Previously used adjustsFontSizeToFit which shrunk long titles
+            below the place line, inverting the hierarchy.) */}
+        <Text
+          style={[
+            styles.title,
+            {
+              color: colors.ink,
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+            },
+          ]}
+          numberOfLines={2}
+        >
+          {title}
+          <Text style={{ color: colors.coral }}>.</Text>
+        </Text>
+
+        {/* Coral squiggle under the title — signature accent */}
+        <View style={{ marginTop: 6, marginBottom: place ? 8 : 0 }}>
+          <Squiggle width={50} color={colors.coral} />
+        </View>
+
+        {/* Place — mono caps, tighter letter-spacing */}
+        {place ? (
+          <Text
+            style={[
+              styles.placeText,
+              { color: colors.inkMute, letterSpacing: 11 * 0.14 },
+            ]}
+            numberOfLines={1}
+          >
+            {place.toUpperCase()}
+          </Text>
+        ) : null}
+
+        {/* Floating edit pencil — bottom-right, small, only when handler given.
+            (The 'Open Day' affordance is the big button below the deck — no
+            duplicate inline chip.) */}
+        {onEdit ? (
+          <Pressable
+            onPress={onEdit}
+            accessibilityLabel={`Edit Day ${dayNumber}`}
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.editChip,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.lineMid,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Pencil size={14} color={colors.ink} strokeWidth={2} />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -86,83 +170,109 @@ export default React.memo(DayDeckCard);
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    borderRadius: Radius.xl,
+    borderRadius: 24,
     overflow: 'hidden',
   },
   photoRegion: {
-    flex: 74,
+    flex: 60,
     position: 'relative',
   },
-  dayBadge: {
+
+  // Rotated coral passport stamp
+  stampWrap: {
     position: 'absolute',
-    top: Spacing.md,
-    left: Spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    top: 14,
+    left: 14,
+    transform: [{ rotate: '-4deg' }],
+  },
+  stampOuter: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingTop: 6,
+    paddingBottom: 5,
+    borderWidth: 1.5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  dayBadgeText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.xs,
-    letterSpacing: 0.7,
+  stampInner: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    right: 2,
+    bottom: 2,
+    borderWidth: 0.75,
+    borderRadius: 3,
+    opacity: 0.55,
   },
-  content: {
-    flex: 26,
-    paddingHorizontal: Spacing.md,
-    paddingTop: 10,
-    paddingBottom: 10,
-    justifyContent: 'space-between',
-  },
-  textBlock: {
-    gap: 1,
-  },
-  dateLabel: {
-    fontFamily: FontFamily.condensedSemibold,
+  stampText: {
+    fontFamily: FontFamily.monoMedium,
     fontSize: 10,
-    letterSpacing: 0.7,
-    marginBottom: 1,
+    fontWeight: '700',
   },
-  title: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 19,
-    lineHeight: 22,
-    letterSpacing: -0.3,
+
+  // Stops pill (glass dark, top-right)
+  stopsPill: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  placeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 4,
+  stopsText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  placeText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    flexShrink: 1,
+
+  // Content region
+  content: {
+    flex: 40,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 16,
+    position: 'relative',
   },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 8,
-  },
-  seeDayButton: {
+  kickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingLeft: 16,
-    paddingRight: 6,
-    paddingVertical: 6,
-    borderRadius: 24,
+    marginBottom: 6,
   },
-  seeDayText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: FontSize.sm,
-    letterSpacing: 0.3,
+  kickerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  seeDayIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  kickerText: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  title: {
+    fontSize: 24,
+    lineHeight: 28,
+    letterSpacing: -24 * 0.018,
+    fontWeight: '500',
+  },
+  placeText: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // Floating edit pencil
+  editChip: {
+    position: 'absolute',
+    bottom: 14,
+    right: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
