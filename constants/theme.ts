@@ -186,6 +186,75 @@ export const visaCategoryColors = {
 
 export type VisaHeroCategory = keyof typeof visaCategoryColors;
 
+// ──────────────────────────────────────────────
+// Booking sheet gradients & inks
+// (only used by <BookingDetailSheet />)
+// ──────────────────────────────────────────────
+export const bookingTypeColors = {
+  restaurant: {
+    bgFrom: '#7E2A2A',
+    bgTo:   '#5C1F1F',
+    accent: '#FBE9C8',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.78)',
+    divider: 'rgba(255,255,255,0.16)',
+    guillocheOpacity: 0.10,
+    secondary: 'rgba(0,0,0,0.18)',
+  },
+  insurance: {
+    bgFrom: '#1F2746',
+    bgTo:   '#161D38',
+    accent: '#F4CB6F',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.78)',
+    divider: 'rgba(255,255,255,0.14)',
+    guillocheOpacity: 0.09,
+    secondary: 'rgba(0,0,0,0.20)',
+  },
+  car: {
+    bgFrom: '#2E4A40',
+    bgTo:   '#1F362E',
+    accent: '#F4CB6F',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.80)',
+    divider: 'rgba(255,255,255,0.16)',
+    guillocheOpacity: 0.10,
+    secondary: 'rgba(0,0,0,0.18)',
+  },
+  experience: {
+    bgFrom: '#A05A2C',
+    bgTo:   '#7E4421',
+    accent: '#FBE9C8',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.82)',
+    divider: 'rgba(255,255,255,0.16)',
+    guillocheOpacity: 0.12,
+    secondary: 'rgba(0,0,0,0.16)',
+  },
+  hotel: {
+    bgFrom: '#3F2F62',
+    bgTo:   '#2E2249',
+    accent: '#D4C5F0',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.78)',
+    divider: 'rgba(255,255,255,0.14)',
+    guillocheOpacity: 0.10,
+    secondary: 'rgba(0,0,0,0.20)',
+  },
+  flight: {
+    bgFrom: '#1F2746',
+    bgTo:   '#161D38',
+    accent: '#F4CB6F',
+    ink:    '#FFFFFF',
+    inkSoft: 'rgba(255,255,255,0.82)',
+    divider: 'rgba(255,255,255,0.14)',
+    guillocheOpacity: 0.09,
+    secondary: 'rgba(0,0,0,0.22)',
+  },
+} as const;
+
+export type BookingHeroType = keyof typeof bookingTypeColors;
+
 export function getVisaCategoryColor(
   category: string,
   colors: ThemeColors,
