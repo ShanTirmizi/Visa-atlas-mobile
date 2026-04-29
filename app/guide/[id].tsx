@@ -1,4 +1,7 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import Animated from 'react-native-reanimated';
+import { tabSlideIn } from '@/utils/tabAnimation';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import {
   View,
   Text,
@@ -29,6 +32,7 @@ import {
   BookOpen,
   Building2,
   Info,
+  MessageSquare,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import {
@@ -38,6 +42,9 @@ import {
   Radius,
   Shadows,
 } from '@/constants/theme';
+import BackButton from '@/components/ui/BackButton';
+import VisaChatSheet, { type VisaChatSheetRef } from '@/components/guides/VisaChatSheet';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,11 +93,18 @@ interface ChecklistItem {
 
 type StatusKey = 'preparing' | 'submitted' | 'approved' | 'rejected';
 
-const STATUS_CONFIG: Record<StatusKey, { label: string; color: string; bg: string }> = {
-  preparing: { label: 'Preparing', color: '#E5A832', bg: 'rgba(229, 168, 50, 0.15)' },
-  submitted: { label: 'Submitted', color: '#EB6D3A', bg: 'rgba(235, 109, 58, 0.15)' },
-  approved:  { label: 'Approved',  color: '#2EAA6E', bg: 'rgba(46, 170, 110, 0.15)' },
-  rejected:  { label: 'Rejected',  color: '#E05545', bg: 'rgba(224, 85, 69, 0.15)' },
+// Status palette mapped to Signature v2 theme tokens (was hardcoded hex from
+// the old Mono palette). Each status uses a (fg, bg) pair built off the
+// existing visa-category / brand accent system so it stays consistent with
+// pills throughout the rest of the app.
+const STATUS_CONFIG: Record<
+  StatusKey,
+  { label: string; tokenFg: 'warning' | 'coralDeep' | 'visaFree' | 'rose'; tokenBg: 'warningBg' | 'coralBg' | 'visaFreeBg' | 'dangerBg' }
+> = {
+  preparing: { label: 'Preparing', tokenFg: 'warning',   tokenBg: 'warningBg' },
+  submitted: { label: 'Submitted', tokenFg: 'coralDeep', tokenBg: 'coralBg'   },
+  approved:  { label: 'Approved',  tokenFg: 'visaFree',  tokenBg: 'visaFreeBg' },
+  rejected:  { label: 'Rejected',  tokenFg: 'rose',      tokenBg: 'dangerBg'  },
 };
 
 const STATUS_OPTIONS: StatusKey[] = ['preparing', 'submitted', 'approved', 'rejected'];
@@ -187,12 +201,25 @@ function Section({
     <View
       style={[
         styles.section,
-        { backgroundColor: iconColor, borderColor: 'transparent' },
+        { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1 },
       ]}
     >
-      <View style={[styles.sectionHeader, { borderBottomColor: 'rgba(255,255,255,0.20)' }]}>
-        <Icon size={16} strokeWidth={1.5} color={'#FFFFFF'} />
-        <Text style={[styles.sectionTitle, { color: '#FFFFFF' }]}>{title}</Text>
+      <View
+        style={[styles.sectionHeader, { borderBottomColor: colors.line }]}
+      >
+        <View
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 8,
+            backgroundColor: iconColor + '1F',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Icon size={14} strokeWidth={1.8} color={iconColor} />
+        </View>
+        <Text style={[styles.sectionTitle, { color: colors.ink }]}>{title}</Text>
       </View>
       <View style={styles.sectionBody}>{children}</View>
     </View>
@@ -213,9 +240,24 @@ export default function GuideDetailScreen() {
   const updateChecklist = useOfflineMutation(api.visaGuides.updateChecklist);
   const updateStatus = useOfflineMutation(api.visaGuides.updateStatus);
 
+  const chatSheetRef = useRef<VisaChatSheetRef>(null);
+
   const [statusOpen, setStatusOpen] = useState(false);
   const [expandedTip, setExpandedTip] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  // Tabs split the dense scroll into Checklist / Details / Tips. Header
+  // (flag, status pill, progress, quick stats) stays above the tabs and is
+  // always visible. Directional fade-slide on tab swap matches trip detail.
+  type GuideTab = 'Checklist' | 'Details' | 'Tips';
+  const GUIDE_TABS: ReadonlyArray<GuideTab> = ['Checklist', 'Details', 'Tips'];
+  const [activeTab, setActiveTab] = useState<GuideTab>('Checklist');
+  const prevTabRef = useRef<GuideTab>('Checklist');
+  const tabDirection =
+    GUIDE_TABS.indexOf(activeTab) >= GUIDE_TABS.indexOf(prevTabRef.current) ? 1 : -1;
+  useEffect(() => {
+    prevTabRef.current = activeTab;
+  }, [activeTab]);
 
   // Parse guide JSON
   const guideData: GuideData | null = useMemo(
@@ -285,9 +327,8 @@ export default function GuideDetailScreen() {
           { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md },
         ]}
       >
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-          <ArrowLeft color={colors.foreground} size={22} />
-        </TouchableOpacity>
+        <BackButton />
+
         <SkeletonBlock h={60} colors={colors} />
         <SkeletonBlock h={40} colors={colors} />
         <SkeletonBlock h={200} colors={colors} />
@@ -305,9 +346,8 @@ export default function GuideDetailScreen() {
           { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md },
         ]}
       >
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-          <ArrowLeft color={colors.foreground} size={22} />
-        </TouchableOpacity>
+        <BackButton />
+
         <View style={styles.emptyWrap}>
           <FileText color={colors.textMuted} size={48} strokeWidth={1} />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Guide not found</Text>
@@ -334,23 +374,23 @@ export default function GuideDetailScreen() {
   ];
 
   return (
+    <BottomSheetModalProvider>
     <View
       style={[
         styles.container,
         { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md },
       ]}
     >
+      {/* ── Header (outside ScrollView so the back-button shadow doesn't
+          get clipped by the scroll view's bounds on iOS) ─────────── */}
+      <View style={styles.headerRow}>
+        <BackButton />
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* ── Header ────────────────────────────────── */}
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-            <ArrowLeft color={colors.foreground} size={22} />
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.titleRow}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.countryName, { color: colors.foreground }]}>
@@ -361,49 +401,65 @@ export default function GuideDetailScreen() {
             </Text>
           </View>
 
-          {/* Status dropdown */}
+          {/* Status dropdown — soft pill, token-based palette. Status colour
+              comes through in the text + bg tint; no separate dot indicator. */}
           <View style={{ position: 'relative', zIndex: 20 }}>
             <TouchableOpacity
               onPress={() => setStatusOpen(!statusOpen)}
-              style={[styles.statusBadge, { backgroundColor: currentStatus.color }]}
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: colors[currentStatus.tokenBg],
+                  borderColor: colors.line,
+                  borderWidth: 1,
+                },
+              ]}
               activeOpacity={0.7}
             >
-              <Text style={[styles.statusText, { color: '#FFFFFF' }]}>
+              <Text style={[styles.statusText, { color: colors[currentStatus.tokenFg] }]}>
                 {currentStatus.label}
               </Text>
-              <ChevronDown size={14} color="#FFFFFF" strokeWidth={2} />
+              <ChevronDown size={14} color={colors[currentStatus.tokenFg]} strokeWidth={2} />
             </TouchableOpacity>
 
             {statusOpen && (
-              <View
-                style={[
-                  styles.statusDropdown,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                {STATUS_OPTIONS.map((opt) => {
-                  const cfg = STATUS_CONFIG[opt];
-                  const isActive = guide.status === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => handleStatusChange(opt)}
-                      style={[
-                        styles.statusOption,
-                        isActive && { backgroundColor: cfg.bg },
-                      ]}
-                    >
-                      <Text
+              <View style={styles.statusDropdownShadow}>
+                <View
+                  style={[
+                    styles.statusDropdownInner,
+                    { backgroundColor: colors.surface, borderColor: colors.line },
+                  ]}
+                >
+                  {STATUS_OPTIONS.map((opt) => {
+                    const cfg = STATUS_CONFIG[opt];
+                    const isActive = guide.status === opt;
+                    return (
+                      <TouchableOpacity
+                        key={opt}
+                        onPress={() => handleStatusChange(opt)}
                         style={[
-                          styles.statusOptionText,
-                          { color: isActive ? cfg.color : colors.textSecondary },
+                          styles.statusOption,
+                          isActive && { backgroundColor: colors[cfg.tokenBg] },
                         ]}
+                        activeOpacity={0.7}
                       >
-                        {cfg.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Text
+                          style={[
+                            styles.statusOptionText,
+                            {
+                              color: isActive ? colors[cfg.tokenFg] : colors.inkSoft,
+                              fontFamily: isActive
+                                ? FontFamily.condensedSemibold
+                                : FontFamily.condensedMedium,
+                            },
+                          ]}
+                        >
+                          {cfg.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
             )}
           </View>
@@ -418,34 +474,48 @@ export default function GuideDetailScreen() {
           />
         )}
 
+        {/* ── Ask about your visa CTA ───────────────── */}
+        <TouchableOpacity
+          onPress={() => chatSheetRef.current?.open()}
+          activeOpacity={0.75}
+          style={[
+            styles.askCta,
+            { backgroundColor: colors.primaryBg, borderColor: colors.primarySoft },
+          ]}
+        >
+          <MessageSquare size={15} color={colors.primary} strokeWidth={1.8} />
+          <Text style={[styles.askCtaText, { color: colors.primary }]}>
+            Ask about your visa
+          </Text>
+        </TouchableOpacity>
+
         {/* ── Progress overview ─────────────────────── */}
         {totalItems > 0 && (
           <View
             style={[
               styles.progressCard,
-              { backgroundColor: colors.secondary, borderColor: 'transparent' },
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.line,
+                borderWidth: 1,
+              },
             ]}
           >
             <View style={styles.progressLabelRow}>
-              <Text style={[styles.progressLabel, { color: 'rgba(255,255,255,0.70)' }]}>
+              <Text style={[styles.progressLabel, { color: colors.inkMute }]}>
                 {checkedItems} of {totalItems} documents ready
               </Text>
-              <Text
-                style={[
-                  styles.progressPct,
-                  { color: '#FFFFFF' },
-                ]}
-              >
+              <Text style={[styles.progressPct, { color: colors.coralDeep }]}>
                 {progressPct}%
               </Text>
             </View>
-            <View style={[styles.progressTrack, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+            <View style={[styles.progressTrack, { backgroundColor: colors.line }]}>
               <View
                 style={[
                   styles.progressFill,
                   {
                     width: `${progressPct}%`,
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: colors.coral,
                   },
                 ]}
               />
@@ -458,24 +528,29 @@ export default function GuideDetailScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsRow} contentContainerStyle={{ gap: Spacing.sm }}>
             {[
               { icon: Clock, label: 'Processing', value: guideData.processingTime || 'N/A', tint: colors.primary },
-              { icon: DollarSign, label: 'Total Cost', value: guideData.cost?.total || 'N/A', tint: colors.secondary },
-              { icon: MapPin, label: 'Where', value: guideData.whereToApply?.name || 'N/A', tint: colors.accent },
+              { icon: DollarSign, label: 'Total Cost', value: guideData.cost?.total || 'N/A', tint: colors.coralDeep },
+              { icon: MapPin, label: 'Where', value: guideData.whereToApply?.name || 'N/A', tint: colors.primary },
             ].map((stat, idx) => (
               <View
                 key={idx}
                 style={[
                   styles.statCard,
-                  { backgroundColor: stat.tint, borderColor: 'transparent', minWidth: 150 },
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.line,
+                    borderWidth: 1,
+                    minWidth: 150,
+                  },
                 ]}
               >
                 <View style={styles.statIconRow}>
-                  <stat.icon size={13} strokeWidth={1.5} color={'#FFFFFF'} />
-                  <Text style={[styles.statLabel, { color: 'rgba(255,255,255,0.70)' }]}>
+                  <stat.icon size={13} strokeWidth={1.5} color={stat.tint} />
+                  <Text style={[styles.statLabel, { color: colors.inkMute }]}>
                     {stat.label}
                   </Text>
                 </View>
                 <Text
-                  style={[styles.statValue, { color: '#FFFFFF' }]}
+                  style={[styles.statValue, { color: colors.ink }]}
                   numberOfLines={3}
                 >
                   {stat.value}
@@ -485,8 +560,19 @@ export default function GuideDetailScreen() {
           </ScrollView>
         )}
 
+        {/* ── Tabs — Checklist / Details / Tips ─── */}
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <SegmentedControl
+            options={['Checklist', 'Details', 'Tips']}
+            value={activeTab}
+            onChange={(v) => setActiveTab(v as 'Checklist' | 'Details' | 'Tips')}
+            variant="squiggle"
+          />
+        </View>
+
         {/* ── Document Checklist ────────────────────── */}
-        {checklist.length > 0 && (
+        {activeTab === 'Checklist' && checklist.length > 0 && (
+          <Animated.View entering={tabSlideIn(tabDirection * 18)}>
           <Section title="Document Checklist" icon={FileText} iconColor={colors.primary} colors={colors}>
             {allCategories.map((cat) => {
               const items = groupedChecklist[cat];
@@ -501,16 +587,16 @@ export default function GuideDetailScreen() {
                     style={styles.categoryHeader}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.categoryLabel, { color: 'rgba(255,255,255,0.70)' }]}>
+                    <Text style={[styles.categoryLabel, { color: colors.inkMute }]}>
                       {catLabel}
                     </Text>
-                    <Text style={[styles.categoryCount, { color: 'rgba(255,255,255,0.60)' }]}>
+                    <Text style={[styles.categoryCount, { color: colors.inkFaint }]}>
                       {items.filter((i) => i.checked).length}/{items.length}
                     </Text>
                     {isExpanded ? (
-                      <ChevronUp size={14} color="rgba(255,255,255,0.60)" />
+                      <ChevronUp size={14} color={colors.inkFaint}/>
                     ) : (
-                      <ChevronDown size={14} color="rgba(255,255,255,0.60)" />
+                      <ChevronDown size={14} color={colors.inkFaint}/>
                     )}
                   </TouchableOpacity>
 
@@ -521,20 +607,20 @@ export default function GuideDetailScreen() {
                           onPress={() => handleToggle(item.id)}
                           style={[
                             styles.checkItem,
-                            item.checked && { backgroundColor: 'rgba(255,255,255,0.15)' },
+                            item.checked && { backgroundColor: colors.surfaceMuted },
                           ]}
                           activeOpacity={0.7}
                         >
                           {item.checked ? (
-                            <CheckCircle2 size={20} strokeWidth={2} color="rgba(255,255,255,0.90)" />
+                            <CheckCircle2 size={20} strokeWidth={2} color={colors.ink}/>
                           ) : (
-                            <Circle size={20} strokeWidth={1.5} color="rgba(255,255,255,0.50)" />
+                            <Circle size={20} strokeWidth={1.5} color={colors.inkFaint}/>
                           )}
                           <Text
                             style={[
                               styles.checkLabel,
                               {
-                                color: item.checked ? 'rgba(255,255,255,0.50)' : '#FFFFFF',
+                                color: item.checked ? colors.inkFaint : colors.ink,
                                 textDecorationLine: item.checked ? 'line-through' : 'none',
                               },
                             ]}
@@ -551,7 +637,7 @@ export default function GuideDetailScreen() {
                               <Info
                                 size={16}
                                 strokeWidth={1.5}
-                                color="rgba(255,255,255,0.70)"
+                                color={colors.inkMute}
                               />
                             </TouchableOpacity>
                           )}
@@ -562,12 +648,12 @@ export default function GuideDetailScreen() {
                             style={[
                               styles.tipBubble,
                               {
-                                backgroundColor: 'rgba(255,255,255,0.15)',
-                                borderColor: 'rgba(255,255,255,0.20)',
+                                backgroundColor: colors.surfaceMuted,
+                                borderColor: colors.line,
                               },
                             ]}
                           >
-                            <Text style={[styles.tipText, { color: 'rgba(255,255,255,0.80)' }]}>
+                            <Text style={[styles.tipText, { color: colors.inkSoft }]}>
                               {item.tip}
                             </Text>
                           </View>
@@ -578,10 +664,13 @@ export default function GuideDetailScreen() {
               );
             })}
           </Section>
+          </Animated.View>
         )}
 
-        {/* ── Cost Breakdown ────────────────────────── */}
-        {guideData?.cost?.items && guideData.cost.items.length > 0 && (
+        {/* ── Details tab — Cost Breakdown + Timeline + Bank Requirements ── */}
+        {activeTab === 'Details' && (
+          <Animated.View entering={tabSlideIn(tabDirection * 18)}>
+          {guideData?.cost?.items && guideData.cost.items.length > 0 && (
           <Section title="Cost Breakdown" icon={DollarSign} iconColor={colors.secondary} colors={colors}>
             {guideData.cost.items.map((item, idx) => (
               <View
@@ -590,21 +679,21 @@ export default function GuideDetailScreen() {
                   styles.costRow,
                   idx < guideData.cost.items.length - 1 && {
                     borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: 'rgba(255,255,255,0.20)',
+                    borderBottomColor: colors.line,
                   },
                 ]}
               >
-                <Text style={[styles.costItem, { color: 'rgba(255,255,255,0.70)' }]}>
+                <Text style={[styles.costItem, { color: colors.inkMute }]}>
                   {item.item}
                 </Text>
-                <Text style={[styles.costAmount, { color: '#FFFFFF' }]}>
+                <Text style={[styles.costAmount, { color: colors.ink }]}>
                   {item.amount}
                 </Text>
               </View>
             ))}
-            <View style={[styles.costTotal, { borderTopColor: 'rgba(255,255,255,0.30)' }]}>
-              <Text style={[styles.costTotalLabel, { color: '#FFFFFF' }]}>Total</Text>
-              <Text style={[styles.costTotalValue, { color: '#FFFFFF' }]}>
+            <View style={[styles.costTotal, { borderTopColor: colors.line }]}>
+              <Text style={[styles.costTotalLabel, { color: colors.ink }]}>Total</Text>
+              <Text style={[styles.costTotalValue, { color: colors.coralDeep }]}>
                 {guideData.cost.total}
               </Text>
             </View>
@@ -620,8 +709,8 @@ export default function GuideDetailScreen() {
                   style={[
                     styles.timelineDot,
                     {
-                      backgroundColor: 'rgba(255,255,255,0.20)',
-                      borderColor: 'rgba(255,255,255,0.40)',
+                      backgroundColor: colors.coral,
+                      borderColor: colors.coral,
                     },
                   ]}
                 >
@@ -637,9 +726,9 @@ export default function GuideDetailScreen() {
                   </Text>
                 </View>
                 {idx < guideData.timeline.length - 1 && (
-                  <View style={[styles.timelineLine, { backgroundColor: 'rgba(255,255,255,0.20)' }]} />
+                  <View style={[styles.timelineLine, { backgroundColor: colors.line }]} />
                 )}
-                <Text style={[styles.timelineLabel, { color: 'rgba(255,255,255,0.80)' }]}>
+                <Text style={[styles.timelineLabel, { color: colors.inkSoft }]}>
                   {step}
                 </Text>
               </View>
@@ -654,26 +743,26 @@ export default function GuideDetailScreen() {
               <View
                 style={[
                   styles.bankCard,
-                  { backgroundColor: colors.secondary, borderColor: 'transparent' },
+                  { backgroundColor: colors.coralBg, borderColor: colors.line, borderWidth: 1 },
                 ]}
               >
-                <Text style={[styles.bankLabel, { color: 'rgba(255,255,255,0.70)' }]}>
+                <Text style={[styles.bankLabel, { color: colors.inkMute }]}>
                   Minimum Balance
                 </Text>
-                <Text style={[styles.bankValue, { color: '#FFFFFF' }]}>
+                <Text style={[styles.bankValue, { color: colors.coralDeep }]}>
                   {guideData.bankRequirements.minimumBalance}
                 </Text>
               </View>
               <View
                 style={[
                   styles.bankCard,
-                  { backgroundColor: colors.secondary, borderColor: 'transparent' },
+                  { backgroundColor: colors.coralBg, borderColor: colors.line, borderWidth: 1 },
                 ]}
               >
-                <Text style={[styles.bankLabel, { color: 'rgba(255,255,255,0.70)' }]}>
+                <Text style={[styles.bankLabel, { color: colors.inkMute }]}>
                   Months Required
                 </Text>
-                <Text style={[styles.bankValue, { color: '#FFFFFF' }]}>
+                <Text style={[styles.bankValue, { color: colors.coralDeep }]}>
                   {guideData.bankRequirements.monthsRequired} months
                 </Text>
               </View>
@@ -684,29 +773,33 @@ export default function GuideDetailScreen() {
                 key={idx}
                 style={[
                   styles.bankTip,
-                  { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)' },
+                  { backgroundColor: colors.surfaceMuted, borderColor: colors.line },
                 ]}
               >
-                <Lightbulb size={14} strokeWidth={1.5} color="rgba(255,255,255,0.80)" />
-                <Text style={[styles.bankTipText, { color: 'rgba(255,255,255,0.80)' }]}>{tip}</Text>
+                <Lightbulb size={14} strokeWidth={1.5} color={colors.inkSoft} />
+                <Text style={[styles.bankTipText, { color: colors.inkSoft }]}>{tip}</Text>
               </View>
             ))}
           </Section>
         )}
+          </Animated.View>
+        )}
 
-        {/* ── Common Pitfalls ───────────────────────── */}
-        {guideData?.rejectionReasons && guideData.rejectionReasons.length > 0 && (
+        {/* ── Tips tab — Pitfalls + Pro Tips ── */}
+        {activeTab === 'Tips' && (
+          <Animated.View entering={tabSlideIn(tabDirection * 18)}>
+          {guideData?.rejectionReasons && guideData.rejectionReasons.length > 0 && (
           <Section title="Common Pitfalls" icon={AlertTriangle} iconColor={colors.danger} colors={colors}>
             {guideData.rejectionReasons.map((reason, idx) => (
               <View
                 key={idx}
                 style={[
                   styles.pitfallCard,
-                  { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)' },
+                  { backgroundColor: colors.surfaceMuted, borderColor: colors.line },
                 ]}
               >
-                <AlertTriangle size={15} strokeWidth={1.5} color="rgba(255,255,255,0.80)" />
-                <Text style={[styles.pitfallText, { color: 'rgba(255,255,255,0.80)' }]}>
+                <AlertTriangle size={15} strokeWidth={1.5} color={colors.inkSoft} />
+                <Text style={[styles.pitfallText, { color: colors.inkSoft }]}>
                   {reason}
                 </Text>
               </View>
@@ -722,20 +815,32 @@ export default function GuideDetailScreen() {
                 key={idx}
                 style={[
                   styles.proTipCard,
-                  { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.20)' },
+                  { backgroundColor: colors.surfaceMuted, borderColor: colors.line },
                 ]}
               >
-                <Text style={[styles.proTipNum, { color: 'rgba(255,255,255,0.80)' }]}>{idx + 1}</Text>
-                <Text style={[styles.proTipText, { color: 'rgba(255,255,255,0.80)' }]}>{tip}</Text>
+                <Text style={[styles.proTipNum, { color: colors.inkSoft }]}>{idx + 1}</Text>
+                <Text style={[styles.proTipText, { color: colors.inkSoft }]}>{tip}</Text>
               </View>
             ))}
           </Section>
+        )}
+          </Animated.View>
         )}
 
         {/* Bottom spacer */}
         <View style={{ height: insets.bottom + 32 }} />
       </ScrollView>
+
+      {/* ── Visa Chat Sheet ───────────────────────── */}
+      <VisaChatSheet
+        ref={chatSheetRef}
+        guideId={String(guide._id)}
+        countryName={guide.countryName}
+        visaType={guideData?.visaType || guide.visaType}
+        guideJson={guide.guide}
+      />
     </View>
+    </BottomSheetModalProvider>
   );
 }
 
@@ -757,15 +862,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: Spacing.md,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.subtle,
-  },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -784,6 +880,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  // Ask CTA
+  askCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  askCtaText: {
+    fontFamily: FontFamily.condensedSemibold,
+    fontSize: FontSize.sm,
+    letterSpacing: 0.2,
+  },
+
   // Status
   statusBadge: {
     flexDirection: 'row',
@@ -799,22 +913,27 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
-  statusDropdown: {
+  // Outer carries the shadow + matching radius (no overflow hidden) so iOS
+  // doesn't clip the drop shadow. Inner clips the option backgrounds to
+  // the rounded corners. See CLAUDE.md "Drop shadows on rounded cards".
+  statusDropdownShadow: {
     position: 'absolute',
-    top: 40,
+    top: 44,
     right: 0,
-    minWidth: 140,
-    borderRadius: Radius.sm,
+    minWidth: 156,
+    borderRadius: Radius.md,
+    ...Shadows.cardRaised,
+  },
+  statusDropdownInner: {
+    borderRadius: Radius.md,
     borderWidth: 1,
     overflow: 'hidden',
-    ...Shadows.cardRaised,
   },
   statusOption: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
   },
   statusOptionText: {
-    fontFamily: FontFamily.condensedMedium,
     fontSize: FontSize.sm,
   },
 
