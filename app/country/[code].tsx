@@ -11,7 +11,8 @@ import { useTheme } from '@/contexts/theme-context';
 import { useVisa, useVisaData } from '@/contexts/visa-context';
 import { Type } from '@/constants/typography';
 import {
-  Shadows, Spacing, Radius, FontFamily, type ThemeColors,
+  Shadows, Spacing, Radius, FontFamily,
+  type ThemeColors, type VisaHeroCategory,
 } from '@/constants/theme';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Guilloche } from '@/components/ui/Guilloche';
@@ -19,7 +20,6 @@ import { ApprovedStamp } from '@/components/ui/ApprovedStamp';
 import { BestTimeBar } from '@/components/ui/BestTimeBar';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { VisaHeroCard } from '@/components/visa/VisaHeroCard';
-import type { VisaHeroCategory } from '@/constants/theme';
 import {
   resolveCountry,
   visaData as staticVisaData,
