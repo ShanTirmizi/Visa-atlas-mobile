@@ -59,8 +59,7 @@ function ThemedApp() {
     if (isLoading || !visaLoaded) return;
     const inAuthGroup =
       segments[0] === 'sign-in' ||
-      segments[0] === 'forgot-password' ||
-      segments[0] === 'verify-email';
+      segments[0] === 'forgot-password';
     const inOnboarding = segments[0] === 'onboarding';
 
     if (!isAuthenticated && !inAuthGroup) {
@@ -141,7 +140,6 @@ function ThemedApp() {
           <Stack.Screen name="more/terms" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
           <Stack.Screen name="forgot-password" options={{ animation: 'slide_from_right' }} />
-          <Stack.Screen name="verify-email" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="email-connected" options={{ animation: 'none' }} />
           <Stack.Screen name="invite/[code]" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           <Stack.Screen name="trip/invite" options={{ animation: 'slide_from_right' }} />

@@ -355,18 +355,15 @@ export default function SignInScreen() {
     setSignUpError(null);
     setEmailLoading(true);
     try {
-      const result = await signIn('password', {
+      // Email verification is decoupled from sign-up — see convex/auth.ts.
+      // Convex Auth signs the user in directly; the layout auth-gate
+      // redirects to /(tabs)/trips. Email verification is now optional and
+      // surfaced in settings.
+      await signIn('password', {
         email: email.trim().toLowerCase(),
         password,
         flow: 'signUp',
       });
-      if (result && typeof result === 'object' && 'signingIn' in result && !result.signingIn) {
-        router.push({
-          pathname: '/verify-email',
-          params: { email: email.trim().toLowerCase(), password },
-        } as never);
-        return;
-      }
     } catch (error: unknown) {
       const msg = String((error as any)?.message ?? error ?? '').toLowerCase();
       if (msg.includes('already exists')) {

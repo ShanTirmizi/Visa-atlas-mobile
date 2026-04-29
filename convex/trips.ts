@@ -278,6 +278,9 @@ export const getCurrentUser = query({
       name: user.name ?? null,
       image: user.image ?? null,
       email: user.email ?? null,
+      // null until the user verifies their email; settings reads this to
+      // show a "Verify your email" affordance.
+      emailVerificationTime: user.emailVerificationTime ?? null,
     };
   },
 });
