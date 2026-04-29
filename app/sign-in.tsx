@@ -4,14 +4,12 @@ import {
   Text,
   StyleSheet,
   Platform,
-  Alert,
   ActivityIndicator,
   Pressable,
   TextInput,
   KeyboardAvoidingView,
-  ScrollView,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthActions } from '@convex-dev/auth/react';
@@ -24,6 +22,7 @@ import { Guilloche } from '@/components/ui/Guilloche';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { VAStamp } from '@/components/auth/VAStamp';
 import { PasswordStrength } from '@/components/auth/PasswordStrength';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Mode = 'signIn' | 'signUp';
@@ -92,15 +91,45 @@ function UnderlineField({
   );
 }
 
+// ─── Inline Error Banner ──────────────────────────────────────────────────────
+function ErrorBanner({ error, colors }: { error: string | null; colors: ThemeColors }) {
+  if (!error) return null;
+  return (
+    <View
+      style={{
+        backgroundColor: colors.coralBg,
+        borderRadius: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: colors.coralSoft,
+      }}
+    >
+      <Text
+        style={{
+          fontFamily: FontFamily.medium,
+          fontSize: 13,
+          lineHeight: 19,
+          color: colors.coralDeep,
+        }}
+      >
+        {error}
+      </Text>
+    </View>
+  );
+}
+
 // ─── Sign-In Form ─────────────────────────────────────────────────────────────
 interface SignInFormProps {
   colors: ThemeColors;
   onForgotPassword: () => void;
   loading: boolean;
+  error: string | null;
   onSubmit: (email: string, password: string) => void;
 }
 
-function SignInForm({ colors, onForgotPassword, loading, onSubmit }: SignInFormProps) {
+function SignInForm({ colors, onForgotPassword, loading, error, onSubmit }: SignInFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -123,6 +152,8 @@ function SignInForm({ colors, onForgotPassword, loading, onSubmit }: SignInFormP
         secureTextEntry
         colors={colors}
       />
+
+      <ErrorBanner error={error} colors={colors} />
 
       {/* CTA */}
       <Pressable
@@ -165,24 +196,17 @@ function SignInForm({ colors, onForgotPassword, loading, onSubmit }: SignInFormP
 interface SignUpFormProps {
   colors: ThemeColors;
   loading: boolean;
-  onSubmit: (name: string, email: string, password: string) => void;
+  error: string | null;
+  onSubmit: (email: string, password: string) => void;
 }
 
-function SignUpForm({ colors, loading, onSubmit }: SignUpFormProps) {
-  const [name, setName] = useState('');
+function SignUpForm({ colors, loading, error, onSubmit }: SignUpFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   return (
     <View>
-      <UnderlineField
-        label="FULL NAME"
-        value={name}
-        onChangeText={setName}
-        placeholder="As on passport"
-        autoCapitalize="words"
-        colors={colors}
-      />
       <UnderlineField
         label="EMAIL"
         value={email}
@@ -204,16 +228,51 @@ function SignUpForm({ colors, loading, onSubmit }: SignUpFormProps) {
       {/* Password strength meter */}
       {password.length > 0 && <PasswordStrength password={password} />}
 
-      {/* Spacing before button */}
-      <View style={{ height: 24 }} />
+      <UnderlineField
+        label="CONFIRM PASSWORD"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        placeholder="Re-enter your password"
+        secureTextEntry
+        colors={colors}
+      />
+
+      {/* Mismatch hint */}
+      {confirmPassword.length > 0 && password !== confirmPassword ? (
+        <Text
+          style={{
+            fontFamily: FontFamily.displayItalic,
+            fontStyle: 'italic',
+            fontSize: 12.5,
+            color: colors.coralDeep,
+            marginTop: -14,
+            marginBottom: 12,
+          }}
+        >
+          Passwords don't match
+        </Text>
+      ) : null}
+
+      {/* Spacing before error / button */}
+      <View style={{ height: 10 }} />
+
+      <ErrorBanner error={error} colors={colors} />
 
       {/* CTA */}
       <Pressable
-        onPress={() => onSubmit(name, email, password)}
-        disabled={loading}
+        onPress={() => onSubmit(email, password)}
+        disabled={loading || (confirmPassword.length > 0 && password !== confirmPassword)}
         style={({ pressed }) => [
           styles.ctaButton,
-          { backgroundColor: colors.primary, opacity: pressed ? 0.88 : 1 },
+          {
+            backgroundColor: colors.primary,
+            opacity:
+              loading || (confirmPassword.length > 0 && password !== confirmPassword)
+                ? 0.5
+                : pressed
+                  ? 0.88
+                  : 1,
+          },
         ]}
       >
         {loading ? (
@@ -239,6 +298,16 @@ export default function SignInScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
 
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const [signUpError, setSignUpError] = useState<string | null>(null);
+
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y;
+    },
+  });
+
   const redirectTo = makeRedirectUri();
 
   // Compute slide direction before effect updates ref
@@ -251,48 +320,62 @@ export default function SignInScreen() {
   // ─── Auth handlers ────────────────────────────────
   const handleSignIn = async (email: string, password: string) => {
     if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email address.');
+      setSignInError('Please enter your email address.');
       return;
     }
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters.');
+      setSignInError('Password must be at least 8 characters.');
       return;
     }
+    setSignInError(null);
     setEmailLoading(true);
     try {
       await signIn('password', { email: email.trim().toLowerCase(), password, flow: 'signIn' });
-    } catch (error) {
-      console.error('Sign in failed:', error);
-      Alert.alert('Sign In Failed', 'Invalid email or password. Please try again.');
+    } catch (error: unknown) {
+      const msg = String((error as any)?.message ?? error ?? '').toLowerCase();
+      if (msg.includes('invalid') || msg.includes('credentials')) {
+        setSignInError('Email or password is incorrect.');
+      } else {
+        setSignInError('Could not sign in. Please try again.');
+      }
     } finally {
       setEmailLoading(false);
     }
   };
 
-  const handleSignUp = async (name: string, email: string, password: string) => {
-    if (!name.trim()) {
-      Alert.alert('Error', 'Please enter your full name.');
-      return;
-    }
+  const handleSignUp = async (email: string, password: string) => {
     if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email address.');
+      setSignUpError('Please enter your email address.');
       return;
     }
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters.');
+      setSignUpError('Password must be at least 8 characters.');
       return;
     }
+    setSignUpError(null);
     setEmailLoading(true);
     try {
-      await signIn('password', {
+      const result = await signIn('password', {
         email: email.trim().toLowerCase(),
         password,
         flow: 'signUp',
-        name: name.trim(),
       });
-    } catch (_error) {
-      // Signup may need email verification — route to existing OTP flow
-      router.push('/sign-in-email' as never);
+      if (result && typeof result === 'object' && 'signingIn' in result && !result.signingIn) {
+        router.push({
+          pathname: '/verify-email',
+          params: { email: email.trim().toLowerCase(), password },
+        } as never);
+        return;
+      }
+    } catch (error: unknown) {
+      const msg = String((error as any)?.message ?? error ?? '').toLowerCase();
+      if (msg.includes('already exists')) {
+        setSignUpError('An account with this email already exists. Try signing in instead.');
+      } else if (msg.includes('password') || msg.includes('invalid')) {
+        setSignUpError('Could not create your account. Check your details and try again.');
+      } else {
+        setSignUpError('Could not create your account. Please try again.');
+      }
     } finally {
       setEmailLoading(false);
     }
@@ -314,7 +397,7 @@ export default function SignInScreen() {
       }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Google sign in failed';
-      Alert.alert('Sign In Failed', msg);
+      setSignInError(msg);
     } finally {
       setGoogleLoading(false);
     }
@@ -336,7 +419,7 @@ export default function SignInScreen() {
       }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Apple sign in failed';
-      Alert.alert('Sign In Failed', msg);
+      setSignInError(msg);
     } finally {
       setAppleLoading(false);
     }
@@ -354,231 +437,244 @@ export default function SignInScreen() {
       : 'Track visas for 195 countries, plan trips, and never lose a confirmation again.';
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Guilloche background — absolutely positioned behind everything */}
       <Guilloche variant="wavy" color={colors.ink} opacity={0.04} />
 
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: insets.top + 24,
-            paddingBottom: insets.bottom + 24,
-            paddingHorizontal: 22,
-          },
-        ]}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* ── Kicker row ─────────────────────────────── */}
-        <View style={styles.kickerRow}>
-          <Text style={[styles.kicker, { color: colors.inkMute }]}>{kickerText}</Text>
-          <Squiggle width={60} height={8} color={colors.coral} strokeWidth={2} style={{ marginLeft: 8 }} />
-        </View>
-
-        {/* ── Passport stamp ─────────────────────────── */}
-        <View style={styles.stampWrap}>
-          <VAStamp size={120} />
-        </View>
-
-        {/* ── Title ──────────────────────────────────── */}
-        <View style={styles.titleWrap}>
-          <Text style={styles.titleLine}>
-            <Text style={{ fontFamily: FontFamily.display, fontSize: 36, letterSpacing: -36 * 0.02 }}>
-              {titleFirst}
-            </Text>
-            <Text
-              style={{
-                fontFamily: FontFamily.displayItalic,
-                fontStyle: 'italic',
-                fontSize: 36,
-                letterSpacing: -36 * 0.02,
-              }}
-            >
-              {titleItalic}
-            </Text>
-            <Text
-              style={{
-                fontFamily: FontFamily.displayItalic,
-                fontStyle: 'italic',
-                fontSize: 36,
-                color: colors.coral,
-                letterSpacing: -36 * 0.02,
-              }}
-            >
-              .
-            </Text>
-          </Text>
-        </View>
-
-        {/* ── Subtitle ───────────────────────────────── */}
-        <Text style={[styles.subtitle, { color: colors.inkSoft }]}>{subtitle}</Text>
-
-        {/* ── Tab pill ───────────────────────────────── */}
-        <View
-          style={[
-            styles.tabPill,
+        <Animated.ScrollView
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
             {
-              backgroundColor: colors.surface,
-              shadowColor: '#1F1A14',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.10,
-              shadowRadius: 16,
-              elevation: 4,
+              paddingTop: insets.top + 24,
+              paddingBottom: insets.bottom + 24,
+              paddingHorizontal: 22,
             },
           ]}
         >
-          <Pressable
-            onPress={() => setMode('signIn')}
-            style={[
-              styles.tabSeg,
-              mode === 'signIn' && { backgroundColor: colors.ink },
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                { color: mode === 'signIn' ? '#FFFFFF' : colors.inkSoft },
-              ]}
-            >
-              SIGN IN
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setMode('signUp')}
-            style={[
-              styles.tabSeg,
-              mode === 'signUp' && { backgroundColor: colors.ink },
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                { color: mode === 'signUp' ? '#FFFFFF' : colors.inkSoft },
-              ]}
-            >
-              CREATE ACCOUNT
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Coral squiggle under active tab */}
-        <View style={{ flexDirection: 'row', marginTop: 6 }}>
-          <View style={{ flex: 1, alignItems: 'center', opacity: mode === 'signIn' ? 1 : 0 }}>
-            <Squiggle width={56} color={colors.coral} />
+          {/* ── Kicker row ─────────────────────────────── */}
+          <View style={styles.kickerRow}>
+            <Text style={[styles.kicker, { color: colors.inkMute }]}>{kickerText}</Text>
+            <Squiggle width={60} height={8} color={colors.coral} strokeWidth={2} style={{ marginLeft: 8 }} />
           </View>
-          <View style={{ flex: 1, alignItems: 'center', opacity: mode === 'signUp' ? 1 : 0 }}>
-            <Squiggle width={56} color={colors.coral} />
+
+          {/* ── Passport stamp ─────────────────────────── */}
+          <View style={styles.stampWrap}>
+            <VAStamp size={120} />
           </View>
-        </View>
 
-        {/* ── Animated form ──────────────────────────── */}
-        <View style={{ marginTop: 28, overflow: 'hidden' }}>
-          <Animated.View key={mode} entering={tabSlideIn(dx * 18)}>
-            {mode === 'signIn' ? (
-              <SignInForm
-                colors={colors}
-                onForgotPassword={() => router.push('/sign-in-email' as never)}
-                loading={emailLoading}
-                onSubmit={handleSignIn}
-              />
-            ) : (
-              <SignUpForm colors={colors} loading={emailLoading} onSubmit={handleSignUp} />
-            )}
-          </Animated.View>
-        </View>
+          {/* ── Title ──────────────────────────────────── */}
+          <View style={styles.titleWrap}>
+            <Text style={styles.titleLine}>
+              <Text style={{ fontFamily: FontFamily.display, fontSize: 36, letterSpacing: -36 * 0.02 }}>
+                {titleFirst}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 36,
+                  letterSpacing: -36 * 0.02,
+                }}
+              >
+                {titleItalic}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 36,
+                  color: colors.coral,
+                  letterSpacing: -36 * 0.02,
+                }}
+              >
+                .
+              </Text>
+            </Text>
+          </View>
 
-        {/* ── Divider ────────────────────────────────── */}
-        <View style={styles.dividerRow}>
-          <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
-          <Text style={[styles.dividerText, { color: colors.inkMute }]}>
-            {mode === 'signIn' ? 'OR CONTINUE WITH' : 'OR'}
-          </Text>
-          <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
-        </View>
+          {/* ── Subtitle ───────────────────────────────── */}
+          <Text style={[styles.subtitle, { color: colors.inkSoft }]}>{subtitle}</Text>
 
-        {/* ── Social row ─────────────────────────────── */}
-        <View style={styles.socialRow}>
-          {/* Google */}
-          <Pressable
-            onPress={handleGoogleSignIn}
-            disabled={isLoading}
-            style={({ pressed }) => [
-              styles.socialBtn,
+          {/* ── Tab pill ───────────────────────────────── */}
+          <View
+            style={[
+              styles.tabPill,
               {
                 backgroundColor: colors.surface,
-                borderColor: colors.line,
-                borderWidth: 1,
-                opacity: pressed ? 0.84 : 1,
+                shadowColor: '#1F1A14',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.10,
+                shadowRadius: 16,
+                elevation: 4,
               },
             ]}
           >
-            {googleLoading ? (
-              <ActivityIndicator color={colors.ink} size="small" />
-            ) : (
-              <>
-                <View style={styles.googleLogoWrap}>
-                  <Text style={styles.googleG}>G</Text>
-                </View>
-                <Text style={[styles.socialBtnText, { color: colors.ink }]}>Google</Text>
-              </>
-            )}
-          </Pressable>
+            <Pressable
+              onPress={() => setMode('signIn')}
+              style={[
+                styles.tabSeg,
+                mode === 'signIn' && { backgroundColor: colors.ink },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: mode === 'signIn' ? '#FFFFFF' : colors.inkSoft },
+                ]}
+              >
+                SIGN IN
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setMode('signUp')}
+              style={[
+                styles.tabSeg,
+                mode === 'signUp' && { backgroundColor: colors.ink },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: mode === 'signUp' ? '#FFFFFF' : colors.inkSoft },
+                ]}
+              >
+                CREATE ACCOUNT
+              </Text>
+            </Pressable>
+          </View>
 
-          {/* Apple */}
-          <Pressable
-            onPress={handleAppleSignIn}
-            disabled={isLoading}
-            style={({ pressed }) => [
-              styles.socialBtn,
-              { backgroundColor: '#000000', opacity: pressed ? 0.84 : 1 },
-            ]}
-          >
-            {appleLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <>
-                <Text style={styles.appleIcon}>{''}</Text>
-                <Text style={[styles.socialBtnText, { color: '#FFFFFF' }]}>Apple</Text>
-              </>
-            )}
-          </Pressable>
-        </View>
+          {/* Coral squiggle under active tab */}
+          <View style={{ flexDirection: 'row', marginTop: 6 }}>
+            <View style={{ flex: 1, alignItems: 'center', opacity: mode === 'signIn' ? 1 : 0 }}>
+              <Squiggle width={56} color={colors.coral} />
+            </View>
+            <View style={{ flex: 1, alignItems: 'center', opacity: mode === 'signUp' ? 1 : 0 }}>
+              <Squiggle width={56} color={colors.coral} />
+            </View>
+          </View>
 
-        {/* ── ToS / Privacy footer ───────────────────── */}
-        <View style={styles.footerRow}>
-          <Text style={[styles.footerText, { color: colors.inkMute }]}>
-            {mode === 'signUp' ? 'By creating an account you agree to our ' : 'By signing in you agree to our '}
+          {/* ── Animated form ──────────────────────────── */}
+          <View style={{ marginTop: 28, overflow: 'hidden' }}>
+            <Animated.View key={mode} entering={tabSlideIn(dx * 18)}>
+              {mode === 'signIn' ? (
+                <SignInForm
+                  colors={colors}
+                  onForgotPassword={() => router.push('/sign-in-email' as never)}
+                  loading={emailLoading}
+                  error={signInError}
+                  onSubmit={handleSignIn}
+                />
+              ) : (
+                <SignUpForm
+                  colors={colors}
+                  loading={emailLoading}
+                  error={signUpError}
+                  onSubmit={handleSignUp}
+                />
+              )}
+            </Animated.View>
+          </View>
+
+          {/* ── Divider ────────────────────────────────── */}
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
+            <Text style={[styles.dividerText, { color: colors.inkMute }]}>
+              {mode === 'signIn' ? 'OR CONTINUE WITH' : 'OR'}
+            </Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
+          </View>
+
+          {/* ── Social row ─────────────────────────────── */}
+          <View style={styles.socialRow}>
+            {/* Google */}
+            <Pressable
+              onPress={handleGoogleSignIn}
+              disabled={isLoading}
+              style={({ pressed }) => [
+                styles.socialBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.line,
+                  borderWidth: 1,
+                  opacity: pressed ? 0.84 : 1,
+                },
+              ]}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color={colors.ink} size="small" />
+              ) : (
+                <>
+                  <View style={styles.googleLogoWrap}>
+                    <Text style={styles.googleG}>G</Text>
+                  </View>
+                  <Text style={[styles.socialBtnText, { color: colors.ink }]}>Google</Text>
+                </>
+              )}
+            </Pressable>
+
+            {/* Apple */}
+            <Pressable
+              onPress={handleAppleSignIn}
+              disabled={isLoading}
+              style={({ pressed }) => [
+                styles.socialBtn,
+                { backgroundColor: '#000000', opacity: pressed ? 0.84 : 1 },
+              ]}
+            >
+              {appleLoading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Text style={styles.appleIcon}>{''}</Text>
+                  <Text style={[styles.socialBtnText, { color: '#FFFFFF' }]}>Apple</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+
+          {/* ── ToS / Privacy footer ───────────────────── */}
+          <View style={styles.footerRow}>
+            <Text style={[styles.footerText, { color: colors.inkMute }]}>
+              {mode === 'signUp' ? 'By creating an account you agree to our ' : 'By signing in you agree to our '}
+            </Text>
+            <Pressable
+              onPress={() => router.push('/more/terms' as never)}
+              accessibilityRole="link"
+              accessibilityLabel="Terms of Service"
+              hitSlop={6}
+            >
+              <Text style={[styles.footerLink, { color: colors.inkSoft }]}>Terms</Text>
+            </Pressable>
+            <Text style={[styles.footerText, { color: colors.inkMute }]}> & </Text>
+            <Pressable
+              onPress={() => router.push('/more/privacy-policy' as never)}
+              accessibilityRole="link"
+              accessibilityLabel="Privacy Policy"
+              hitSlop={6}
+            >
+              <Text style={[styles.footerLink, { color: colors.inkSoft }]}>Privacy</Text>
+            </Pressable>
+            <Text style={[styles.footerText, { color: colors.inkMute }]}>.</Text>
+          </View>
+
+          {/* ── Bottom mono caps line ──────────────────── */}
+          <Text style={[styles.estLine, { color: colors.inkFaint }]}>
+            EST · 2026 · YOUR PASSPORT, ORGANIZED
           </Text>
-          <Pressable
-            onPress={() => router.push('/more/terms' as never)}
-            accessibilityRole="link"
-            accessibilityLabel="Terms of Service"
-            hitSlop={6}
-          >
-            <Text style={[styles.footerLink, { color: colors.inkSoft }]}>Terms</Text>
-          </Pressable>
-          <Text style={[styles.footerText, { color: colors.inkMute }]}> & </Text>
-          <Pressable
-            onPress={() => router.push('/more/privacy-policy' as never)}
-            accessibilityRole="link"
-            accessibilityLabel="Privacy Policy"
-            hitSlop={6}
-          >
-            <Text style={[styles.footerLink, { color: colors.inkSoft }]}>Privacy</Text>
-          </Pressable>
-          <Text style={[styles.footerText, { color: colors.inkMute }]}>.</Text>
-        </View>
+        </Animated.ScrollView>
+      </KeyboardAvoidingView>
 
-        {/* ── Bottom mono caps line ──────────────────── */}
-        <Text style={[styles.estLine, { color: colors.inkFaint }]}>
-          EST · 2026 · YOUR PASSPORT, ORGANIZED
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      {/* Glass header overlay — always on top */}
+      <TopSafeAreaBlur />
+    </View>
   );
 }
 
