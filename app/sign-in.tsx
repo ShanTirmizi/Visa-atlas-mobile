@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, ActivityIndicator, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Globe, Mail, Plane, MapPin } from 'lucide-react-native';
@@ -22,18 +22,24 @@ export default function SignInScreen() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
+      console.error('[GoogleSignIn] redirectTo=', redirectTo);
       const { redirect } = await signIn('google', { redirectTo });
+      console.error('[GoogleSignIn] signIn returned redirect=', redirect?.toString());
       if (Platform.OS === 'web') return;
       if (redirect) {
         const result = await openAuthSessionAsync(redirect.toString(), redirectTo);
+        console.error('[GoogleSignIn] openAuthSessionAsync result type=', result.type, 'url=', (result as any).url);
         if (result.type === 'success') {
           const code = new URL(result.url).searchParams.get('code');
+          console.error('[GoogleSignIn] extracted code=', code ? 'PRESENT' : 'MISSING');
           if (code) {
             await signIn('google', { code });
+            console.error('[GoogleSignIn] final signIn with code completed');
           }
         }
       }
     } catch (error: any) {
+      console.error('[GoogleSignIn] ERROR:', error?.message || error);
       Alert.alert('Sign In Failed', error?.message || 'Google sign in failed');
     } finally {
       setGoogleLoading(false);
@@ -192,23 +198,33 @@ export default function SignInScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Footer */}
-      <Text style={[styles.footer, { color: colors.textMuted }]}>
-        By continuing, you agree to our{' '}
-        <Text
-          style={[styles.footerLink, { color: colors.primary }]}
-          onPress={() => router.push('/more/terms' as any)}
-        >
-          Terms of Service
+      {/* Footer — Pressable per link (nested Text onPress is unreliable on iOS) */}
+      <View style={styles.footerRow}>
+        <Text style={[styles.footer, { color: colors.textMuted }]}>
+          By continuing, you agree to our{' '}
         </Text>
-        {' '}and{' '}
-        <Text
-          style={[styles.footerLink, { color: colors.primary }]}
-          onPress={() => router.push('/more/privacy-policy' as any)}
+        <Pressable
+          onPress={() => router.push('/more/terms' as never)}
+          accessibilityRole="link"
+          accessibilityLabel="Terms of Service"
+          hitSlop={6}
         >
-          Privacy Policy
-        </Text>
-      </Text>
+          <Text style={[styles.footerLink, { color: colors.primary }]}>
+            Terms of Service
+          </Text>
+        </Pressable>
+        <Text style={[styles.footer, { color: colors.textMuted }]}> and </Text>
+        <Pressable
+          onPress={() => router.push('/more/privacy-policy' as never)}
+          accessibilityRole="link"
+          accessibilityLabel="Privacy Policy"
+          hitSlop={6}
+        >
+          <Text style={[styles.footerLink, { color: colors.primary }]}>
+            Privacy Policy
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -346,11 +362,16 @@ const styles = StyleSheet.create({
   },
 
   // Footer
+  footerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+  },
   footer: {
     fontFamily: FontFamily.regular,
     fontSize: 11,
-    textAlign: 'center',
-    marginTop: Spacing.lg,
   },
   footerLink: {
     fontFamily: FontFamily.semibold,
