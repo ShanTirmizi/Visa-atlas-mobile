@@ -76,6 +76,16 @@ export default defineSchema({
     userId: v.optional(v.id("users")),
   }).index("by_guide", ["guideId", "timestamp"]),
 
+  // ── Email verification codes ──
+  // Post-signin email verification (separate from Convex Auth's signup-time
+  // verify flow which we removed). We send a 6-digit code, store it here,
+  // and clear it once verified.
+  emailVerificationCodes: defineTable({
+    userId: v.id("users"),
+    code: v.string(),
+    expiresAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   // ── Visa Guides ──
   visaGuides: defineTable({
     userId: v.id("users"),
