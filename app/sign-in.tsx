@@ -567,7 +567,7 @@ export default function SignInScreen() {
               {mode === 'signIn' ? (
                 <SignInForm
                   colors={colors}
-                  onForgotPassword={() => router.push('/sign-in-email' as never)}
+                  onForgotPassword={() => router.push('/forgot-password' as never)}
                   loading={emailLoading}
                   error={signInError}
                   onSubmit={handleSignIn}

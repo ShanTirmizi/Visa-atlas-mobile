@@ -21,6 +21,13 @@ import {
   JetBrainsMono_400Regular,
   JetBrainsMono_500Medium,
 } from '@expo-google-fonts/jetbrains-mono';
+import {
+  Fraunces_500Medium,
+  Fraunces_500Medium_Italic,
+  Fraunces_600SemiBold,
+  Fraunces_600SemiBold_Italic,
+  Fraunces_700Bold,
+} from '@expo-google-fonts/fraunces';
 
 // Providers
 import { ConvexProvider } from '@/contexts/ConvexProvider';
@@ -31,6 +38,7 @@ import { EmailProvider } from '@/contexts/email-context';
 import { ToastProvider } from '@/contexts/toast-context';
 import { OfflineProvider } from '@/contexts/offline-context';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
+import { MapPrewarm } from '@/components/map/MapPrewarm';
 import { FontFamily, FontSize } from '@/constants/theme';
 import type { ThemeColors } from '@/constants/theme';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -49,7 +57,10 @@ function ThemedApp() {
   // Auth gate: redirect based on auth state
   useEffect(() => {
     if (isLoading || !visaLoaded) return;
-    const inAuthGroup = segments[0] === 'sign-in' || segments[0] === 'sign-in-email';
+    const inAuthGroup =
+      segments[0] === 'sign-in' ||
+      segments[0] === 'forgot-password' ||
+      segments[0] === 'verify-email';
     const inOnboarding = segments[0] === 'onboarding';
 
     if (!isAuthenticated && !inAuthGroup) {
@@ -68,30 +79,37 @@ function ThemedApp() {
   // Show loading screen while checking auth
   if (isLoading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F2F2F0' }]}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FBFAF7' }]}>
         <StatusBar style="dark" />
         <Image
           source={require('@/assets/icon.png')}
-          style={{ width: 120, height: 120, borderRadius: 28 }}
+          style={{ width: 140, height: 140, borderRadius: 32 }}
           resizeMode="contain"
         />
       </View>
     );
   }
 
+  // Pre-warm the Atlas map once the user is past auth + onboarding so the
+  // first tap on the Atlas tab finds a hot MapLibre tile cache and a hot
+  // GeoJSON module cache. Renders a 1×1 hidden MapView and dynamically
+  // imports the country GeoJSON pipeline. See `MapPrewarm` for details.
+  const shouldPrewarmMap = isAuthenticated && onboarded && visaLoaded;
+
   return (
     <View style={styles.container}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <OfflineIndicator />
+      {shouldPrewarmMap ? <MapPrewarm /> : null}
       <ErrorBoundary>
         <Stack
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: colors.background },
-            animation: 'fade',
+            animation: 'slide_from_right',
           }}
         >
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
           <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
           <Stack.Screen
             name="trip/[id]"
@@ -122,7 +140,8 @@ function ThemedApp() {
           <Stack.Screen name="more/privacy-policy" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="more/terms" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
-          <Stack.Screen name="sign-in-email" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="forgot-password" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="verify-email" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="email-connected" options={{ animation: 'none' }} />
           <Stack.Screen name="invite/[code]" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           <Stack.Screen name="trip/invite" options={{ animation: 'slide_from_right' }} />
@@ -140,6 +159,11 @@ export default function RootLayout() {
     Inter_700Bold,
     JetBrainsMono_400Regular,
     JetBrainsMono_500Medium,
+    Fraunces_500Medium,
+    Fraunces_500Medium_Italic,
+    Fraunces_600SemiBold,
+    Fraunces_600SemiBold_Italic,
+    Fraunces_700Bold,
   });
 
   useEffect(() => {
