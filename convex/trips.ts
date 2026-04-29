@@ -84,6 +84,11 @@ export const createTrip = mutation({
     capital: v.string(),
     visaCategory: v.string(),
     visaNotes: v.optional(v.string()),
+    visaCost: v.optional(v.string()),
+    visaProcessingTime: v.optional(v.string()),
+    visaForms: v.optional(v.string()),
+    visaPassportValidity: v.optional(v.string()),
+    visaEntries: v.optional(v.string()),
     surpriseMe: v.optional(v.boolean()),
     vibeTag: v.optional(v.string()),
     companions: v.optional(v.string()),
@@ -103,6 +108,10 @@ export const createTrip = mutation({
     isMultiCountry: v.optional(v.boolean()),
     routeTitle: v.optional(v.string()),
     legs: v.optional(v.string()),
+    // Optional dates — when omitted the trip lands in "Dreaming". When set
+    // it shows up in Upcoming or Past based on whether the start is past.
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
@@ -118,6 +127,18 @@ export const createTrip = mutation({
     });
 
     return tripId;
+  },
+});
+
+/** Pin or un-pin a trip via the heart button on the trip detail header. */
+export const setTripStarred = mutation({
+  args: {
+    id: v.id("trips"),
+    starred: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await checkTripPermission(ctx, args.id, "editor");
+    await ctx.db.patch(args.id, { starred: args.starred });
   },
 });
 
@@ -155,6 +176,11 @@ export const updateTripField = mutation({
       "carRental",
       "seasonalGuide",
       "companions",
+      "visaCost",
+      "visaProcessingTime",
+      "visaForms",
+      "visaPassportValidity",
+      "visaEntries",
     ];
 
     if (!allowedFields.includes(args.field)) {
