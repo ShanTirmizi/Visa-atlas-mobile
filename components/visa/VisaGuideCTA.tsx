@@ -31,7 +31,7 @@ export function VisaGuideCTA({ kicker, label, accent, onPress, style }: VisaGuid
           alignItems: 'center',
           gap: 12,
           opacity: pressed ? 0.9 : 1,
-          ...Shadows.card,
+          ...Shadows.cardWarm,
         },
         style,
       ]}
@@ -43,7 +43,7 @@ export function VisaGuideCTA({ kicker, label, accent, onPress, style }: VisaGuid
           borderRadius: 16,
           borderWidth: 1,
           borderColor: accent,
-          backgroundColor: colors.solidOverlay,
+          backgroundColor: colors.solidOverlayFaint,
           alignItems: 'center',
           justifyContent: 'center',
         }}

@@ -8,6 +8,7 @@ interface GuillocheProps {
   color?: string;
   opacity?: number;
   style?: StyleProp<ViewStyle>;
+  /** Only used by variant='wavy'. Controls wave row count. Default 'med'. */
   density?: 'tight' | 'med' | 'loose';
 }
 
@@ -46,7 +47,7 @@ export function Guilloche({
       <View pointerEvents="none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity }, style]}>
         <Svg width="100%" height="100%" viewBox="0 0 360 600" preserveAspectRatio="xMidYMid slice">
           {Array.from({ length: rows }).map((_, i) => {
-            const y = i * spacing + 30;
+            const y = spacing / 2 + i * spacing;
             const phase = (i % 2) * 18;
             return (
               <Path

@@ -113,6 +113,7 @@ export const LightColors = {
   solidText: '#FFFFFF',
   solidTextSub: 'rgba(255,255,255,0.80)',
   solidTextMuted: 'rgba(255,255,255,0.60)',
+  solidOverlayFaint: 'rgba(255,255,255,0.06)',
   solidOverlay: 'rgba(255,255,255,0.20)',
   solidOverlayMd: 'rgba(255,255,255,0.25)',
   solidBorder: 'rgba(255,255,255,0.15)',
@@ -302,6 +303,15 @@ export const Shadows = {
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.10,
     shadowRadius: 26,
+    elevation: 5,
+  },
+  // Warm-toned variant of `card` — for elements sitting in/near the warm
+  // hero cards. Uses #1F1A14 ink instead of pure black per CLAUDE.md.
+  cardWarm: {
+    shadowColor: '#1F1A14',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
     elevation: 5,
   },
   // Subtle — 2px lift

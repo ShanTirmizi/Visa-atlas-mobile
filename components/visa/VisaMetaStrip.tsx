@@ -58,7 +58,7 @@ export function VisaMetaStrip({ items, color, divider, style }: VisaMetaStripPro
               fontWeight: '500',
               color,
               letterSpacing: -18 * 0.014,
-              lineHeight: 18,
+              lineHeight: 24,
               marginTop: 4,
             }}
             numberOfLines={1}
