@@ -7,21 +7,38 @@ interface Props {
   password: string;
 }
 
-/** Returns 0..4 strength score + a feedback string. */
+/** Returns 0..4 strength score + a feedback string that names what is
+ *  actually missing (not what the score happens to be). */
 export function scorePassword(pw: string): { score: 0 | 1 | 2 | 3 | 4; feedback: string } {
   if (!pw) return { score: 0, feedback: 'Use at least 8 characters' };
-  let s = 0;
-  if (pw.length >= 8) s++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
-  if (/\d/.test(pw)) s++;
-  if (/[^A-Za-z0-9]/.test(pw)) s++;
-  const score = Math.min(s, 4) as 0 | 1 | 2 | 3 | 4;
-  const feedback =
-    score === 0 ? 'Use at least 8 characters'
-    : score === 1 ? 'Add upper + lower case'
-    : score === 2 ? 'Add a number'
-    : score === 3 ? 'Add a number or symbol'
-    : 'Strong password';
+
+  const hasLength = pw.length >= 8;
+  const hasUpperAndLower = /[A-Z]/.test(pw) && /[a-z]/.test(pw);
+  const hasDigit = /\d/.test(pw);
+  const hasSymbol = /[^A-Za-z0-9]/.test(pw);
+
+  const score = ((hasLength ? 1 : 0)
+    + (hasUpperAndLower ? 1 : 0)
+    + (hasDigit ? 1 : 0)
+    + (hasSymbol ? 1 : 0)) as 0 | 1 | 2 | 3 | 4;
+
+  const missing: string[] = [];
+  if (!hasLength) missing.push('8+ characters');
+  if (!hasUpperAndLower) missing.push('upper + lower case');
+  if (!hasDigit) missing.push('a number');
+  if (!hasSymbol) missing.push('a symbol');
+
+  let feedback: string;
+  if (missing.length === 0) {
+    feedback = 'Strong password';
+  } else if (missing.length === 1) {
+    feedback = `Add ${missing[0]}`;
+  } else if (missing.length === 2) {
+    feedback = `Add ${missing[0]} and ${missing[1]}`;
+  } else {
+    feedback = `Add ${missing.slice(0, -1).join(', ')}, and ${missing[missing.length - 1]}`;
+  }
+
   return { score, feedback };
 }
 
