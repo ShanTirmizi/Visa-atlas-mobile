@@ -5,8 +5,11 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useConvexAuth, useQuery, useMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { type CountryVisa } from '@/data/visaData';
 
 // ──────────────────────────────────────────────
@@ -151,6 +154,18 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
   const [onboarded, setOnboardedState] = useState(false);
   const [residence, setResidenceState] = useState<string | null>(null);
 
+  // ── Convex: server-truth onboarded flag ────────────────────────────
+  // AsyncStorage is device-scoped, so without this the previous account's
+  // onboarded flag would survive a sign-out + new sign-up on the same
+  // device. We treat the user-profile doc as the source of truth and fall
+  // back to the local cache only while the query is still resolving.
+  const { isAuthenticated } = useConvexAuth();
+  const remoteProfile = useQuery(
+    api.userProfiles.getCurrentProfile,
+    isAuthenticated ? {} : 'skip',
+  );
+  const markOnboardedMutation = useMutation(api.userProfiles.markOnboarded);
+
   // Load all persisted data on mount
   useEffect(() => {
     Promise.all([
@@ -247,7 +262,52 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
   const setOnboarded = useCallback((value: boolean) => {
     setOnboardedState(value);
     AsyncStorage.setItem(KEYS.onboarded, String(value));
-  }, []);
+    // Persist on the server so the flag follows the user, not the device.
+    if (value && isAuthenticated) {
+      void markOnboardedMutation({}).catch((err) => {
+        console.warn('markOnboarded failed', err);
+      });
+    }
+  }, [isAuthenticated, markOnboardedMutation]);
+
+  // Effective `onboarded` — server-truth when authenticated, local cache
+  // otherwise. While the profile query is still resolving (`undefined`)
+  // we fall back to the cache to avoid flickering the onboarding flow on
+  // every cold start.
+  const effectiveOnboarded = useMemo(() => {
+    if (!isAuthenticated) return false;
+    if (remoteProfile === undefined) return onboarded;
+    return remoteProfile?.onboarded === true;
+  }, [isAuthenticated, remoteProfile, onboarded]);
+
+  // Sign-out cleanup: when the auth state transitions from authed → not,
+  // clear the user-scoped cache so the next account on this device starts
+  // fresh. Without this, a fast new-account flow on the same device would
+  // see the previous user's passports / visa map / onboarded flag.
+  const wasAuthedRef = useRef(isAuthenticated);
+  useEffect(() => {
+    if (wasAuthedRef.current && !isAuthenticated) {
+      AsyncStorage.multiRemove([
+        KEYS.passports,
+        KEYS.visaMap,
+        KEYS.onboarded,
+        KEYS.residence,
+        KEYS.heldVisas,
+        KEYS.favorites,
+        KEYS.visited,
+        KEYS.expiryDates,
+      ]).catch(() => {});
+      setPassportsState([]);
+      setVisaMapState(null);
+      setOnboardedState(false);
+      setResidenceState(null);
+      setHeldVisasState([]);
+      setFavoritesState([]);
+      setVisitedState([]);
+      setExpiryDatesState({});
+    }
+    wasAuthedRef.current = isAuthenticated;
+  }, [isAuthenticated]);
 
   const setResidence = useCallback((code: string | null) => {
     setResidenceState(code);
@@ -302,10 +362,10 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       setExpiryDate,
       removeExpiryDate,
       getExpiryDate,
-      loaded,
+      loaded: loaded && (!isAuthenticated || remoteProfile !== undefined),
       passports,
       visaMap: visaMapData,
-      onboarded,
+      onboarded: effectiveOnboarded,
       setPassports,
       setVisaMap,
       setOnboarded,
@@ -327,9 +387,11 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       removeExpiryDate,
       getExpiryDate,
       loaded,
+      isAuthenticated,
+      remoteProfile,
       passports,
       visaMapData,
-      onboarded,
+      effectiveOnboarded,
       setPassports,
       setVisaMap,
       setOnboarded,

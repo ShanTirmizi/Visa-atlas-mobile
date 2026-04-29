@@ -55,12 +55,11 @@ export default function VisaSelectorScreen() {
 
   return (
     <OnboardingScaffold
-      step={2}
+      step={3}
       totalSteps={3}
-      heroTone="sunset"
-      title="Do you hold any of these?"
-      body="These can unlock visa-free travel to more countries."
-      ctaLabel="Continue"
+      title="Hold any of these?"
+      body="Residency, settled status, or a long-stay visa can unlock visa-free travel to dozens more countries. Tap any that apply."
+      ctaLabel="Build my atlas"
       onCta={handleContinue}
     >
       {/* Visa cards */}
@@ -78,8 +77,8 @@ export default function VisaSelectorScreen() {
                 styles.card,
                 Shadows.subtle,
                 {
-                  backgroundColor: isActive ? colors.surfaceMuted : colors.surface,
-                  borderColor: isActive ? colors.ink : colors.line,
+                  backgroundColor: isActive ? colors.coralBg : colors.surface,
+                  borderColor: isActive ? colors.coral : colors.line,
                   borderWidth: isActive ? 1.5 : 1,
                 },
               ]}
@@ -88,13 +87,22 @@ export default function VisaSelectorScreen() {
               <Text style={styles.cardFlag}>{v.flag}</Text>
 
               <View style={styles.cardTextWrap}>
-                <Text style={[Type.title14, { color: colors.ink }]}>
+                <Text
+                  style={{
+                    fontFamily: 'Fraunces_500Medium_Italic',
+                    fontStyle: 'italic',
+                    fontSize: 16,
+                    letterSpacing: -16 * 0.012,
+                    color: colors.ink,
+                  }}
+                >
                   {v.label}
+                  {isActive ? <Text style={{ color: colors.coral }}>.</Text> : null}
                 </Text>
                 <Text
                   style={[
                     Type.body13,
-                    { color: colors.inkMute, marginTop: 2 },
+                    { color: colors.inkMute, marginTop: 2, lineHeight: 18 },
                   ]}
                   numberOfLines={2}
                 >
@@ -107,8 +115,8 @@ export default function VisaSelectorScreen() {
                 style={[
                   styles.checkIndicator,
                   isActive
-                    ? { backgroundColor: colors.ink, borderColor: colors.ink }
-                    : { backgroundColor: 'transparent', borderColor: colors.surfaceMuted },
+                    ? { backgroundColor: colors.coral, borderColor: colors.coral }
+                    : { backgroundColor: 'transparent', borderColor: colors.line },
                 ]}
               >
                 {isActive && (
@@ -119,7 +127,7 @@ export default function VisaSelectorScreen() {
           );
         })}
 
-        {/* "None of these" option */}
+        {/* "None of these" — italic Fraunces pill */}
         <TouchableOpacity
           onPress={clearAll}
           activeOpacity={0.7}
@@ -127,21 +135,21 @@ export default function VisaSelectorScreen() {
             styles.nonePill,
             {
               backgroundColor:
-                selected.size === 0 ? colors.surfaceMuted : colors.surface,
+                selected.size === 0 ? colors.coralBg : 'transparent',
               borderColor:
-                selected.size === 0 ? colors.ink : colors.line,
-              borderWidth: selected.size === 0 ? 1.5 : 1,
+                selected.size === 0 ? colors.coralDeep : colors.line,
+              borderWidth: 1,
             },
           ]}
         >
           <Text
-            style={[
-              Type.title14,
-              {
-                color:
-                  selected.size === 0 ? colors.ink : colors.inkMute,
-              },
-            ]}
+            style={{
+              fontFamily: 'Fraunces_500Medium_Italic',
+              fontStyle: 'italic',
+              fontSize: 14,
+              letterSpacing: -14 * 0.012,
+              color: selected.size === 0 ? colors.coralDeep : colors.inkMute,
+            }}
           >
             None of these
           </Text>

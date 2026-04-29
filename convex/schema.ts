@@ -221,4 +221,16 @@ export default defineSchema({
     userId: v.id("users"),
     lastSeen: v.number(),
   }).index("by_trip", ["tripId"]),
+
+  // ── User Profiles ──
+  // Per-user flags that don't fit in the auth-managed users table. The auth
+  // users doc is owned by @convex-dev/auth, so anything app-specific (like
+  // whether the user has finished onboarding) lives here. Tied to userId so
+  // it survives across devices and sign-outs — and conversely, AsyncStorage
+  // values from a previous account on the same device never leak in.
+  userProfiles: defineTable({
+    userId: v.id("users"),
+    onboarded: v.boolean(),
+    onboardedAt: v.optional(v.number()),
+  }).index("by_user", ["userId"]),
 });

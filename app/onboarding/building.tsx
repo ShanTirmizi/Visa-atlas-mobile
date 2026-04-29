@@ -20,7 +20,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Globe, AlertTriangle } from 'lucide-react-native';
+import { AlertTriangle } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -33,10 +33,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
-import { Shadows } from '@/constants/theme';
+import { FontFamily, Shadows } from '@/constants/theme';
 import { endpoints } from '@/constants/api';
 import { passportCountries } from '@/data/passportCountries';
 import { OnboardingScaffold } from '@/components/onboarding/OnboardingScaffold';
+import { VAStamp } from '@/components/auth/VAStamp';
+import { Squiggle } from '@/components/ui/Squiggle';
 import { Type } from '@/constants/typography';
 
 // ── Alpha-3 → flag emoji ─────────────────────────────────────────────────
@@ -68,13 +70,14 @@ function getFlag(a3: string): string {
   return String.fromCodePoint(...a2.split('').map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
-// ── Loading messages ─────────────────────────────────────────────────────
+// ── Loading messages — travel-flavoured rotation ───────────────────────
 const LOAD_MSGS = [
-  'Checking visa requirements...',
-  'Analyzing 195 countries...',
-  'Applying your visa upgrades...',
-  'Calculating access...',
-  'Almost ready...',
+  'Checking visa requirements',
+  'Analysing 195 countries',
+  'Applying your visa upgrades',
+  'Cross-referencing borders',
+  'Stamping your passport map',
+  'Almost ready',
 ];
 
 // ── Summary stats ────────────────────────────────────────────────────────
@@ -252,47 +255,51 @@ export default function BuildingScreen() {
 
   const passportFlags = visa.passports.map((code) => getFlag(code)).join('  ');
 
-  const ctaLabel = state === 'loading' ? 'Building your map…' : 'Start Exploring';
+  const ctaLabel = state === 'loading' ? 'Building your map…' : 'Start exploring';
 
   return (
     <OnboardingScaffold
       step={3}
       totalSteps={3}
-      heroTone="forest"
-      title={state === 'loading' ? 'Building your visa map…' : "You're all set!"}
+      title={state === 'loading' ? 'Building your atlas' : "You're all set"}
       body={
         state === 'loading'
           ? undefined
-          : `${visa.passports.map((c) => passportCountries.find((p) => p.code === c)?.name ?? c).join(' + ')} passport${visa.passports.length > 1 ? 's' : ''}`
+          : `${visa.passports.map((c) => passportCountries.find((p) => p.code === c)?.name ?? c).join(' + ')} passport${visa.passports.length > 1 ? 's' : ''} — and a world to explore.`
       }
       ctaLabel={ctaLabel}
       onCta={state === 'summary' ? handleStartExploring : () => undefined}
+      ctaDisabled={state === 'loading'}
+      showBack={state === 'loading' ? false : true}
     >
-      {/* ── Loading state ── */}
+      {/* ── Loading state — VA stamp + rotating message + dots ─── */}
       {state === 'loading' && (
         <View style={styles.centerContent}>
-          {/* Animated globe */}
-          <Animated.View
-            style={[
-              styles.iconCircle,
-              { backgroundColor: colors.surfaceMuted },
-              globeStyle,
-            ]}
-          >
-            <Globe size={36} color={colors.ink} />
+          {/* Floating VA passport stamp — same logo as auth */}
+          <Animated.View style={globeStyle}>
+            <VAStamp size={140} />
           </Animated.View>
 
-          {/* Rotating message */}
+          {/* Rotating message — italic Fraunces ellipsis */}
           <Animated.Text
             key={tick}
             entering={FadeIn.duration(400)}
             exiting={FadeOut.duration(200)}
-            style={[Type.body14, { color: colors.inkMute, textAlign: 'center', marginTop: 12 }]}
+            style={{
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+              fontSize: 17,
+              letterSpacing: -17 * 0.014,
+              color: colors.inkSoft,
+              textAlign: 'center',
+              marginTop: 28,
+            }}
           >
             {LOAD_MSGS[tick % LOAD_MSGS.length]}
+            <Text style={{ color: colors.coral }}>…</Text>
           </Animated.Text>
 
-          <TypingDots color={colors.inkMute} />
+          <TypingDots color={colors.coral} />
 
           {/* Error card */}
           {error !== '' && (
@@ -312,20 +319,46 @@ export default function BuildingScreen() {
                 activeOpacity={0.7}
                 style={[styles.retryBtn, { backgroundColor: colors.danger }]}
               >
-                <Text style={[Type.title14, { color: '#FFFFFF' }]}>Try Again</Text>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 14,
+                    color: '#FFFFFF',
+                  }}
+                >
+                  Try again
+                </Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
       )}
 
-      {/* ── Summary state ── */}
+      {/* ── Summary state — passport flags + editorial stats card ─── */}
       {state === 'summary' && (
         <View style={styles.summaryContent}>
-          {/* Passport flag emojis */}
+          {/* Passport flag emojis (kept — emoji works well at this scale) */}
           <Text style={styles.passportFlags}>{passportFlags}</Text>
 
-          {/* Stats row */}
+          {/* Mono kicker + squiggle above stats */}
+          <View style={styles.statsKickerRow}>
+            <Text
+              style={{
+                fontFamily: FontFamily.monoMedium,
+                fontSize: 10,
+                fontWeight: '700',
+                letterSpacing: 10 * 0.22,
+                textTransform: 'uppercase',
+                color: colors.inkMute,
+              }}
+            >
+              YOUR ACCESS
+            </Text>
+            <Squiggle width={28} color={colors.coral} />
+          </View>
+
+          {/* Stats row — italic Fraunces values, mono kicker labels */}
           <View
             style={[
               styles.statsRow,
@@ -334,29 +367,92 @@ export default function BuildingScreen() {
             ]}
           >
             <View style={styles.statItem}>
-              <Text style={[Type.display32, { color: colors.visaFree }]}>
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 32,
+                  lineHeight: 34,
+                  letterSpacing: -32 * 0.022,
+                  fontWeight: '500',
+                  color: colors.visaFree,
+                }}
+              >
                 {stats.visaFree}
+                <Text style={{ color: colors.coral }}>.</Text>
               </Text>
-              <Text style={[Type.meta11, { color: colors.inkMute, marginTop: 2 }]}>
-                visa-free
+              <Text
+                style={{
+                  fontFamily: FontFamily.monoMedium,
+                  fontSize: 9,
+                  fontWeight: '700',
+                  letterSpacing: 9 * 0.22,
+                  textTransform: 'uppercase',
+                  color: colors.inkMute,
+                  marginTop: 4,
+                }}
+              >
+                VISA-FREE
               </Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
             <View style={styles.statItem}>
-              <Text style={[Type.display32, { color: colors.visaOnArrival }]}>
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 32,
+                  lineHeight: 34,
+                  letterSpacing: -32 * 0.022,
+                  fontWeight: '500',
+                  color: colors.visaOnArrival,
+                }}
+              >
                 {stats.onArrival}
+                <Text style={{ color: colors.coral }}>.</Text>
               </Text>
-              <Text style={[Type.meta11, { color: colors.inkMute, marginTop: 2 }]}>
-                on arrival
+              <Text
+                style={{
+                  fontFamily: FontFamily.monoMedium,
+                  fontSize: 9,
+                  fontWeight: '700',
+                  letterSpacing: 9 * 0.22,
+                  textTransform: 'uppercase',
+                  color: colors.inkMute,
+                  marginTop: 4,
+                }}
+              >
+                ON ARRIVAL
               </Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
             <View style={styles.statItem}>
-              <Text style={[Type.display32, { color: colors.evisa }]}>
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 32,
+                  lineHeight: 34,
+                  letterSpacing: -32 * 0.022,
+                  fontWeight: '500',
+                  color: colors.evisa,
+                }}
+              >
                 {stats.evisa}
+                <Text style={{ color: colors.coral }}>.</Text>
               </Text>
-              <Text style={[Type.meta11, { color: colors.inkMute, marginTop: 2 }]}>
-                e-visa
+              <Text
+                style={{
+                  fontFamily: FontFamily.monoMedium,
+                  fontSize: 9,
+                  fontWeight: '700',
+                  letterSpacing: 9 * 0.22,
+                  textTransform: 'uppercase',
+                  color: colors.inkMute,
+                  marginTop: 4,
+                }}
+              >
+                E-VISA
               </Text>
             </View>
           </View>
@@ -370,14 +466,7 @@ export default function BuildingScreen() {
 const styles = StyleSheet.create({
   centerContent: {
     alignItems: 'center',
-    paddingVertical: 16,
-  },
-  iconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 28,
   },
   errorCard: {
     marginTop: 24,
@@ -401,6 +490,14 @@ const styles = StyleSheet.create({
   passportFlags: {
     fontSize: 52,
     textAlign: 'center',
+  },
+  statsKickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    marginBottom: 4,
   },
   statsRow: {
     flexDirection: 'row',

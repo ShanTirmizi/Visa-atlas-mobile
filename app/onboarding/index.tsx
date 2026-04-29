@@ -67,11 +67,21 @@ function CountryRow({ item, isSelected, onPress, colors }: CountryRowProps) {
       activeOpacity={0.7}
       accessibilityRole="checkbox"
       accessibilityState={{ checked: isSelected }}
-      style={styles.row}
+      style={[
+        styles.row,
+        isSelected && { backgroundColor: colors.coralBg, borderRadius: 14 },
+      ]}
     >
-      <Flag code={toA2(item.code)} size={22} />
+      <Flag code={toA2(item.code)} size={24} />
       <Text
-        style={[Type.title14, { color: colors.ink, flex: 1 }]}
+        style={{
+          fontFamily: 'Fraunces_500Medium_Italic',
+          fontStyle: 'italic',
+          fontSize: 16,
+          letterSpacing: -16 * 0.012,
+          color: colors.ink,
+          flex: 1,
+        }}
         numberOfLines={1}
       >
         {item.name}
@@ -80,8 +90,8 @@ function CountryRow({ item, isSelected, onPress, colors }: CountryRowProps) {
         style={[
           styles.radioIndicator,
           isSelected
-            ? { backgroundColor: colors.ink, borderColor: colors.ink }
-            : { backgroundColor: 'transparent', borderColor: colors.surfaceMuted },
+            ? { backgroundColor: colors.coral, borderColor: colors.coral }
+            : { backgroundColor: 'transparent', borderColor: colors.line },
         ]}
       >
         {isSelected && <Check size={12} color="#FFFFFF" strokeWidth={2.5} />}
@@ -150,31 +160,35 @@ export default function PassportPickerScreen() {
     <OnboardingScaffold
       step={1}
       totalSteps={3}
-      heroTone="sunset"
-      title="Where are you from?"
-      body="We'll show you which countries you can visit visa-free."
-      ctaLabel="Continue"
+      title="Pick your passport"
+      body="Tell us which passport you carry. We'll work out the 195 countries you can visit and which ones you'll need a visa for."
+      ctaLabel={canContinue ? 'Continue' : 'Pick a passport first'}
       onCta={handleContinue}
+      ctaDisabled={!canContinue}
+      showBack={false}
     >
-      {/* ── Multi-passport toggle ── */}
+      {/* ── Multi-passport toggle — italic Fraunces pill ── */}
       <TouchableOpacity
         onPress={toggleMultiMode}
         activeOpacity={0.7}
         style={[
           styles.multiPill,
           {
-            backgroundColor: multiMode ? colors.inkFaint : colors.surfaceMuted,
-            borderColor: multiMode ? colors.ink : colors.line,
+            backgroundColor: multiMode ? colors.coralBg : colors.surface,
+            borderColor: multiMode ? colors.coralDeep : colors.line,
           },
         ]}
       >
         <Text
-          style={[
-            Type.meta12,
-            { color: multiMode ? colors.ink : colors.inkMute },
-          ]}
+          style={{
+            fontFamily: 'Fraunces_500Medium_Italic',
+            fontStyle: 'italic',
+            fontSize: 13,
+            letterSpacing: -13 * 0.012,
+            color: multiMode ? colors.coralDeep : colors.inkSoft,
+          }}
         >
-          {multiMode ? 'Single passport' : 'I have multiple passports'}
+          {multiMode ? '— Switch to single' : 'I have multiple passports →'}
         </Text>
       </TouchableOpacity>
 
@@ -186,18 +200,26 @@ export default function PassportPickerScreen() {
               key={code}
               style={[
                 styles.chip,
-                { backgroundColor: colors.surfaceMuted, borderColor: colors.line },
+                { backgroundColor: colors.coralBg, borderColor: colors.coral },
               ]}
             >
               <Flag code={toA2(code)} size={16} />
-              <Text style={[Type.meta12, { color: colors.ink }]}>
+              <Text
+                style={{
+                  fontFamily: 'Fraunces_500Medium_Italic',
+                  fontStyle: 'italic',
+                  fontSize: 13,
+                  letterSpacing: -13 * 0.012,
+                  color: colors.coralDeep,
+                }}
+              >
                 {getCountryName(code)}
               </Text>
               <TouchableOpacity
                 onPress={() => removeChip(code)}
                 hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
               >
-                <X size={12} color={colors.inkMute} />
+                <X size={12} color={colors.coralDeep} />
               </TouchableOpacity>
             </View>
           ))}
@@ -214,7 +236,7 @@ export default function PassportPickerScreen() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search countries..."
+          placeholder="Search countries…"
           placeholderTextColor={colors.inkFaint}
           autoCorrect={false}
           autoCapitalize="words"
@@ -249,13 +271,6 @@ export default function PassportPickerScreen() {
           </Text>
         )}
       </View>
-
-      {/* CTA disabled hint */}
-      {!canContinue && (
-        <Text style={[Type.meta12, { color: colors.inkFaint, textAlign: 'center', marginTop: 8 }]}>
-          Select at least one passport to continue
-        </Text>
-      )}
     </OnboardingScaffold>
   );
 }

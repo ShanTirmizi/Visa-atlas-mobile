@@ -64,9 +64,13 @@ export function TopSafeAreaBlur({ extra = 0 }: TopSafeAreaBlurProps) {
       style={[styles.wrap, { height: totalHeight }]}
     >
       <MaskedView style={StyleSheet.absoluteFill} maskElement={mask}>
+        {/* Ultra-thin material at low intensity — same family Apple uses for
+            Mail / Settings / App Store. systemMaterial at 50 reads as a grey
+            band on TestFlight builds against a warm paper bg; ultra-thin at
+            30 stays neutral and just refracts the page beneath. */}
         <BlurView
-          tint={isDark ? 'systemMaterialDark' : 'systemMaterial'}
-          intensity={50}
+          tint={isDark ? 'systemUltraThinMaterialDark' : 'systemUltraThinMaterial'}
+          intensity={30}
           style={StyleSheet.absoluteFill}
         />
       </MaskedView>

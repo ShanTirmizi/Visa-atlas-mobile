@@ -62,6 +62,20 @@ When you encounter any of these patterns, ship the **right** version on the firs
 - After getting the userId from `requireAuth`, always verify ownership before reading or modifying a document (e.g., `if (doc.userId !== userId) throw new Error("...")`).
 - Never accept a userId as a function argument for authorization. Always derive it server-side via `requireAuth`.
 
+## Deploying Convex changes (do this automatically)
+
+After **any** edit to a file under `convex/` — schema, query, mutation, action, http route, allow-list, etc. — push to the dev backend so the running app picks it up. The client will throw `Could not find public function for '...'` or `Cannot update field: ...` until this runs. The user's TestFlight / dev client is **not** auto-syncing the Convex deploy; you have to push it.
+
+```bash
+PATH="/Users/shahnawaztirmizi/.nvm/versions/node/v22.22.0/bin:$PATH" npx convex dev --once
+```
+
+Why the explicit PATH: Convex CLI 1.34+ uses RegExp `v` flag, which needs Node ≥ 20. The shell defaults to Node 18.17.1 here and crashes with `Invalid flags supplied to RegExp constructor 'v'`. The user has Node 22.22.0 installed via nvm — point at it directly rather than relying on `nvm use`, which doesn't propagate into non-interactive shells.
+
+`--once` does a single push and exits; safe to run from a tool call. A regular `npx convex dev` would block waiting for file watches.
+
+Confirm the push actually landed before telling the user "fixed". Look for a line like `✔ Added function userProfiles:getCurrentProfile` or `Added table indexes`. If you only see `Convex functions ready!` with no diff, the deploy was a no-op and your local change wasn't picked up — re-check the file path and try again.
+
 ## UI Conventions (follow existing patterns)
 
 - **Component reuse**: Always check `components/ui/` for existing reusable components before creating inline implementations. If a UI pattern is used in 2+ places, extract it into a shared component in `components/ui/`. Never duplicate component logic across screens. Key shared components:

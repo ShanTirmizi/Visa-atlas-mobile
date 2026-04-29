@@ -68,26 +68,31 @@ function CountryRow({ item, isSelected, onPress, colors }: CountryRowProps) {
       activeOpacity={0.7}
       accessibilityRole="radio"
       accessibilityState={{ checked: isSelected }}
-      style={styles.row}
+      style={[
+        styles.row,
+        isSelected && { backgroundColor: colors.coralBg, borderRadius: 14 },
+      ]}
     >
-      {/* Flag */}
-      <Flag code={toA2(item.code)} size={22} />
-
-      {/* Country name */}
+      <Flag code={toA2(item.code)} size={24} />
       <Text
-        style={[Type.title14, { color: colors.ink, flex: 1 }]}
+        style={{
+          fontFamily: 'Fraunces_500Medium_Italic',
+          fontStyle: 'italic',
+          fontSize: 16,
+          letterSpacing: -16 * 0.012,
+          color: colors.ink,
+          flex: 1,
+        }}
         numberOfLines={1}
       >
         {item.name}
       </Text>
-
-      {/* Radio indicator */}
       <View
         style={[
           styles.radioIndicator,
           isSelected
-            ? { backgroundColor: colors.ink, borderColor: colors.ink }
-            : { backgroundColor: 'transparent', borderColor: colors.surfaceMuted },
+            ? { backgroundColor: colors.coral, borderColor: colors.coral }
+            : { backgroundColor: 'transparent', borderColor: colors.line },
         ]}
       >
         {isSelected && <Check size={12} color="#FFFFFF" strokeWidth={2.5} />}
@@ -137,13 +142,13 @@ export default function ResidencePickerScreen() {
 
   return (
     <OnboardingScaffold
-      step={1}
+      step={2}
       totalSteps={3}
-      heroTone="ocean"
       title="Where do you live?"
-      body="Your residence affects where you apply for visas and which benefits you qualify for."
-      ctaLabel="Continue"
+      body="Residence shapes which embassy you apply through and which fast-track lanes are open to you. We'll keep this in mind."
+      ctaLabel={selected ? 'Continue' : 'Pick where you live'}
       onCta={handleContinue}
+      ctaDisabled={!selected}
     >
       {/* ── Spec card: surface bg, radius 20, 1px border, padding 6 ── */}
       <View

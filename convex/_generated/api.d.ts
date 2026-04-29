@@ -23,6 +23,7 @@ import type * as tripInvites from "../tripInvites.js";
 import type * as tripPresence from "../tripPresence.js";
 import type * as tripVotes from "../tripVotes.js";
 import type * as trips from "../trips.js";
+import type * as userProfiles from "../userProfiles.js";
 import type * as visaGuides from "../visaGuides.js";
 import type * as wipeTestData from "../wipeTestData.js";
 
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   tripPresence: typeof tripPresence;
   tripVotes: typeof tripVotes;
   trips: typeof trips;
+  userProfiles: typeof userProfiles;
   visaGuides: typeof visaGuides;
   wipeTestData: typeof wipeTestData;
 }>;
