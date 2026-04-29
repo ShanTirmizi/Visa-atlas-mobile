@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
 import { useQuery, useMutation, useConvexAuth } from 'convex/react';
 import { Id } from '@/convex/_generated/dataModel';
-import { ArrowLeft, Send, Bot, User } from 'lucide-react-native';
+import { Send, Bot, User } from 'lucide-react-native';
+import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/contexts/theme-context';
 import { endpoints } from '@/constants/api';
 import {
@@ -37,7 +38,10 @@ interface ChatMessage {
 }
 
 export default function ChatScreen() {
-  const { tripId } = useLocalSearchParams<{ tripId: string }>();
+  const { tripId, day } = useLocalSearchParams<{ tripId: string; day?: string }>();
+  // When opened from a day-detail "Tweak this day" CTA, `day` is the 0-based
+  // index of the day. Otherwise the chat is trip-scoped.
+  const dayIndex = day !== undefined && day !== '' ? Number(day) : null;
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -59,8 +63,26 @@ export default function ChatScreen() {
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  // When a send fails, surface a soft retry banner (not a permanent fake
+  // assistant message). Holds the text the user tried to send.
+  const [failedMessage, setFailedMessage] = useState<string | null>(null);
+  const updateTripField = useMutation(api.trips.updateTripField);
 
   const countryName = trip?.countryName ?? 'your trip';
+
+  // Resolve the current day from the trip's itinerary if a dayIndex was
+  // provided. Used to scope the chat header/suggestions/payload to a single
+  // day rather than the whole trip.
+  type ItineraryDay = { day: number; title: string; morning: string; afternoon: string; evening: string };
+  const currentDay = useMemo<ItineraryDay | null>(() => {
+    if (dayIndex === null || !trip?.itinerary) return null;
+    try {
+      const arr = JSON.parse(trip.itinerary) as ItineraryDay[];
+      return arr[dayIndex] ?? null;
+    } catch {
+      return null;
+    }
+  }, [dayIndex, trip?.itinerary]);
 
   const displayMessages: ChatMessage[] = (convexMessages ?? []).map((m) => ({
     id: m._id,
@@ -71,16 +93,15 @@ export default function ChatScreen() {
     userId: m.userId ?? undefined,
   }));
 
-  const sendMessage = useCallback(async () => {
-    if (isOffline) return;
-    const text = inputText.trim();
-    if (!text || isSending) return;
+  const sendChat = useCallback(
+    async (text: string) => {
+      if (isOffline) return;
+      if (!text || isSending) return;
 
-    setInputText('');
-    setIsSending(true);
+      setIsSending(true);
+      setFailedMessage(null);
 
-    try {
-      // Persist user message to Convex
+      // Persist user message immediately so it shows up in the conversation.
       await addMessage({
         tripId: tripId as Id<'trips'>,
         role: 'user',
@@ -89,47 +110,116 @@ export default function ChatScreen() {
         userName: currentUser?.name ?? 'You',
       });
 
-      // Call AI endpoint
-      const res = await fetch(endpoints.tripChat, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tripId,
-          message: text,
-          countryName: trip?.countryName,
-          itinerary: trip?.itinerary,
-          context: (convexMessages ?? []).slice(-6).map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-        }),
-      });
+      try {
+        // Call AI endpoint with the body shape the server actually expects.
+        const res = await fetch(endpoints.tripChat, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            tripContext: {
+              countryName: trip?.countryName ?? '',
+              duration: trip?.duration ?? 0,
+              region: trip?.region ?? '',
+              capital: trip?.capital ?? '',
+              currency: trip?.currency ?? '',
+              dailyBudget: trip?.dailyBudget ?? '',
+              visaCategory: trip?.visaCategory ?? '',
+              companions: trip?.companions ?? undefined,
+            },
+            currentItinerary: trip?.itinerary ?? '[]',
+            chatHistory: (convexMessages ?? []).slice(-10).map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+          }),
+        });
 
-      const data = (await res.json()) as { reply?: string; message?: string };
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
 
-      // Persist AI response to Convex
-      await addMessage({
-        tripId: tripId as Id<'trips'>,
-        role: 'assistant',
-        content: data.reply ?? data.message ?? 'Sorry, I could not generate a response.',
-      });
-    } catch {
-      await addMessage({
-        tripId: tripId as Id<'trips'>,
-        role: 'assistant',
-        content: 'Something went wrong. Please try again.',
-      });
-    } finally {
-      setIsSending(false);
+        const data = (await res.json()) as {
+          reply?: string;
+          itineraryUpdate?: string | null;
+        };
+
+        if (!data.reply) {
+          throw new Error('Empty reply');
+        }
+
+        // Persist the AI's chat reply.
+        await addMessage({
+          tripId: tripId as Id<'trips'>,
+          role: 'assistant',
+          content: data.reply,
+        });
+
+        // If the AI returned an itinerary update, patch the trip in place
+        // so the user sees the new itinerary immediately.
+        if (data.itineraryUpdate) {
+          try {
+            await updateTripField({
+              id: tripId as Id<'trips'>,
+              field: 'itinerary',
+              value: data.itineraryUpdate,
+            });
+          } catch (err) {
+            // Patch failed — leave the chat reply intact and let the user know
+            // separately via the retry banner.
+            console.warn('itinerary patch failed', err);
+          }
+        }
+      } catch (err) {
+        console.warn('trip-chat failed', err);
+        // Don't pollute the conversation with a fake "Sorry…" assistant
+        // message. Instead, surface a soft retry banner above the input.
+        setFailedMessage(text);
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [
+      isOffline,
+      isSending,
+      tripId,
+      currentUser,
+      convexMessages,
+      trip,
+      addMessage,
+      updateTripField,
+    ],
+  );
+
+  const sendMessage = useCallback(async () => {
+    const text = inputText.trim();
+    if (!text) return;
+    setInputText('');
+    await sendChat(text);
+  }, [inputText, sendChat]);
+
+  const retryFailed = useCallback(() => {
+    if (failedMessage) {
+      void sendChat(failedMessage);
     }
-  }, [inputText, isSending, isOffline, tripId, currentUser, convexMessages, trip, addMessage]);
+  }, [failedMessage, sendChat]);
 
-  const suggestions = [
-    `What's the best restaurant near Day 1?`,
-    `How do I get around ${countryName}?`,
-    `What should I pack for this trip?`,
-    `Any hidden gems not in the itinerary?`,
-  ];
+  const dismissFailed = useCallback(() => setFailedMessage(null), []);
+
+  // Day-scoped prompts when entering from a specific day; trip-scoped otherwise.
+  const suggestions = currentDay
+    ? [
+        `Suggest a different morning activity for Day ${currentDay.day}`,
+        `Add a hidden-gem stop to this day`,
+        `Make this day more relaxed`,
+        `What should I bring for Day ${currentDay.day}?`,
+      ]
+    : [
+        `What's the best restaurant near Day 1?`,
+        `How do I get around ${countryName}?`,
+        `What should I pack for this trip?`,
+        `Any hidden gems not in the itinerary?`,
+      ];
 
   const renderMessage = useCallback(
     ({ item }: { item: ChatMessage }) => {
@@ -220,27 +310,19 @@ export default function ChatScreen() {
           },
         ]}
       >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 8,
-            backgroundColor: '#FFFFFF',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <ArrowLeft color={colors.foreground} size={20} />
-        </TouchableOpacity>
+        <BackButton />
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            Trip Chat
+            {currentDay ? `Day ${currentDay.day}` : 'Trip Chat'}
           </Text>
           {trip && (
-            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-              {trip.countryName} · {trip.duration} days
+            <Text
+              style={[styles.headerSubtitle, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {currentDay
+                ? `${currentDay.title} · ${trip.countryName}`
+                : `${trip.countryName} · ${trip.duration} days`}
             </Text>
           )}
         </View>
@@ -305,6 +387,54 @@ export default function ChatScreen() {
           </Text>
         </View>
       )}
+      {!isOffline && failedMessage ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            paddingHorizontal: Spacing.lg,
+            paddingVertical: 10,
+            backgroundColor: colors.warningBg,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: colors.border,
+          }}
+        >
+          <Text
+            style={{
+              flex: 1,
+              fontFamily: FontFamily.medium,
+              fontSize: 13,
+              color: colors.ink,
+            }}
+            numberOfLines={2}
+          >
+            Couldn't reach Visa Atlas. Tap retry to send your message again.
+          </Text>
+          <TouchableOpacity onPress={retryFailed} hitSlop={8}>
+            <Text
+              style={{
+                fontFamily: FontFamily.semibold,
+                fontSize: 13,
+                color: colors.coralDeep,
+              }}
+            >
+              Retry
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={dismissFailed} hitSlop={8}>
+            <Text
+              style={{
+                fontFamily: FontFamily.medium,
+                fontSize: 13,
+                color: colors.inkMute,
+              }}
+            >
+              Dismiss
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       {!isOffline && (
         <View
           style={[
