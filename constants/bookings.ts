@@ -73,6 +73,7 @@ export interface RestaurantDetails {
   cuisine: string;
   partySize: string;
   time: string;
+  phone?: string;
 }
 
 // ──────────────────────────────────────────────
@@ -176,6 +177,7 @@ export const BOOKING_TYPES: Record<BookingType, BookingTypeConfig> = {
       { key: 'cuisine', label: 'Cuisine', placeholder: 'e.g. Japanese' },
       { key: 'partySize', label: 'Party Size', placeholder: 'e.g. 4', keyboardType: 'numeric' },
       { key: 'time', label: 'Time', placeholder: 'e.g. 7:30 PM', required: true },
+      { key: 'phone', label: 'Phone', placeholder: 'e.g. +62 361 555 124', keyboardType: 'phone-pad' },
     ],
   },
 } as const;
