@@ -23,6 +23,11 @@ export default defineSchema({
     flightHours: v.number(),
     visaCategory: v.string(),
     visaNotes: v.optional(v.string()),
+    visaCost: v.optional(v.string()),
+    visaProcessingTime: v.optional(v.string()),
+    visaForms: v.optional(v.string()),
+    visaPassportValidity: v.optional(v.string()),
+    visaEntries: v.optional(v.string()),
     surpriseMe: v.optional(v.boolean()),
     vibeTag: v.optional(v.string()),
     companions: v.optional(v.string()),
@@ -44,6 +49,9 @@ export default defineSchema({
     isMultiCountry: v.optional(v.boolean()),
     routeTitle: v.optional(v.string()),
     legs: v.optional(v.string()),
+    // User-pinned trip — heart on the trip detail header. Distinct from
+    // country-level favorites (which live in client-side AsyncStorage).
+    starred: v.optional(v.boolean()),
   })
     .index("by_status", ["status"])
     .index("by_country", ["countryCode"])
