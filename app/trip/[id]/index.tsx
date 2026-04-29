@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Pressable,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,9 +15,12 @@ import { useQuery, useMutation } from 'convex/react';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
-import { Globe, Heart, Shield } from 'lucide-react-native';
+import { Globe, Heart, MoreHorizontal, MessageSquare, Trash2 } from 'lucide-react-native';
+import Animated from 'react-native-reanimated';
+import { tabSlideIn } from '@/utils/tabAnimation';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { useTheme } from '@/contexts/theme-context';
-import { Spacing, getVisaCategoryColor } from '@/constants/theme';
+import { Spacing, getVisaCategoryColor, FontFamily } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 
 // ── UI Primitives ──────────────────────────────────────────
@@ -24,7 +28,6 @@ import BackButton from '@/components/ui/BackButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { CircleBtn } from '@/components/ui/CircleBtn';
 import { SectionKicker } from '@/components/ui/SectionKicker';
-import { PillButton } from '@/components/ui/PillButton';
 
 // ── Trip Overview components ───────────────────────────────
 import { TripOverviewHero } from '@/components/trip/overview/TripOverviewHero';
@@ -41,6 +44,16 @@ import BookingDetailSheet, {
 
 // ── DayDeck (for Itinerary tab) ────────────────────────────
 import DayDeck from '@/components/trip/DayDeck';
+
+// ── Visa guide sheet — same flow used on country/[code] ────
+import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
+import { useVisa } from '@/contexts/visa-context';
+import {
+  visaData as staticVisaData,
+  resolveCountry,
+  type HeldVisaType,
+} from '@/data/visaData';
+import { VisaHeroCardForCountry } from '@/components/visa/VisaHeroCardForCountry';
 
 // ──────────────────────────────────────────────────────────
 // Types
@@ -99,6 +112,9 @@ function getVisaLabel(category: string): string {
 type TabKey = 'Overview' | 'Itinerary' | 'Bookings' | 'Visa';
 const TABS: TabKey[] = ['Overview', 'Itinerary', 'Bookings', 'Visa'];
 
+// `tabSlideIn` lives in @/utils/tabAnimation — shared with country detail
+// and any other tabbed surface that needs the same premium swap feel.
+
 // ──────────────────────────────────────────────────────────
 // Main Component
 // ──────────────────────────────────────────────────────────
@@ -110,13 +126,94 @@ export default function TripDetailScreen() {
   const router = useRouter();
   const addBookingRef = useRef<AddBookingSheetRef>(null);
   const bookingDetailRef = useRef<BookingDetailSheetRef>(null);
+  const guideSheetRef = useRef<VisaGuideSheetRef>(null);
+
+  const { heldVisas, residence } = useVisa();
+  const heldVisasSet = useMemo(
+    () => new Set(heldVisas as HeldVisaType[]),
+    [heldVisas],
+  );
 
   const trip = useOfflineQuery(api.trips.getTrip, { id: id as Id<'trips'> });
   const heartbeatMutation = useMutation(api.tripPresence.heartbeat);
   const leaveMutation = useMutation(api.tripPresence.leave);
+  const deleteTripMutation = useMutation(api.trips.deleteTrip);
+
+  // Look up an existing visa guide for this country so the Visa tab's
+  // "Start visa application" button either resumes it or kicks off the
+  // VisaGuideSheet generator (mirrors the country/[code] page flow).
+  const existingGuide = useQuery(
+    api.visaGuides.getGuideByCountry,
+    trip?.countryCode ? { countryCode: trip.countryCode } : 'skip',
+  );
+
+  const handleStartVisaApplication = () => {
+    if (existingGuide) {
+      router.push(`/guide/${existingGuide._id}` as never);
+    } else {
+      guideSheetRef.current?.present();
+    }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete trip',
+      `Are you sure you want to delete this trip? This will also delete its bookings, messages, and itinerary. This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            // Navigate AWAY first so the live `getTrip` query stops re-running
+            // against a record we're about to delete (which would throw "no
+            // access" into render and surface as a Render Error).
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/' as never);
+            }
+            // Fire-and-forget the delete. The Convex mutation already enforces
+            // ownership server-side; a failure here is almost certainly a
+            // network issue, which is fine to swallow at this point since the
+            // user has already left the screen.
+            deleteTripMutation({ id: id as Id<'trips'> }).catch(() => {});
+          },
+        },
+      ],
+    );
+  };
+
+  const handleOpenMenu = () => {
+    Alert.alert('Trip options', undefined, [
+      {
+        text: 'Chat with AI',
+        onPress: () => router.push(`/chat/${id}` as never),
+      },
+      {
+        text: 'Edit itinerary',
+        onPress: () => router.push(`/trip/${id}/day/0` as never),
+      },
+      {
+        text: 'Delete trip',
+        style: 'destructive',
+        onPress: handleDelete,
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const [activeTab, setActiveTab] = useState<TabKey>('Overview');
-  const [saved, setSaved] = useState(false);
+  // Track previous tab so the fade-slide knows which direction to come from.
+  const prevTabRef = useRef<TabKey>('Overview');
+  const tabDirection = TABS.indexOf(activeTab) >= TABS.indexOf(prevTabRef.current) ? 1 : -1;
+  useEffect(() => {
+    prevTabRef.current = activeTab;
+  }, [activeTab]);
+  // The heart toggles `trip.starred` via Convex — no local state. Reads the
+  // live value off the trip document so the UI always matches the server.
+  const setStarredMutation = useMutation(api.trips.setTripStarred);
+  const saved = !!trip?.starred;
 
   // Presence heartbeat
   useEffect(() => {
@@ -184,12 +281,13 @@ export default function TripDetailScreen() {
         { label: 'Mt. Fuji', dayStamp: 'DAY 5', tone: 'mountain' },
       ];
     }
-    return itinerary.slice(0, 3).map((day, idx) => ({
+    return itinerary.slice(0, 6).map((day, idx) => ({
       label: day.morning,
       dayStamp: `DAY ${day.day}`,
       imageUri: dayImages[idx]?.thumb ?? dayImages[idx]?.url ?? undefined,
+      onPress: () => router.push(`/trip/${id}/day/${idx}` as never),
     }));
-  }, [itinerary, dayImages]);
+  }, [itinerary, dayImages, id, router]);
 
   // ── Destination label ────────────────────────────────────
   const destinationLabel = trip
@@ -233,6 +331,7 @@ export default function TripDetailScreen() {
   // ── Render ───────────────────────────────────────────────
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <TopSafeAreaBlur />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
@@ -247,40 +346,66 @@ export default function TripDetailScreen() {
           {/* Left: back */}
           <BackButton />
 
-          {/* Center: destination + date */}
+          {/* Center: italic Fraunces destination + mono date */}
           <View style={styles.headerCenter}>
-            <Text style={[Type.title15, { color: colors.ink }]} numberOfLines={1}>
+            <Text
+              style={{
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+                fontSize: 17,
+                fontWeight: '500',
+                letterSpacing: -17 * 0.012,
+                color: colors.ink,
+              }}
+              numberOfLines={1}
+            >
               {destinationLabel}
             </Text>
             {dateRange ? (
-              <Text style={[Type.mono10, { color: colors.inkMute, letterSpacing: 10 * 0.1 }]}>
+              <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
                 {dateRange}
               </Text>
             ) : null}
           </View>
 
-          {/* Right: heart save toggle */}
-          <CircleBtn
-            size={38}
-            solid
-            onPress={() => setSaved((v) => !v)}
-            accessibilityLabel={saved ? 'Unsave trip' : 'Save trip'}
-          >
-            <Heart
-              size={17}
-              color={saved ? colors.danger : colors.ink}
-              fill={saved ? colors.danger : 'none'}
-            />
-          </CircleBtn>
+          {/* Right: heart save toggle + 3-dot menu (chat / edit / delete) */}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <CircleBtn
+              size={38}
+              solid
+              onPress={() => {
+                if (!trip) return;
+                setStarredMutation({
+                  id: trip._id as Id<'trips'>,
+                  starred: !saved,
+                }).catch(() => {});
+              }}
+              accessibilityLabel={saved ? 'Unstar trip' : 'Star trip'}
+            >
+              <Heart
+                size={17}
+                color={colors.coral}
+                fill={saved ? colors.coral : 'none'}
+              />
+            </CircleBtn>
+            <CircleBtn
+              size={38}
+              solid
+              onPress={handleOpenMenu}
+              accessibilityLabel="Trip options"
+            >
+              <MoreHorizontal size={18} color={colors.ink} />
+            </CircleBtn>
+          </View>
         </View>
 
-        {/* ─── SEGMENTED TABS ─── */}
-        <View style={{ paddingVertical: 10, paddingHorizontal: 22 }}>
+        {/* ─── SEGMENTED TABS — squiggle variant for trip tabs ─── */}
+        <View style={{ paddingHorizontal: 16 }}>
           <SegmentedControl
             options={TABS}
             value={activeTab}
             onChange={(v) => setActiveTab(v as TabKey)}
-            variant="pill"
+            variant="squiggle"
           />
         </View>
 
@@ -288,7 +413,7 @@ export default function TripDetailScreen() {
 
         {/* ── Overview tab ── */}
         {activeTab === 'Overview' && (
-          <View>
+          <Animated.View entering={tabSlideIn(tabDirection * 18)}>
             {/* Hero card */}
             <TripOverviewHero
               tripName={trip.routeTitle ?? trip.countryName ?? ''}
@@ -312,12 +437,58 @@ export default function TripDetailScreen() {
               items={highlights}
               onSeeAll={() => setActiveTab('Itinerary')}
             />
-          </View>
+
+            {/* AI chat — opens the conversational tweaker for the itinerary */}
+            <Pressable
+              onPress={() => router.push(`/chat/${id}` as never)}
+              style={({ pressed }) => [
+                styles.chatCta,
+                {
+                  backgroundColor: colors.ink,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              <View style={[styles.chatCtaIcon, { backgroundColor: colors.coral }]}>
+                <MessageSquare size={16} color="#FFFFFF" strokeWidth={2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[
+                    Type.kickerSm,
+                    { color: colors.coral, fontSize: 9, letterSpacing: 9 * 0.18 },
+                  ]}
+                >
+                  AI ASSISTANT
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 16,
+                    fontWeight: '500',
+                    color: '#FFFFFF',
+                    marginTop: 2,
+                  }}
+                >
+                  Tweak this trip
+                </Text>
+              </View>
+              <Text
+                style={[
+                  Type.body12_5,
+                  { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
+                ]}
+              >
+                Chat →
+              </Text>
+            </Pressable>
+          </Animated.View>
         )}
 
         {/* ── Itinerary tab ── */}
         {activeTab === 'Itinerary' && (
-          <View style={{ paddingTop: 8 }}>
+          <Animated.View entering={tabSlideIn(tabDirection * 18)} style={{ paddingTop: 8 }}>
             <DayDeck
               tripId={String(trip._id)}
               days={itinerary}
@@ -326,75 +497,70 @@ export default function TripDetailScreen() {
               tripStartDate={trip.startDate}
               destination={trip.countryName}
             />
-          </View>
+          </Animated.View>
         )}
 
         {/* ── Bookings tab ── */}
         {activeTab === 'Bookings' && (
-          <View style={{ paddingTop: 8, paddingBottom: 20 }}>
+          <Animated.View entering={tabSlideIn(tabDirection * 18)} style={{ paddingTop: 8, paddingBottom: 20 }}>
             <BookingTimeline
               tripId={String(trip._id)}
               onBookingPress={handleBookingPress}
               onAddBooking={() => addBookingRef.current?.open(String(trip._id))}
             />
-          </View>
+          </Animated.View>
         )}
 
-        {/* ── Visa tab ── */}
+        {/* ── Visa tab — same hero card used on country detail ── */}
         {activeTab === 'Visa' && (() => {
-          const cat = (trip.visaCategory ?? '').toLowerCase();
-          const isFree = cat.includes('free');
-          const isOnArrival = cat.includes('arrival');
-          const needsApplication = cat.includes('evisa') || cat.includes('e-visa') || cat.includes('required');
-
-          // Copy per status
-          const title = getVisaLabel(trip.visaCategory);
-          const body = isFree
-            ? `Good news — you don't need a visa to enter ${trip.countryName}. Just show up with a valid passport and you're in.`
-            : isOnArrival
-              ? `You can get your visa on arrival in ${trip.countryName}. Have your passport and return ticket ready at immigration.`
-              : `You'll need to apply for a visa before you travel to ${trip.countryName}. Start your application early — processing can take a few days to weeks.`;
+          const country = staticVisaData.find((c) => c.code === trip.countryCode);
+          if (!country) return null;
+          const resolved = resolveCountry(country, heldVisasSet);
 
           return (
-            <View style={styles.visaStub}>
-              <View style={[styles.visaCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                <SectionKicker color={catColor}>VISA STATUS</SectionKicker>
-                <Text style={[Type.title18, { color: colors.ink, marginTop: 8 }]}>
-                  {title}
-                </Text>
-                {trip.capital ? (
-                  <Text style={[Type.body13, { color: colors.inkMute, marginTop: 4 }]}>
-                    {trip.countryName} · {trip.capital}
+            <Animated.View entering={tabSlideIn(tabDirection * 18)} style={styles.visaStub}>
+              <VisaHeroCardForCountry
+                country={country}
+                category={resolved.category}
+                days={resolved.days}
+                residence={residence ?? undefined}
+                hasGuide={!!existingGuide}
+                onCreateGuide={handleStartVisaApplication}
+              />
+
+              {/* "Visiting" row — flag + italic country name. Tap to drill into country detail. */}
+              <Pressable
+                onPress={() => router.push(`/country/${trip.countryCode}` as const)}
+                style={({ pressed }) => [
+                  styles.visitingRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.line,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
+              >
+                <Globe size={20} color={colors.inkSoft} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[Type.body13, { color: colors.inkMute, fontSize: 12 }]}>
+                    Visiting
                   </Text>
-                ) : null}
-
-                <View style={styles.visaIconRow}>
-                  <Shield size={40} color={catColor} strokeWidth={1.5} />
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                      fontSize: 16,
+                      fontWeight: '500',
+                      color: colors.ink,
+                      letterSpacing: -16 * 0.012,
+                      marginTop: 1,
+                    }}
+                  >
+                    {trip.countryName}
+                  </Text>
                 </View>
-
-                <Text style={[Type.body14, { color: colors.inkSoft, marginTop: 4, lineHeight: 22 }]}>
-                  {body}
-                </Text>
-
-                {needsApplication ? (
-                  <PillButton
-                    label="Start visa application"
-                    variant="primary"
-                    fullWidth
-                    onPress={() => router.push(`/country/${trip.countryCode}` as const)}
-                    style={{ marginTop: 20 }}
-                  />
-                ) : isOnArrival ? (
-                  <PillButton
-                    label="View entry details"
-                    variant="soft"
-                    fullWidth
-                    onPress={() => router.push(`/country/${trip.countryCode}` as const)}
-                    style={{ marginTop: 20 }}
-                  />
-                ) : null}
-              </View>
-            </View>
+              </Pressable>
+            </Animated.View>
           );
         })()}
       </ScrollView>
@@ -402,6 +568,18 @@ export default function TripDetailScreen() {
       {/* ─── Booking sheets ─── */}
       <AddBookingSheet ref={addBookingRef} />
       <BookingDetailSheet ref={bookingDetailRef} />
+      {/* Visa guide generator — opens when the user taps "Start visa
+          application" and there's no guide yet. Once created, the sheet's
+          callback routes to the new guide page. */}
+      {trip?.countryCode ? (
+        <VisaGuideSheet
+          ref={guideSheetRef}
+          countryCode={trip.countryCode}
+          countryName={trip.countryName ?? trip.countryCode}
+          heldVisas={heldVisasSet}
+          onGuideCreated={(guideId) => router.push(`/guide/${guideId}` as never)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -431,16 +609,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   visaStub: {
-    paddingHorizontal: 22,
+    paddingHorizontal: 16,
     paddingTop: 8,
+    gap: 14,
   },
-  visaCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 22,
-  },
-  visaIconRow: {
+  chatCta: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 20,
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 14,
+    padding: 14,
+    borderRadius: 18,
+  },
+  chatCtaIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  visitingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
   },
 });

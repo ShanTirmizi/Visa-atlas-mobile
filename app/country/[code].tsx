@@ -11,18 +11,16 @@ import { useTheme } from '@/contexts/theme-context';
 import { useVisa, useVisaData } from '@/contexts/visa-context';
 import { Type } from '@/constants/typography';
 import {
-  Shadows, Spacing, Radius, FontFamily,
-  type ThemeColors, type VisaHeroCategory,
+  Shadows, Spacing, Radius, FontFamily, type ThemeColors,
 } from '@/constants/theme';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Guilloche } from '@/components/ui/Guilloche';
 import { ApprovedStamp } from '@/components/ui/ApprovedStamp';
 import { BestTimeBar } from '@/components/ui/BestTimeBar';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
-import { VisaHeroCard } from '@/components/visa/VisaHeroCard';
+import { VisaHeroCardForCountry } from '@/components/visa/VisaHeroCardForCountry';
 import {
   resolveCountry,
-  visaData as staticVisaData,
   type HeldVisaType, type VisaCategory,
 } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
@@ -397,16 +395,13 @@ export default function CountryDetailScreen() {
 
           {tab === 'Visa' && (
             <Animated.View entering={tabSlideIn(tabDirection * 18)}>
-              <VisaTab
-                colors={colors}
-                catColor={catColor}
+              <VisaHeroCardForCountry
+                country={country}
                 category={visaCat}
                 days={resolved.days}
-                country={country}
                 residence={residence ?? undefined}
-                needsApplication={needsApplication}
                 hasGuide={!!existingGuide}
-                onStartApplication={onStartApplication}
+                onCreateGuide={onStartApplication}
               />
             </Animated.View>
           )}
@@ -578,216 +573,6 @@ function OverviewTab({
         style={{ marginTop: Spacing.lg }}
       />
     </>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// VisaTab helpers
-// ════════════════════════════════════════════════════════════════════════
-function visaHeroCategoryFor(cat: VisaCategory): VisaHeroCategory | null {
-  if (cat === 'visa-free' || cat === 'home') return 'free';
-  if (cat === 'visa-on-arrival') return 'arrival';
-  if (cat === 'evisa') return 'evisa';
-  if (cat === 'visa-required') return 'required';
-  return null;
-}
-
-function fmtStayDays(days?: number): string {
-  return days ? `${days}d` : '—';
-}
-
-function fmtMonthYear(date: Date): string {
-  const m = date.toLocaleDateString('en-US', { month: 'short' });
-  const y = String(date.getFullYear()).slice(-2);
-  return `${date.getDate()} · ${m.toUpperCase()} · ${y}`;
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// VisaTab
-// ════════════════════════════════════════════════════════════════════════
-function VisaTab({
-  colors,
-  catColor,
-  category,
-  days,
-  country,
-  residence,
-  needsApplication,
-  hasGuide,
-  onStartApplication,
-}: {
-  colors: ThemeColors;
-  catColor: string;
-  category: VisaCategory;
-  days?: number;
-  country: import('@/data/visaData').CountryVisa;
-  residence?: string;
-  needsApplication: boolean;
-  hasGuide: boolean;
-  onStartApplication: () => void;
-}) {
-  const heroCat = visaHeroCategoryFor(category);
-  if (!heroCat) {
-    return null;
-  }
-
-  // Pull structured visa fields off the country (fallbacks for unset countries).
-  const cost = country.cost ?? '—';
-  const processingTime = country.processingTime ?? '—';
-  const forms = country.forms ?? '—';
-  const passportValidity = country.passportValidity ?? '6m+';
-  const entries = country.entries ?? (heroCat === 'free' ? '∞' : 'single');
-
-  const residenceName = residence
-    ? (staticVisaData.find((c) => c.code === residence)?.name ?? residence)
-    : null;
-
-  // Today's date — for the visa-free APPROVED stamp.
-  const today = new Date();
-
-  if (heroCat === 'free') {
-    return (
-      <VisaHeroCard
-        category="free"
-        kicker="YOU'RE COVERED"
-        headlineLine1={days ? 'Visa-free,' : 'Visa-free'}
-        headlineLine2={days ? `${days} days` : 'entry'}
-        stamp={{ label: 'APPROVED', date: fmtMonthYear(today) }}
-        body={
-          <>
-            {residenceName ? (
-              <>
-                As a{' '}
-                <Text
-                  style={{
-                    textDecorationLine: 'underline',
-                    color: '#FFFFFF',
-                    fontWeight: '500',
-                  }}
-                >
-                  {residenceName} passport holder
-                </Text>
-                {' — '}
-              </>
-            ) : null}
-            {country.notes ?? `No visa needed. Just show up at ${country.name} with your passport.`}
-          </>
-        }
-        meta={[
-          { label: 'Stay', value: fmtStayDays(days) },
-          { label: 'Entries', value: entries },
-          { label: 'Passport', value: passportValidity },
-        ]}
-      />
-    );
-  }
-
-  if (heroCat === 'arrival') {
-    return (
-      <VisaHeroCard
-        category="arrival"
-        kicker="PAY AT THE GATE"
-        headlineLine1="Visa on"
-        headlineLine2="arrival"
-        stamp={{
-          label: 'ON ARRIVAL',
-          date: `${cost} · ${fmtStayDays(days).toUpperCase()}`,
-        }}
-        body={
-          <>
-            Pay{' '}
-            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{cost} in cash</Text>{' '}
-            at the airport. Bring a passport photo and printed itinerary.
-          </>
-        }
-        meta={[
-          { label: 'Stay', value: fmtStayDays(days) },
-          { label: 'Cost', value: cost },
-          { label: 'Time', value: processingTime },
-        ]}
-      />
-    );
-  }
-
-  if (heroCat === 'evisa') {
-    const stampDate = `${processingTime
-      .replace(/\s*days?/i, 'D')
-      .replace(/\s*weeks?/i, 'WK')
-      .toUpperCase()
-      .trim()} · ${cost}`;
-    return (
-      <VisaHeroCard
-        category="evisa"
-        kicker="APPLY ONLINE"
-        headlineLine1="Apply"
-        headlineLine2="before you go"
-        stamp={{ label: 'E-VISA', date: stampDate }}
-        body={
-          <>
-            Submit on the{' '}
-            <Text
-              style={{
-                textDecorationLine: 'underline',
-                color: '#3D1810',
-                fontWeight: '500',
-              }}
-            >
-              official portal
-            </Text>
-            . Approval usually arrives in{' '}
-            <Text style={{ color: '#3D1810', fontWeight: '700' }}>{processingTime}</Text>{' '}
-            — print before flying.
-          </>
-        }
-        meta={[
-          { label: 'Process', value: processingTime },
-          { label: 'Fee', value: cost },
-          { label: 'Stay', value: fmtStayDays(days) },
-        ]}
-        onCreateGuide={onStartApplication}
-        ctaLabel={hasGuide ? 'Continue your e-visa guide' : 'Create my e-visa guide'}
-      />
-    );
-  }
-
-  // required
-  const requiredStampDate = `${processingTime
-    .replace(/\s*days?/i, 'D')
-    .replace(/\s*weeks?/i, 'WK')
-    .toUpperCase()
-    .trim()} · ${cost}`;
-  return (
-    <VisaHeroCard
-      category="required"
-      kicker="EMBASSY · IN PERSON"
-      headlineLine1="Visa"
-      headlineLine2="required"
-      stamp={{ label: 'VISA REQ.', date: requiredStampDate }}
-      body={
-        <>
-          Apply at the{' '}
-          <Text
-            style={{
-              textDecorationLine: 'underline',
-              color: '#FFFFFF',
-              fontWeight: '500',
-            }}
-          >
-            {country.name} embassy
-          </Text>
-          . Allow{' '}
-          <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{processingTime}</Text>
-          : docs, biometrics, interview.
-        </>
-      }
-      meta={[
-        { label: 'Process', value: processingTime },
-        { label: 'Fee', value: cost },
-        { label: 'Forms', value: forms },
-      ]}
-      onCreateGuide={onStartApplication}
-      ctaLabel={hasGuide ? 'Continue your embassy guide' : 'Create my embassy guide'}
-    />
   );
 }
 
