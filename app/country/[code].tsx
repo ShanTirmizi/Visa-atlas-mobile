@@ -1,18 +1,28 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Animated from 'react-native-reanimated';
+import { tabSlideIn } from '@/utils/tabAnimation';
 import {
   View, Text, ScrollView, StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Heart, Sparkles, PlusCircle } from 'lucide-react-native';
+import { ArrowLeft, Heart, Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa, useVisaData } from '@/contexts/visa-context';
 import { Type } from '@/constants/typography';
 import {
-  Shadows, Spacing, Radius, type ThemeColors,
+  Shadows, Spacing, Radius, FontFamily, type ThemeColors,
 } from '@/constants/theme';
+import { Squiggle } from '@/components/ui/Squiggle';
+import { Guilloche } from '@/components/ui/Guilloche';
+import { ApprovedStamp } from '@/components/ui/ApprovedStamp';
+import { BestTimeBar } from '@/components/ui/BestTimeBar';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
+import { VisaHeroCard } from '@/components/visa/VisaHeroCard';
+import type { VisaHeroCategory } from '@/constants/theme';
 import {
   resolveCountry,
+  visaData as staticVisaData,
   type HeldVisaType, type VisaCategory,
 } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
@@ -122,7 +132,7 @@ export default function CountryDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { heldVisas, residence } = useVisa();
+  const { heldVisas, residence, isFavorite, toggleFavorite } = useVisa();
   // User's home currency, derived from their residence country.
   const userCurrency = useMemo(
     () => (residence ? countryMeta[residence]?.currencyCode : undefined),
@@ -131,7 +141,23 @@ export default function CountryDetailScreen() {
   const dynamicVisaData = useVisaData();
 
   const [tab, setTab] = useState<'Overview' | 'Visa' | 'Tips'>('Overview');
-  const [saved, setSaved] = useState(false);
+  // Track previous tab so the directional fade-slide knows which side to
+  // come in from when the user taps a different tab.
+  const TAB_ORDER: ReadonlyArray<'Overview' | 'Visa' | 'Tips'> = [
+    'Overview',
+    'Visa',
+    'Tips',
+  ];
+  const prevTabRef = useRef<'Overview' | 'Visa' | 'Tips'>('Overview');
+  const tabDirection =
+    TAB_ORDER.indexOf(tab) >= TAB_ORDER.indexOf(prevTabRef.current) ? 1 : -1;
+  useEffect(() => {
+    prevTabRef.current = tab;
+  }, [tab]);
+  // The heart toggles the country in the persisted favorites list (used by
+  // the /more/favorites screen). No local "saved" state — favorites is the
+  // single source of truth.
+  const saved = code ? isFavorite(code) : false;
 
   const country = useMemo(
     () => dynamicVisaData.find((c) => c.code === code) ?? null,
@@ -237,13 +263,13 @@ export default function CountryDetailScreen() {
         </Text>
         <CircleBtn
           solid
-          onPress={() => setSaved((s) => !s)}
-          accessibilityLabel={saved ? 'Unsave' : 'Save'}
+          onPress={() => code && toggleFavorite(code)}
+          accessibilityLabel={saved ? 'Remove from favorites' : 'Add to favorites'}
         >
           <Heart
             size={16}
-            color={saved ? '#E53E5A' : colors.ink}
-            fill={saved ? '#E53E5A' : 'none'}
+            color={colors.coral}
+            fill={saved ? colors.coral : 'none'}
             strokeWidth={2.25}
           />
         </CircleBtn>
@@ -286,71 +312,113 @@ export default function CountryDetailScreen() {
             </View>
           </View>
         ) : (
-          // Flag-forward header block — no photo, no ugly placeholder
+          // Flag-forward Signature v2 header — italic name + coral period + APPROVED stamp
           <View
             style={{
               paddingHorizontal: Spacing.lg,
               paddingTop: 6,
-              paddingBottom: 22,
+              paddingBottom: 18,
               flexDirection: 'row',
               alignItems: 'center',
               gap: 14,
             }}
           >
-            {flagCode ? <Flag code={flagCode} size={72} /> : null}
+            {flagCode ? <Flag code={flagCode} size={56} /> : null}
             <View style={{ flex: 1 }}>
-              <Text style={[Type.display32, { color: colors.ink }]} numberOfLines={1}>
-                {country.name}
+              <Text
+                style={{
+                  fontFamily: FontFamily.display,
+                  fontSize: 26,
+                  fontWeight: '500',
+                  letterSpacing: -26 * 0.018,
+                  color: colors.ink,
+                }}
+                numberOfLines={1}
+              >
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                  }}
+                >
+                  {country.name}
+                </Text>
+                <Text style={{ color: colors.coral }}>.</Text>
               </Text>
-              {subRow ? (
-                <Text style={[Type.meta11, { color: colors.inkMute, marginTop: 6 }]} numberOfLines={2}>
-                  {subRow}
+              {meta?.region ? (
+                <Text
+                  style={[
+                    Type.kickerSm,
+                    {
+                      color: colors.inkMute,
+                      marginTop: 4,
+                      fontSize: 9,
+                      letterSpacing: 9 * 0.16,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {meta.region.toUpperCase()}
+                  {meta.timezone ? ` · ${meta.timezone}` : ''}
                 </Text>
               ) : null}
             </View>
+            {existingGuide?.status === 'approved' ? (
+              <ApprovedStamp year={new Date().getFullYear()} size={62} />
+            ) : null}
           </View>
         )}
 
-        {/* ── Tabs ────────────────────────────────────────────────── */}
-        <View style={{ paddingHorizontal: Spacing.lg }}>
+        {/* ── Tabs — squiggle variant matches the trip tabs ──── */}
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
           <SegmentedControl
             options={['Overview', 'Visa', 'Tips']}
             value={tab}
             onChange={(v: string) => setTab(v as 'Overview' | 'Visa' | 'Tips')}
-            variant="underline"
+            variant="squiggle"
           />
         </View>
 
-        {/* ── Tab content ─────────────────────────────────────────── */}
+        {/* ── Tab content with directional fade-slide ─────────────── */}
         <View style={{ paddingHorizontal: Spacing.lg, paddingTop: 4 }}>
           {tab === 'Overview' && (
-            <OverviewTab
-              colors={colors}
-              catColor={catColor}
-              resolved={resolved}
-              stats={stats}
-              onPlanTrip={() => tripSheetRef.current?.present()}
-            />
+            <Animated.View entering={tabSlideIn(tabDirection * 18)}>
+              <OverviewTab
+                colors={colors}
+                catColor={catColor}
+                resolved={resolved}
+                bestMonths={travel?.bestMonths}
+                budgetDisplay={budgetDisplay}
+                safetyDisplay={safetyDisplay}
+                onPlanTrip={() => tripSheetRef.current?.present()}
+              />
+            </Animated.View>
           )}
 
           {tab === 'Visa' && (
-            <VisaTab
-              colors={colors}
-              catColor={catColor}
-              category={visaCat}
-              days={resolved.days}
-              needsApplication={needsApplication}
-              hasGuide={!!existingGuide}
-              onStartApplication={onStartApplication}
-            />
+            <Animated.View entering={tabSlideIn(tabDirection * 18)}>
+              <VisaTab
+                colors={colors}
+                catColor={catColor}
+                category={visaCat}
+                days={resolved.days}
+                country={country}
+                residence={residence ?? undefined}
+                needsApplication={needsApplication}
+                hasGuide={!!existingGuide}
+                onStartApplication={onStartApplication}
+              />
+            </Animated.View>
           )}
 
           {tab === 'Tips' && (
-            <TipsTab
-              colors={colors}
-              countryName={country.name}
-              local={local}
-            />
+            <Animated.View entering={tabSlideIn(tabDirection * 18)}>
+              <TipsTab
+                colors={colors}
+                countryName={country.name}
+                local={local}
+              />
+            </Animated.View>
           )}
         </View>
       </ScrollView>
@@ -384,17 +452,19 @@ export default function CountryDetailScreen() {
 // OverviewTab
 // ════════════════════════════════════════════════════════════════════════
 function OverviewTab({
-  colors, catColor, resolved, stats, onPlanTrip,
+  colors, catColor, resolved, bestMonths, budgetDisplay, safetyDisplay, onPlanTrip,
 }: {
   colors: ThemeColors;
   catColor: string;
   resolved: { category: VisaCategory; days?: number; notes?: string };
-  stats: { label: string; value: string; dotColor?: string }[];
+  bestMonths: number[] | undefined;
+  budgetDisplay: string;
+  safetyDisplay: string;
   onPlanTrip: () => void;
 }) {
   return (
     <>
-      {/* Visa-at-a-glance card */}
+      {/* Visa-at-a-glance — guilloché bg + italic title + coral squiggle */}
       <View
         style={{
           backgroundColor: colors.surface,
@@ -403,62 +473,99 @@ function OverviewTab({
           borderWidth: 1,
           borderColor: colors.line,
           marginBottom: Spacing.lg,
+          overflow: 'hidden',
+          position: 'relative',
           ...Shadows.subtle,
         }}
       >
-        <SectionKicker color={catColor}>YOUR VISA</SectionKicker>
-        <Text style={[Type.display22, { color: colors.ink, marginTop: 6 }]}>
+        <Guilloche variant="rings" color={colors.teal} opacity={0.04} />
+        <Text
+          style={[
+            Type.kickerSm,
+            { color: catColor, fontSize: 9, letterSpacing: 9 * 0.22 },
+          ]}
+        >
+          YOUR VISA
+        </Text>
+        <Text
+          style={{
+            fontFamily: FontFamily.displayItalic,
+            fontStyle: 'italic',
+            fontSize: 24,
+            fontWeight: '500',
+            letterSpacing: -24 * 0.018,
+            color: colors.ink,
+            marginTop: 4,
+          }}
+        >
           {visaTitle(resolved.category)}
         </Text>
-        <Text style={[Type.body14, { color: colors.inkMute, marginTop: 8, lineHeight: 21 }]}>
+        <Squiggle width={110} color={colors.coral} style={{ marginTop: 4 }} />
+        <Text style={[Type.body14, { color: colors.inkSoft, marginTop: 10, lineHeight: 21 }]}>
           {visaBody(resolved.category, resolved.days)}
         </Text>
       </View>
 
-      {/* Quick facts — colored dot on Best Time, localized budget, safety score */}
-      <SectionKicker style={{ marginBottom: 10 }}>QUICK FACTS</SectionKicker>
-      <View
-        style={{
-          flexDirection: 'row',
-          backgroundColor: colors.surfaceMuted,
-          borderRadius: 18,
-          overflow: 'hidden',
-        }}
-      >
-        {stats.map((s, i) => (
-          <View
-            key={s.label}
-            style={{
-              flex: 1,
-              paddingVertical: 12,
-              paddingHorizontal: 14,
-              borderLeftWidth: i > 0 ? 1 : 0,
-              borderLeftColor: colors.line,
-            }}
+      {/* When to go — full-width 12-month climate bar */}
+      {bestMonths && bestMonths.length > 0 && (
+        <View
+          style={{
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            borderWidth: 1,
+            borderRadius: 18,
+            padding: 16,
+            marginBottom: 12,
+          }}
+        >
+          <BestTimeBar bestMonths={bestMonths} />
+        </View>
+      )}
+
+      {/* Budget + Safety pair */}
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            borderWidth: 1,
+            borderRadius: 18,
+            padding: 14,
+          }}
+        >
+          <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>BUDGET</Text>
+          <Text
+            style={[
+              Type.title17,
+              { color: colors.ink, fontSize: 16, marginTop: 4 },
+            ]}
+            numberOfLines={1}
           >
-            <Text style={[Type.meta10_5, { color: colors.inkMute }]} numberOfLines={1}>
-              {s.label}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              {s.dotColor ? (
-                <View
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: s.dotColor,
-                  }}
-                />
-              ) : null}
-              <Text
-                style={[Type.title17, { color: colors.ink, fontSize: 16 }]}
-                numberOfLines={1}
-              >
-                {s.value}
-              </Text>
-            </View>
-          </View>
-        ))}
+            {budgetDisplay}
+          </Text>
+        </View>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            borderWidth: 1,
+            borderRadius: 18,
+            padding: 14,
+          }}
+        >
+          <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>SAFETY</Text>
+          <Text
+            style={[
+              Type.title17,
+              { color: colors.ink, fontSize: 16, marginTop: 4 },
+            ]}
+            numberOfLines={1}
+          >
+            {safetyDisplay}
+          </Text>
+        </View>
       </View>
 
       {/* Primary CTA — replaces the old floating FAB */}
@@ -475,109 +582,212 @@ function OverviewTab({
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// VisaTab helpers
+// ════════════════════════════════════════════════════════════════════════
+function visaHeroCategoryFor(cat: VisaCategory): VisaHeroCategory | null {
+  if (cat === 'visa-free' || cat === 'home') return 'free';
+  if (cat === 'visa-on-arrival') return 'arrival';
+  if (cat === 'evisa') return 'evisa';
+  if (cat === 'visa-required') return 'required';
+  return null;
+}
+
+function fmtStayDays(days?: number): string {
+  return days ? `${days}d` : '—';
+}
+
+function fmtMonthYear(date: Date): string {
+  const m = date.toLocaleDateString('en-US', { month: 'short' });
+  const y = String(date.getFullYear()).slice(-2);
+  return `${date.getDate()} · ${m.toUpperCase()} · ${y}`;
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // VisaTab
 // ════════════════════════════════════════════════════════════════════════
 function VisaTab({
-  colors, catColor, category, days, needsApplication, hasGuide, onStartApplication,
+  colors,
+  catColor,
+  category,
+  days,
+  country,
+  residence,
+  needsApplication,
+  hasGuide,
+  onStartApplication,
 }: {
   colors: ThemeColors;
   catColor: string;
   category: VisaCategory;
   days?: number;
+  country: import('@/data/visaData').CountryVisa;
+  residence?: string;
   needsApplication: boolean;
   hasGuide: boolean;
   onStartApplication: () => void;
 }) {
-  // Visa-free or on-arrival — inline card, no CTA (or soft "Entry rules")
-  if (!needsApplication) {
+  const heroCat = visaHeroCategoryFor(category);
+  if (!heroCat) {
+    return null;
+  }
+
+  // Pull structured visa fields off the country (fallbacks for unset countries).
+  const cost = country.cost ?? '—';
+  const processingTime = country.processingTime ?? '—';
+  const forms = country.forms ?? '—';
+  const passportValidity = country.passportValidity ?? '6m+';
+  const entries = country.entries ?? (heroCat === 'free' ? '∞' : 'single');
+
+  const residenceName = residence
+    ? (staticVisaData.find((c) => c.code === residence)?.name ?? residence)
+    : null;
+
+  // Today's date — for the visa-free APPROVED stamp.
+  const today = new Date();
+
+  if (heroCat === 'free') {
     return (
-      <View
-        style={{
-          backgroundColor: colors.surface,
-          borderRadius: Radius.xl,
-          padding: 18,
-          borderWidth: 1,
-          borderColor: colors.line,
-          marginTop: 4,
-          ...Shadows.subtle,
-        }}
-      >
-        <SectionKicker color={catColor}>ENTRY RULES</SectionKicker>
-        <Text style={[Type.display22, { color: colors.ink, marginTop: 6 }]}>
-          {visaTitle(category)}
-        </Text>
-        <Text style={[Type.body14, { color: colors.inkMute, marginTop: 8, lineHeight: 21 }]}>
-          {visaBody(category, days)}
-        </Text>
-        {category === 'visa-on-arrival' ? (
-          <View style={{ marginTop: 14, gap: 6 }}>
-            {[
-              'Valid passport (6+ months)',
-              'Return or onward ticket',
-              'Proof of accommodation',
-              'Visa fee in cash (USD typically accepted)',
-            ].map((item) => (
-              <Text key={item} style={[Type.body13, { color: colors.inkSoft }]}>• {item}</Text>
-            ))}
-          </View>
-        ) : null}
-      </View>
+      <VisaHeroCard
+        category="free"
+        kicker="YOU'RE COVERED"
+        headlineLine1={days ? 'Visa-free,' : 'Visa-free'}
+        headlineLine2={days ? `${days} days` : 'entry'}
+        stamp={{ label: 'APPROVED', date: fmtMonthYear(today) }}
+        body={
+          <>
+            {residenceName ? (
+              <>
+                As a{' '}
+                <Text
+                  style={{
+                    textDecorationLine: 'underline',
+                    color: '#FFFFFF',
+                    fontWeight: '500',
+                  }}
+                >
+                  {residenceName} passport holder
+                </Text>
+                {' — '}
+              </>
+            ) : null}
+            {country.notes ?? `No visa needed. Just show up at ${country.name} with your passport.`}
+          </>
+        }
+        meta={[
+          { label: 'Stay', value: fmtStayDays(days) },
+          { label: 'Entries', value: entries },
+          { label: 'Passport', value: passportValidity },
+        ]}
+      />
     );
   }
 
-  // Required / E-visa — show guide status and action
+  if (heroCat === 'arrival') {
+    return (
+      <VisaHeroCard
+        category="arrival"
+        kicker="PAY AT THE GATE"
+        headlineLine1="Visa on"
+        headlineLine2="arrival"
+        stamp={{
+          label: 'ON ARRIVAL',
+          date: `${cost} · ${fmtStayDays(days).toUpperCase()}`,
+        }}
+        body={
+          <>
+            Pay{' '}
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{cost} in cash</Text>{' '}
+            at the airport. Bring a passport photo and printed itinerary.
+          </>
+        }
+        meta={[
+          { label: 'Stay', value: fmtStayDays(days) },
+          { label: 'Cost', value: cost },
+          { label: 'Time', value: processingTime },
+        ]}
+      />
+    );
+  }
+
+  if (heroCat === 'evisa') {
+    const stampDate = `${processingTime
+      .replace(/\s*days?/i, 'D')
+      .replace(/\s*weeks?/i, 'WK')
+      .toUpperCase()
+      .trim()} · ${cost}`;
+    return (
+      <VisaHeroCard
+        category="evisa"
+        kicker="APPLY ONLINE"
+        headlineLine1="Apply"
+        headlineLine2="before you go"
+        stamp={{ label: 'E-VISA', date: stampDate }}
+        body={
+          <>
+            Submit on the{' '}
+            <Text
+              style={{
+                textDecorationLine: 'underline',
+                color: '#3D1810',
+                fontWeight: '500',
+              }}
+            >
+              official portal
+            </Text>
+            . Approval usually arrives in{' '}
+            <Text style={{ color: '#3D1810', fontWeight: '700' }}>{processingTime}</Text>{' '}
+            — print before flying.
+          </>
+        }
+        meta={[
+          { label: 'Process', value: processingTime },
+          { label: 'Fee', value: cost },
+          { label: 'Stay', value: fmtStayDays(days) },
+        ]}
+        onCreateGuide={onStartApplication}
+        ctaLabel={hasGuide ? 'Continue your e-visa guide' : 'Create my e-visa guide'}
+      />
+    );
+  }
+
+  // required
+  const requiredStampDate = `${processingTime
+    .replace(/\s*days?/i, 'D')
+    .replace(/\s*weeks?/i, 'WK')
+    .toUpperCase()
+    .trim()} · ${cost}`;
   return (
-    <View style={{ gap: 14, paddingTop: 4 }}>
-      <View
-        style={{
-          backgroundColor: colors.surface,
-          borderRadius: Radius.xl,
-          padding: 18,
-          borderWidth: 1,
-          borderColor: colors.line,
-          ...Shadows.subtle,
-        }}
-      >
-        <SectionKicker color={catColor}>APPLICATION</SectionKicker>
-        <Text style={[Type.display22, { color: colors.ink, marginTop: 6 }]}>
-          {visaTitle(category)}
-        </Text>
-        <Text style={[Type.body14, { color: colors.inkMute, marginTop: 8, lineHeight: 21 }]}>
-          {visaBody(category, days)}
-        </Text>
-
-        {hasGuide ? (
-          <PillButton
-            label="Continue your application"
-            variant="primary"
-            fullWidth
-            onPress={onStartApplication}
-            style={{ marginTop: 18 }}
-          />
-        ) : (
-          <PillButton
-            label="Start visa application"
-            variant="primary"
-            fullWidth
-            icon={<PlusCircle size={16} color="#FFFFFF" strokeWidth={2} />}
-            onPress={onStartApplication}
-            style={{ marginTop: 18 }}
-          />
-        )}
-      </View>
-
-      <View
-        style={{
-          backgroundColor: colors.surfaceMuted,
-          borderRadius: Radius.lg,
-          padding: 14,
-        }}
-      >
-        <Text style={[Type.meta11, { color: colors.inkMute }]}>
-          Your visa application is saved per country. Start it once, come back any time to continue.
-        </Text>
-      </View>
-    </View>
+    <VisaHeroCard
+      category="required"
+      kicker="EMBASSY · IN PERSON"
+      headlineLine1="Visa"
+      headlineLine2="required"
+      stamp={{ label: 'VISA REQ.', date: requiredStampDate }}
+      body={
+        <>
+          Apply at the{' '}
+          <Text
+            style={{
+              textDecorationLine: 'underline',
+              color: '#FFFFFF',
+              fontWeight: '500',
+            }}
+          >
+            {country.name} embassy
+          </Text>
+          . Allow{' '}
+          <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{processingTime}</Text>
+          : docs, biometrics, interview.
+        </>
+      }
+      meta={[
+        { label: 'Process', value: processingTime },
+        { label: 'Fee', value: cost },
+        { label: 'Forms', value: forms },
+      ]}
+      onCreateGuide={onStartApplication}
+      ctaLabel={hasGuide ? 'Continue your embassy guide' : 'Create my embassy guide'}
+    />
   );
 }
 
