@@ -8,7 +8,12 @@ import React, {
 } from 'react';
 import { Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
@@ -222,12 +227,27 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       return trips.find((t) => t._id === prelinkedTripId) ?? null;
     }, [prelinkedTripId, trips]);
 
+    // Dimmed backdrop — matches AppBottomSheet so the trip planner and the
+    // booking sheets feel like the same family of surfaces.
+    const renderBackdrop = useCallback(
+      (props: BottomSheetBackdropProps) => (
+        <BottomSheetBackdrop
+          {...props}
+          appearsOnIndex={0}
+          disappearsOnIndex={-1}
+          opacity={0.4}
+        />
+      ),
+      [],
+    );
+
     // ── Render ───────────────────────────────────────────────────────
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
         enableDynamicSizing={true}
         maxDynamicContentSize={maxSheetHeight}
+        backdropComponent={renderBackdrop}
         // Paper-bg sheet matching the rest of the Signature v2 surfaces;
         // booking-type color is moved into accents inside the form, not the
         // entire sheet background.
