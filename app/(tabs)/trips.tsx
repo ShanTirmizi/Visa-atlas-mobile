@@ -1,11 +1,14 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { tabSlideIn } from '@/utils/tabAnimation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useConvexAuth } from 'convex/react';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
@@ -15,9 +18,11 @@ import { Shadows } from '@/constants/theme';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { SectionKicker } from '@/components/ui/SectionKicker';
 import { PillButton } from '@/components/ui/PillButton';
+import { FontFamily } from '@/constants/theme';
 
 import { TripsGreeting } from '@/components/trips/TripsGreeting';
 import { TripsSearch } from '@/components/trips/TripsSearch';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { FeaturedTripCard } from '@/components/trips/FeaturedTripCard';
 import { TripRow } from '@/components/trips/TripRow';
 
@@ -43,6 +48,7 @@ interface RawTrip {
   startDate?: string;
   endDate?: string;
   heroImage?: string;
+  starred?: boolean;
   _creationTime: number;
   [key: string]: unknown;
 }
@@ -117,16 +123,38 @@ export default function TripsScreen() {
   // Planner sheet ref — used from search AI pill and empty state CTA
   const plannerRef = useRef<TripPlannerSheetRef>(null);
 
-  // Filter chip state
+  // Search query — live-filters the rows list by country name.
+  const [search, setSearch] = useState('');
+
+  // Filter chip state + previous-filter ref so the rows-list swap knows
+  // which side to fade-slide in from when the user taps a different tab.
   const [filter, setFilter] = useState<FilterTab>('All');
+  const prevFilterRef = useRef<FilterTab>('All');
+  const filterDirection =
+    FILTER_OPTIONS.indexOf(filter) >= FILTER_OPTIONS.indexOf(prevFilterRef.current)
+      ? 1
+      : -1;
+  useEffect(() => {
+    prevFilterRef.current = filter;
+  }, [filter]);
 
-  // Convex query — same pattern as the original screen
-  const trips = useOfflineQuery(api.trips.listTrips, {});
+  // Convex query — gated on auth so a sign-out doesn't fire a query
+  // against requireAuth() and surface a "Not authenticated" render error
+  // before the router has a chance to redirect to /sign-in.
+  const { isAuthenticated } = useConvexAuth();
+  const trips = useOfflineQuery(
+    api.trips.listTrips,
+    isAuthenticated ? {} : 'skip',
+  );
 
-  // Sort: upcoming (nearest startDate) first; no-date trips last; then by creation desc
+  // Sort: starred first, then upcoming (nearest startDate), no-date trips
+  // last, then by creation desc.
   const sortedTrips = useMemo<RawTrip[]>(() => {
     if (!trips) return [];
     return [...(trips as unknown as RawTrip[])].sort((a, b) => {
+      if (Boolean(a.starred) !== Boolean(b.starred)) {
+        return a.starred ? -1 : 1;
+      }
       const aT = a.startDate ? new Date(a.startDate).getTime() : Infinity;
       const bT = b.startDate ? new Date(b.startDate).getTime() : Infinity;
       if (aT !== bT) return aT - bT;
@@ -141,13 +169,18 @@ export default function TripsScreen() {
     return upcoming ?? sortedTrips[0];
   }, [sortedTrips]);
 
-  // Rows = all trips except featured, then filtered by tab
+  // Rows = all trips except featured, filtered by tab + search query.
   const rows = useMemo<RawTrip[]>(() => {
     const withoutFeatured = featured
       ? sortedTrips.filter((t) => t._id !== featured._id)
       : sortedTrips;
-    return applyFilter(withoutFeatured, filter);
-  }, [sortedTrips, filter, featured]);
+    const filtered = applyFilter(withoutFeatured, filter);
+    const q = search.trim().toLowerCase();
+    if (!q) return filtered;
+    return filtered.filter((t) =>
+      t.countryName.toLowerCase().includes(q),
+    );
+  }, [sortedTrips, filter, featured, search]);
 
   // ── Loading ──────────────────────────────────────
   if (trips === undefined) {
@@ -156,7 +189,7 @@ export default function TripsScreen() {
         style={{
           flex: 1,
           backgroundColor: colors.background,
-          paddingTop: insets.top + 54,
+          paddingTop: insets.top + 12,
         }}
       >
         <TripsGreeting />
@@ -171,14 +204,14 @@ export default function TripsScreen() {
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.background }}
         contentContainerStyle={{
-          paddingTop: insets.top + 54,
+          paddingTop: insets.top + 12,
           paddingBottom: insets.bottom + 110,
         }}
         showsVerticalScrollIndicator={false}
       >
         <TripsGreeting />
         <View style={{ marginTop: 16 }}>
-          <TripsSearch plannerRef={plannerRef} />
+          <TripsSearch plannerRef={plannerRef} value={search} onChangeText={setSearch} />
         </View>
         <View style={{ marginTop: 14, paddingHorizontal: 22 }}>
           <SegmentedControl
@@ -205,10 +238,11 @@ export default function TripsScreen() {
 
   // ── Main list ────────────────────────────────────
   return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{
-        paddingTop: insets.top + 54,
+        paddingTop: insets.top + 12,
         paddingBottom: insets.bottom + 110,
       }}
       showsVerticalScrollIndicator={false}
@@ -218,7 +252,7 @@ export default function TripsScreen() {
 
       {/* 2. Search + AI plan pill */}
       <View style={{ marginTop: 16 }}>
-        <TripsSearch plannerRef={plannerRef} />
+        <TripsSearch plannerRef={plannerRef} value={search} onChangeText={setSearch} />
       </View>
 
       {/* 3. Filter chips */}
@@ -249,12 +283,44 @@ export default function TripsScreen() {
         </View>
       )}
 
-      {/* 5. More trips rows */}
+      {/* 5. More trips rows — keyed on filter so the entering animation
+            replays whenever the user taps a different chip. */}
       {rows.length > 0 && (
-        <View style={{ marginTop: 28, paddingHorizontal: 20, gap: 10 }}>
-          <SectionKicker style={{ marginBottom: 6, paddingHorizontal: 2 }}>
-            More trips
-          </SectionKicker>
+        <Animated.View
+          key={filter}
+          entering={tabSlideIn(filterDirection * 18)}
+          style={{ marginTop: 28, paddingHorizontal: 22, gap: 8 }}
+        >
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              paddingHorizontal: 2,
+              marginBottom: 10,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+                fontSize: 22,
+                fontWeight: '500',
+                letterSpacing: -22 * 0.018,
+                color: colors.ink,
+              }}
+            >
+              More trips
+            </Text>
+            <Text
+              style={[
+                Type.kickerSm,
+                { color: colors.teal, fontSize: 10, letterSpacing: 0.6, fontWeight: '700' },
+              ]}
+            >
+              SEE ALL
+            </Text>
+          </View>
           {rows.map((trip) => (
             <TripRow
               key={trip._id}
@@ -266,9 +332,10 @@ export default function TripsScreen() {
               startDate={trip.startDate}
               endDate={trip.endDate}
               heroImage={trip.heroImage}
+              starred={Boolean(trip.starred)}
             />
           ))}
-        </View>
+        </Animated.View>
       )}
 
       {/* TripPlannerSheet — stub, no country context from this screen */}
@@ -282,5 +349,7 @@ export default function TripsScreen() {
         onTripCreated={() => {}}
       />
     </ScrollView>
+    <TopSafeAreaBlur />
+    </View>
   );
 }

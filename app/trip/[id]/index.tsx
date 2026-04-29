@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useConvexAuth } from 'convex/react';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
@@ -134,7 +134,11 @@ export default function TripDetailScreen() {
     [heldVisas],
   );
 
-  const trip = useOfflineQuery(api.trips.getTrip, { id: id as Id<'trips'> });
+  const { isAuthenticated } = useConvexAuth();
+  const trip = useOfflineQuery(
+    api.trips.getTrip,
+    isAuthenticated && id ? { id: id as Id<'trips'> } : 'skip',
+  );
   const heartbeatMutation = useMutation(api.tripPresence.heartbeat);
   const leaveMutation = useMutation(api.tripPresence.leave);
   const deleteTripMutation = useMutation(api.trips.deleteTrip);
@@ -144,7 +148,7 @@ export default function TripDetailScreen() {
   // VisaGuideSheet generator (mirrors the country/[code] page flow).
   const existingGuide = useQuery(
     api.visaGuides.getGuideByCountry,
-    trip?.countryCode ? { countryCode: trip.countryCode } : 'skip',
+    isAuthenticated && trip?.countryCode ? { countryCode: trip.countryCode } : 'skip',
   );
 
   const handleStartVisaApplication = () => {

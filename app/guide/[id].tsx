@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useConvexAuth } from 'convex/react';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useOfflineMutation } from '@/hooks/use-offline-mutation';
 import { api } from '@/convex/_generated/api';
@@ -235,7 +236,11 @@ export default function GuideDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const guide = useOfflineQuery(api.visaGuides.getGuide, id ? { id: id as Id<'visaGuides'> } : 'skip');
+  const { isAuthenticated } = useConvexAuth();
+  const guide = useOfflineQuery(
+    api.visaGuides.getGuide,
+    isAuthenticated && id ? { id: id as Id<'visaGuides'> } : 'skip',
+  );
   const updateChecklist = useOfflineMutation(api.visaGuides.updateChecklist);
   const updateStatus = useOfflineMutation(api.visaGuides.updateStatus);
 
