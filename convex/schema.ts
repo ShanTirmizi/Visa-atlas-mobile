@@ -67,6 +67,15 @@ export default defineSchema({
     userName: v.optional(v.string()),
   }).index("by_trip", ["tripId", "timestamp"]),
 
+  // ── Visa Guide Messages ──
+  visaGuideMessages: defineTable({
+    guideId: v.id("visaGuides"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    timestamp: v.number(),
+    userId: v.optional(v.id("users")),
+  }).index("by_guide", ["guideId", "timestamp"]),
+
   // ── Visa Guides ──
   visaGuides: defineTable({
     userId: v.id("users"),
