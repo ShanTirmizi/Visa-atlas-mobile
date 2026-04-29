@@ -34,6 +34,7 @@ import { TripOverviewHero } from '@/components/trip/overview/TripOverviewHero';
 import { NextUpCard } from '@/components/trip/overview/NextUpCard';
 import { HighlightsStrip, type HighlightItem } from '@/components/trip/overview/HighlightsStrip';
 import { LocalEssentialsCard } from '@/components/trip/overview/LocalEssentialsCard';
+import { CountryTipsView } from '@/components/tips/CountryTipsView';
 
 // ── Bookings ───────────────────────────────────────────────
 import { BookingTimeline } from '@/components/trip/bookings/BookingTimeline';
@@ -110,8 +111,8 @@ function getVisaLabel(category: string): string {
 // Tab options
 // ──────────────────────────────────────────────────────────
 
-type TabKey = 'Overview' | 'Itinerary' | 'Bookings' | 'Visa';
-const TABS: TabKey[] = ['Overview', 'Itinerary', 'Bookings', 'Visa'];
+type TabKey = 'Overview' | 'Itinerary' | 'Bookings' | 'Visa' | 'Tips';
+const TABS: TabKey[] = ['Overview', 'Itinerary', 'Bookings', 'Visa', 'Tips'];
 
 // `tabSlideIn` lives in @/utils/tabAnimation — shared with country detail
 // and any other tabbed surface that needs the same premium swap feel.
@@ -443,9 +444,13 @@ export default function TripDetailScreen() {
               onSeeAll={() => setActiveTab('Itinerary')}
             />
 
-            {/* Local essentials — emergency / language / currency / water,
-                routes to country detail Tips tab for the full breakdown */}
-            <LocalEssentialsCard countryCode={trip.countryCode} />
+            {/* Local essentials — emergency / language / currency / water.
+                "View all tips →" jumps to the Tips tab on this same screen
+                rather than routing out to country detail. */}
+            <LocalEssentialsCard
+              countryCode={trip.countryCode}
+              onViewAll={() => setActiveTab('Tips')}
+            />
 
             {/* AI chat — opens the conversational tweaker for the itinerary */}
             <Pressable
@@ -572,6 +577,20 @@ export default function TripDetailScreen() {
             </Animated.View>
           );
         })()}
+
+        {/* ── Tips tab — shared CountryTipsView (same source as the country
+            detail Tips tab so trip + country views stay in lockstep). ── */}
+        {activeTab === 'Tips' && (
+          <Animated.View
+            entering={tabSlideIn(tabDirection * 18)}
+            style={{ paddingHorizontal: 16, paddingTop: 8 }}
+          >
+            <CountryTipsView
+              countryCode={trip.countryCode}
+              countryName={trip.countryName}
+            />
+          </Animated.View>
+        )}
       </ScrollView>
 
       {/* ─── Booking sheets ─── */}

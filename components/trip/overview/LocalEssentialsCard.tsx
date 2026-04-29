@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily } from '@/constants/theme';
 import { localInfo } from '@/data/localInfo';
@@ -9,14 +8,16 @@ import { countryMeta } from '@/data/countryMeta';
 interface Props {
   /** Trip country ISO-3 code. */
   countryCode: string;
+  /** Called when the user taps "View all tips →" — wire it to setActiveTab('Tips')
+   *  on the trip detail screen so the user lands on the in-trip Tips tab. */
+  onViewAll?: () => void;
 }
 
 /** Compact 4-cell strip on the trip Overview surface — emergency number,
  *  language, currency, tap-water status pulled from the curated data
  *  layer. Routes to /country/{code} for the full Tips tab. */
-export function LocalEssentialsCard({ countryCode }: Props) {
+export function LocalEssentialsCard({ countryCode, onViewAll }: Props) {
   const { colors } = useTheme();
-  const router = useRouter();
 
   const local = localInfo[countryCode] ?? null;
   const meta = countryMeta[countryCode] ?? null;
@@ -55,10 +56,7 @@ export function LocalEssentialsCard({ countryCode }: Props) {
         >
           LOCAL ESSENTIALS
         </Text>
-        <Pressable
-          onPress={() => router.push(`/country/${countryCode}` as never)}
-          hitSlop={6}
-        >
+        <Pressable onPress={onViewAll} hitSlop={6} disabled={!onViewAll}>
           <Text
             style={{
               fontFamily: FontFamily.displayItalic,

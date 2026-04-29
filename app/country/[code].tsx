@@ -25,7 +25,7 @@ import {
 } from '@/data/visaData';
 import { countryMeta } from '@/data/countryMeta';
 import { travelData } from '@/data/travelData';
-import { localInfo } from '@/data/localInfo';
+import { CountryTipsView } from '@/components/tips/CountryTipsView';
 import { convertBudget } from '@/utils/currency';
 import { bestTimeStatus, bestTimeColor } from '@/utils/bestTime';
 import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
@@ -130,7 +130,7 @@ export default function CountryDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { heldVisas, residence, isFavorite, toggleFavorite } = useVisa();
+  const { heldVisas, residence, passports, isFavorite, toggleFavorite } = useVisa();
   // User's home currency, derived from their residence country.
   const userCurrency = useMemo(
     () => (residence ? countryMeta[residence]?.currencyCode : undefined),
@@ -165,7 +165,6 @@ export default function CountryDetailScreen() {
   const travel = country ? travelData[country.code] ?? null : null;
   const heldSet = useMemo(() => new Set(heldVisas as HeldVisaType[]), [heldVisas]);
   const resolved = country ? resolveCountry(country, heldSet) : null;
-  const local = country ? localInfo[country.code] ?? null : null;
 
   const tripSheetRef = useRef<TripPlannerSheetRef>(null);
   const guideSheetRef = useRef<VisaGuideSheetRef>(null);
@@ -399,7 +398,7 @@ export default function CountryDetailScreen() {
                 country={country}
                 category={visaCat}
                 days={resolved.days}
-                residence={residence ?? undefined}
+                passports={passports}
                 hasGuide={!!existingGuide}
                 onCreateGuide={onStartApplication}
               />
@@ -408,10 +407,9 @@ export default function CountryDetailScreen() {
 
           {tab === 'Tips' && (
             <Animated.View entering={tabSlideIn(tabDirection * 18)}>
-              <TipsTab
-                colors={colors}
+              <CountryTipsView
+                countryCode={country.code}
                 countryName={country.name}
-                local={local}
               />
             </Animated.View>
           )}
@@ -576,145 +574,3 @@ function OverviewTab({
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════
-// TipsTab — pulls from static `localInfo` map. Shows a clean empty state
-// when the country is not in the map.
-// ════════════════════════════════════════════════════════════════════════
-function TipsTab({
-  colors, countryName, local,
-}: {
-  colors: ThemeColors;
-  countryName: string;
-  local: import('@/data/localInfo').LocalInfo | null;
-}) {
-  if (!local) {
-    return (
-      <View
-        style={{
-          backgroundColor: colors.surface,
-          borderRadius: Radius.xl,
-          padding: 18,
-          borderWidth: 1,
-          borderColor: colors.line,
-          marginTop: 4,
-        }}
-      >
-        <SectionKicker>TRAVEL TIPS</SectionKicker>
-        <Text style={[Type.title17, { color: colors.ink, marginTop: 6 }]}>
-          No saved tips for {countryName} yet
-        </Text>
-        <Text style={[Type.body14, { color: colors.inkMute, marginTop: 8, lineHeight: 21 }]}>
-          Tips for this country will be generated on-demand and saved here when you plan your first
-          trip. For now, check the embassy website and your airline's entry requirements before
-          travel.
-        </Text>
-      </View>
-    );
-  }
-
-  const rows: Array<{ kicker: string; body: string | null; bullets?: string[] }> = [
-    { kicker: 'TIPPING', body: local.tippingCulture ?? null },
-    { kicker: 'MONEY', body: local.currencyTip ?? null },
-    { kicker: 'TAP WATER', body: local.tapWater === 'safe' ? 'Tap water is safe to drink.' : local.tapWater === 'unsafe' ? 'Tap water is NOT safe. Drink bottled or filtered water.' : 'Tap water safety varies — stick to bottled or filtered water to be safe.' },
-    { kicker: 'SIM & DATA', body: local.simCard ?? null },
-    { kicker: 'PLUGS', body: local.plugType ?? null },
-    { kicker: 'DRESS CODE', body: local.dressCode ?? null },
-  ];
-  const bulletRows: Array<{ kicker: string; items: string[] }> = [];
-  if (local.scamWarnings?.length) bulletRows.push({ kicker: 'SCAM WARNINGS', items: local.scamWarnings });
-  if (local.localCustoms?.length) bulletRows.push({ kicker: 'LOCAL CUSTOMS', items: local.localCustoms });
-
-  return (
-    <View style={{ gap: 12, paddingTop: 4 }}>
-      {/* Emergency strip */}
-      <View
-        style={{
-          backgroundColor: colors.surface,
-          borderRadius: Radius.xl,
-          padding: 18,
-          borderWidth: 1,
-          borderColor: colors.line,
-        }}
-      >
-        <SectionKicker color={colors.danger}>EMERGENCY</SectionKicker>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 8 }}>
-          {[
-            { label: 'General', value: local.emergencyNumber },
-            { label: 'Police', value: local.policeNumber },
-            { label: 'Ambulance', value: local.ambulanceNumber },
-            { label: 'Fire', value: local.fireNumber },
-          ].map((e) => (
-            <View
-              key={e.label}
-              // 2×2 grid: each tile takes half the row minus the gap.
-              style={{
-                flexBasis: '48%',
-                flexGrow: 1,
-                backgroundColor: colors.surfaceMuted,
-                borderRadius: Radius.md,
-                paddingVertical: 12,
-                paddingHorizontal: 14,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 10,
-              }}
-            >
-              <Text
-                style={[Type.meta10_5, { color: colors.inkMute, flexShrink: 1 }]}
-                numberOfLines={1}
-              >
-                {e.label}
-              </Text>
-              <Text style={[Type.title17, { color: colors.ink }]} numberOfLines={1}>
-                {e.value}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {/* Info rows */}
-      {rows.filter((r) => r.body).map((r) => (
-        <View
-          key={r.kicker}
-          style={{
-            backgroundColor: colors.surface,
-            borderRadius: Radius.xl,
-            padding: 16,
-            borderWidth: 1,
-            borderColor: colors.line,
-          }}
-        >
-          <SectionKicker>{r.kicker}</SectionKicker>
-          <Text style={[Type.body14, { color: colors.inkSoft, marginTop: 6, lineHeight: 21 }]}>
-            {r.body}
-          </Text>
-        </View>
-      ))}
-
-      {/* Bullet rows */}
-      {bulletRows.map((r) => (
-        <View
-          key={r.kicker}
-          style={{
-            backgroundColor: colors.surface,
-            borderRadius: Radius.xl,
-            padding: 16,
-            borderWidth: 1,
-            borderColor: colors.line,
-          }}
-        >
-          <SectionKicker>{r.kicker}</SectionKicker>
-          <View style={{ marginTop: 8, gap: 4 }}>
-            {r.items.map((item, i) => (
-              <Text key={i} style={[Type.body13, { color: colors.inkSoft, lineHeight: 20 }]}>
-                • {item}
-              </Text>
-            ))}
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
