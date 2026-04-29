@@ -204,7 +204,25 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
           </TouchableOpacity>
         </View>
         <AddBookingSheet ref={addSheetRef} />
-        <BookingDetailSheet ref={detailSheetRef} />
+        <BookingDetailSheet
+          ref={detailSheetRef}
+          onEdit={(booking) => {
+            addSheetRef.current?.openForEdit({
+              id: booking.id,
+              type: booking.type,
+              title: booking.title,
+              startDate: booking.startDate,
+              endDate: booking.endDate,
+              location: booking.location,
+              countryCode: booking.countryCode,
+              confirmationNumber: booking.confirmationNumber,
+              cost: booking.cost,
+              currency: booking.currency,
+              notes: booking.notes,
+              typeDetails: booking.typeDetails,
+            });
+          }}
+        />
       </View>
     );
   }
@@ -358,7 +376,25 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
       </TouchableOpacity>
 
       <AddBookingSheet ref={addSheetRef} />
-      <BookingDetailSheet ref={detailSheetRef} />
+      <BookingDetailSheet
+        ref={detailSheetRef}
+        onEdit={(booking) => {
+          addSheetRef.current?.openForEdit({
+            id: booking.id,
+            type: booking.type,
+            title: booking.title,
+            startDate: booking.startDate,
+            endDate: booking.endDate,
+            location: booking.location,
+            countryCode: booking.countryCode,
+            confirmationNumber: booking.confirmationNumber,
+            cost: booking.cost,
+            currency: booking.currency,
+            notes: booking.notes,
+            typeDetails: booking.typeDetails,
+          });
+        }}
+      />
       <CalendarReviewSheet ref={reviewSheetRef} onComplete={clearReviewItems} />
     </View>
   );

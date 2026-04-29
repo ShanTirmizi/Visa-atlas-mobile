@@ -128,7 +128,7 @@ export default function TripDetailScreen() {
   const bookingDetailRef = useRef<BookingDetailSheetRef>(null);
   const guideSheetRef = useRef<VisaGuideSheetRef>(null);
 
-  const { heldVisas, residence } = useVisa();
+  const { heldVisas, passports } = useVisa();
   const heldVisasSet = useMemo(
     () => new Set(heldVisas as HeldVisaType[]),
     [heldVisas],
@@ -523,7 +523,7 @@ export default function TripDetailScreen() {
                 country={country}
                 category={resolved.category}
                 days={resolved.days}
-                residence={residence ?? undefined}
+                passports={passports}
                 hasGuide={!!existingGuide}
                 onCreateGuide={handleStartVisaApplication}
               />
@@ -567,7 +567,25 @@ export default function TripDetailScreen() {
 
       {/* ─── Booking sheets ─── */}
       <AddBookingSheet ref={addBookingRef} />
-      <BookingDetailSheet ref={bookingDetailRef} />
+      <BookingDetailSheet
+        ref={bookingDetailRef}
+        onEdit={(booking) => {
+          addBookingRef.current?.openForEdit({
+            id: booking.id,
+            type: booking.type,
+            title: booking.title,
+            startDate: booking.startDate,
+            endDate: booking.endDate,
+            location: booking.location,
+            countryCode: booking.countryCode,
+            confirmationNumber: booking.confirmationNumber,
+            cost: booking.cost,
+            currency: booking.currency,
+            notes: booking.notes,
+            typeDetails: booking.typeDetails,
+          });
+        }}
+      />
       {/* Visa guide generator — opens when the user taps "Start visa
           application" and there's no guide yet. Once created, the sheet's
           callback routes to the new guide page. */}

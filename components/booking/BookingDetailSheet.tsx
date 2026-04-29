@@ -22,8 +22,8 @@ import {
   BedDouble,
   Car,
   Compass,
-  Link2Off,
   MapPin,
+  Pencil,
   Phone,
   Plane,
   ShieldCheck,
@@ -81,7 +81,7 @@ export interface BookingDetailData {
 
 interface BookingDetailSheetProps {
   onDelete?: () => void;
-  onUnlink?: () => void;
+  onEdit?: (booking: BookingDetailData) => void;
 }
 
 // ──────────────────────────────────────────────
@@ -420,48 +420,44 @@ function BookingDarkCTA({ kicker, label, accent, icon, onPress, colors }: Bookin
 }
 
 // ──────────────────────────────────────────────
-// BookingActionRow — Unlink + Delete pair
+// BookingActionRow — Edit + Delete pair
 // ──────────────────────────────────────────────
 
 interface BookingActionRowProps {
-  canUnlink: boolean;
-  onUnlink: () => void;
+  onEdit: () => void;
   onDelete: () => void;
   colors: ThemeColors;
 }
 
 function BookingActionRow({
-  canUnlink,
-  onUnlink,
+  onEdit,
   onDelete,
   colors,
 }: BookingActionRowProps) {
   return (
     <View style={actionStyles.row}>
-      {canUnlink && (
-        <Pressable
-          onPress={onUnlink}
-          accessibilityRole="button"
-          accessibilityLabel="Unlink from trip"
-          style={({ pressed }) => [
-            actionStyles.btn,
-            { backgroundColor: 'rgba(255,255,255,0.10)', opacity: pressed ? 0.75 : 1 },
-          ]}
-        >
-          <Link2Off size={15} color="#FFFFFF" strokeWidth={2} />
-          <Text style={[actionStyles.btnText, { color: '#FFFFFF' }]}>Unlink</Text>
-        </Pressable>
-      )}
+      <Pressable
+        onPress={onEdit}
+        accessibilityRole="button"
+        accessibilityLabel="Edit booking"
+        style={({ pressed }) => [
+          actionStyles.btn,
+          { backgroundColor: 'rgba(255,255,255,0.10)', opacity: pressed ? 0.85 : 1 },
+        ]}
+      >
+        <Pencil size={15} color="#FFFFFF" strokeWidth={2.25} />
+        <Text style={[actionStyles.btnText, { color: '#FFFFFF' }]}>Edit</Text>
+      </Pressable>
       <Pressable
         onPress={onDelete}
         accessibilityRole="button"
         accessibilityLabel="Delete booking"
         style={({ pressed }) => [
           actionStyles.btn,
-          { flex: 1, backgroundColor: colors.danger, opacity: pressed ? 0.85 : 1 },
+          { backgroundColor: colors.danger, opacity: pressed ? 0.85 : 1 },
         ]}
       >
-        <Trash2 size={15} color="#FFFFFF" strokeWidth={2} />
+        <Trash2 size={15} color="#FFFFFF" strokeWidth={2.25} />
         <Text style={[actionStyles.btnText, { color: '#FFFFFF' }]}>Delete</Text>
       </Pressable>
     </View>
@@ -501,7 +497,7 @@ function SublineText({
 interface RendererProps {
   booking: BookingDetailData;
   colors: ThemeColors;
-  onUnlink: () => void;
+  onEdit: () => void;
   onDelete: () => void;
 }
 
@@ -509,7 +505,7 @@ interface RendererProps {
 // 1. Restaurant
 // ──────────────────────────────────────────────
 
-function RestaurantSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+function RestaurantSheet({ booking, colors, onEdit, onDelete }: RendererProps) {
   const tokens = bookingTypeColors.restaurant;
   const details = booking.typeDetails ?? {};
   const partySize = details.partySize ?? '';
@@ -627,8 +623,7 @@ function RestaurantSheet({ booking, colors, onUnlink, onDelete }: RendererProps)
       ) : null}
 
       <BookingActionRow
-        canUnlink={!!booking.tripId}
-        onUnlink={onUnlink}
+        onEdit={onEdit}
         onDelete={onDelete}
         colors={colors}
       />
@@ -640,7 +635,7 @@ function RestaurantSheet({ booking, colors, onUnlink, onDelete }: RendererProps)
 // 2. Insurance
 // ──────────────────────────────────────────────
 
-function InsuranceSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+function InsuranceSheet({ booking, colors, onEdit, onDelete }: RendererProps) {
   const tokens = bookingTypeColors.insurance;
   const details = booking.typeDetails ?? {};
 
@@ -696,8 +691,7 @@ function InsuranceSheet({ booking, colors, onUnlink, onDelete }: RendererProps) 
       />
 
       <BookingActionRow
-        canUnlink={!!booking.tripId}
-        onUnlink={onUnlink}
+        onEdit={onEdit}
         onDelete={onDelete}
         colors={colors}
       />
@@ -709,7 +703,7 @@ function InsuranceSheet({ booking, colors, onUnlink, onDelete }: RendererProps) 
 // 3. Car (mapped from car_rental)
 // ──────────────────────────────────────────────
 
-function CarSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+function CarSheet({ booking, colors, onEdit, onDelete }: RendererProps) {
   const tokens = bookingTypeColors.car;
   const details = booking.typeDetails ?? {};
 
@@ -839,8 +833,7 @@ function CarSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
       ) : null}
 
       <BookingActionRow
-        canUnlink={!!booking.tripId}
-        onUnlink={onUnlink}
+        onEdit={onEdit}
         onDelete={onDelete}
         colors={colors}
       />
@@ -852,7 +845,7 @@ function CarSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
 // 4. Experience
 // ──────────────────────────────────────────────
 
-function ExperienceSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+function ExperienceSheet({ booking, colors, onEdit, onDelete }: RendererProps) {
   const tokens = bookingTypeColors.experience;
   const details = booking.typeDetails ?? {};
 
@@ -947,8 +940,7 @@ function ExperienceSheet({ booking, colors, onUnlink, onDelete }: RendererProps)
       ) : null}
 
       <BookingActionRow
-        canUnlink={!!booking.tripId}
-        onUnlink={onUnlink}
+        onEdit={onEdit}
         onDelete={onDelete}
         colors={colors}
       />
@@ -960,7 +952,7 @@ function ExperienceSheet({ booking, colors, onUnlink, onDelete }: RendererProps)
 // 5. Hotel
 // ──────────────────────────────────────────────
 
-function HotelSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+function HotelSheet({ booking, colors, onEdit, onDelete }: RendererProps) {
   const tokens = bookingTypeColors.hotel;
   const details = booking.typeDetails ?? {};
   const hotelName = details.hotelName ?? booking.title;
@@ -1082,8 +1074,7 @@ function HotelSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
       ) : null}
 
       <BookingActionRow
-        canUnlink={!!booking.tripId}
-        onUnlink={onUnlink}
+        onEdit={onEdit}
         onDelete={onDelete}
         colors={colors}
       />
@@ -1095,7 +1086,7 @@ function HotelSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
 // 6. Flight — boarding pass with big italic airport codes
 // ──────────────────────────────────────────────
 
-function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+function FlightSheet({ booking, colors, onEdit, onDelete }: RendererProps) {
   const tokens = bookingTypeColors.flight;
   const details = booking.typeDetails ?? {};
   const [routeLineWidth, setRouteLineWidth] = useState(0);
@@ -1337,8 +1328,7 @@ function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
       />
 
       <BookingActionRow
-        canUnlink={!!booking.tripId}
-        onUnlink={onUnlink}
+        onEdit={onEdit}
         onDelete={onDelete}
         colors={colors}
       />
@@ -1360,13 +1350,12 @@ const SHEET_RENDERERS: Record<BookingType, React.ComponentType<RendererProps>> =
 };
 
 const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetProps>(
-  ({ onDelete, onUnlink }, ref) => {
+  ({ onDelete, onEdit }, ref) => {
     const { colors } = useTheme();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const [booking, setBooking] = useState<BookingDetailData | null>(null);
 
     const deleteBooking = useMutation(api.bookings.deleteBooking);
-    const unlinkBookingFromTrip = useMutation(api.bookings.unlinkBookingFromTrip);
 
     useImperativeHandle(ref, () => ({
       open: (data: BookingDetailData) => {
@@ -1402,29 +1391,13 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
       );
     }, [booking, deleteBooking, onDelete]);
 
-    const handleUnlink = useCallback(() => {
+    const handleEdit = useCallback(() => {
       if (!booking) return;
-      Alert.alert(
-        'Unlink Booking',
-        `Are you sure you want to unlink "${booking.title}" from this trip?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Unlink',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await unlinkBookingFromTrip({ id: booking.id as Id<'bookings'> });
-                bottomSheetRef.current?.dismiss();
-                onUnlink?.();
-              } catch {
-                Alert.alert('Error', 'Failed to unlink booking.');
-              }
-            },
-          },
-        ],
-      );
-    }, [booking, unlinkBookingFromTrip, onUnlink]);
+      bottomSheetRef.current?.dismiss();
+      // Defer the parent callback until the sheet has dismissed so the
+      // AddBookingSheet can present cleanly without a stacking conflict.
+      setTimeout(() => onEdit?.(booking), 250);
+    }, [booking, onEdit]);
 
     const sheetBg = booking
       ? bookingTypeColors[bookingTypeToHeroType(booking.type)].bgFrom
@@ -1445,7 +1418,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
             <SheetRenderer
               booking={booking}
               colors={colors}
-              onUnlink={handleUnlink}
+              onEdit={handleEdit}
               onDelete={handleDelete}
             />
           ) : (
