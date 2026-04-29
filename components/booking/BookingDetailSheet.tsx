@@ -1,44 +1,57 @@
 import React, {
   forwardRef,
+  useCallback,
   useImperativeHandle,
   useRef,
   useState,
-  useCallback,
 } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
   Alert,
+  Linking,
+  Pressable,
   StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
-import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
-import { Copy, Trash2, Unlink, Link2, MapPin, Plane } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
+import {
+  BedDouble,
+  Car,
+  Compass,
+  Link2Off,
+  MapPin,
+  Phone,
+  Plane,
+  ShieldCheck,
+  Trash2,
+  UtensilsCrossed,
+} from 'lucide-react-native';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import {
+  bookingTypeColors,
   FontFamily,
-  FontSize,
-  Spacing,
-  Radius,
+  Shadows,
+  type BookingHeroType,
   type ThemeColors,
 } from '@/constants/theme';
 import {
-  BOOKING_TYPES,
-  type BookingType,
   type BookingStatus,
-  getBookingColor,
-  formatBookingDates,
+  type BookingType,
+  formatRelativeDate,
 } from '@/constants/bookings';
+import { buildMapsSearchUrl, buildTelUrl } from '@/utils/maps';
+import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
+import { Guilloche } from '@/components/ui/Guilloche';
 
 // ──────────────────────────────────────────────
-// Types
+// Public interface — preserved exactly so call sites keep compiling
 // ──────────────────────────────────────────────
 
 export interface BookingDetailSheetRef {
@@ -62,6 +75,7 @@ export interface BookingDetailData {
   tripId?: string;
   tripName?: string;
   typeDetails?: Record<string, string>;
+  countryCode?: string;
 }
 
 interface BookingDetailSheetProps {
@@ -70,331 +84,1200 @@ interface BookingDetailSheetProps {
 }
 
 // ──────────────────────────────────────────────
-// Status badge config
+// Helpers
 // ──────────────────────────────────────────────
 
-const STATUS_STYLES: Record<BookingStatus, { label: string; bg: string; fg: string }> = {
-  upcoming: { label: 'Upcoming', bg: 'rgba(255,255,255,0.25)', fg: '#FFFFFF' },
-  active: { label: 'Active', bg: 'rgba(255,255,255,0.25)', fg: '#FFFFFF' },
-  completed: { label: 'Completed', bg: 'rgba(255,255,255,0.25)', fg: '#FFFFFF' },
-  cancelled: { label: 'Cancelled', bg: 'rgba(255,255,255,0.25)', fg: '#FFFFFF' },
+function bookingTypeToHeroType(type: BookingType): BookingHeroType {
+  if (type === 'car_rental') return 'car';
+  return type as BookingHeroType;
+}
+
+const NUMBER_WORDS: Record<number, string> = {
+  1: 'ONE',
+  2: 'TWO',
+  3: 'THREE',
+  4: 'FOUR',
+  5: 'FIVE',
+  6: 'SIX',
+  7: 'SEVEN',
+  8: 'EIGHT',
+  9: 'NINE',
+  10: 'TEN',
 };
 
+function numberWord(n: number | string): string {
+  const num = typeof n === 'string' ? parseInt(n, 10) : n;
+  if (isNaN(num)) return String(n).toUpperCase();
+  return NUMBER_WORDS[num] ?? String(num);
+}
+
+function parseAirport(raw: string): { code: string; city: string } {
+  if (!raw.trim()) return { code: '—', city: 'Unknown' };
+  const match = raw.match(/\(([A-Z]{3})\)/);
+  if (match) {
+    return {
+      code: match[1],
+      city: raw.replace(/\s*\([A-Z]{3}\)\s*/, '').trim().toUpperCase(),
+    };
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length <= 4) {
+    return { code: trimmed.toUpperCase(), city: trimmed.toUpperCase() };
+  }
+  return { code: trimmed.slice(0, 3).toUpperCase(), city: trimmed.toUpperCase() };
+}
+
+function fmtTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  } catch {
+    return iso;
+  }
+}
+
+function fmtCurrency(cost?: number, currency?: string): string | null {
+  if (cost == null) return null;
+  const symbol =
+    currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
+  return `${symbol}${cost.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function fmtShortDate(iso: string): string {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  try {
+    const d = new Date(iso);
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  } catch {
+    return iso;
+  }
+}
+
 // ──────────────────────────────────────────────
-// DetailRow — clean info row
+// BookingHero — colored top zone
 // ──────────────────────────────────────────────
 
-function DetailRow({
-  label,
-  value,
-  colors,
-  accent,
-}: {
-  label: string;
-  value: string;
-  colors: ThemeColors;
-  accent?: boolean;
-}) {
+interface BookingHeroProps {
+  heroType: BookingHeroType;
+  icon: React.ReactNode;
+  statusPillLabel: string;
+  kicker?: string;
+  /** Pass null to suppress kicker row entirely (used by flight to render route block) */
+  kickerSlot?: React.ReactNode;
+  title: string;
+  subline: React.ReactNode;
+  children?: React.ReactNode;
+}
+
+function BookingHero({
+  heroType,
+  icon,
+  statusPillLabel,
+  kicker,
+  kickerSlot,
+  title,
+  subline,
+  children,
+}: BookingHeroProps) {
+  const tokens = bookingTypeColors[heroType];
+
   return (
-    <View style={styles.detailRow}>
-      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <Text
-        style={[styles.detailValue, { color: accent ? colors.primary : colors.foreground }]}
-        numberOfLines={2}
+    <View
+      style={[
+        heroStyles.outerWrapper,
+        {
+          shadowColor: '#1F1A14',
+          shadowOffset: { width: 0, height: 18 },
+          shadowOpacity: 0.18,
+          shadowRadius: 32,
+          elevation: 8,
+        },
+      ]}
+    >
+      <View
+        style={[
+          heroStyles.inner,
+          { backgroundColor: tokens.bgFrom, borderRadius: 22 },
+        ]}
       >
-        {value}
-      </Text>
+        <Guilloche
+          variant="wavy"
+          color={tokens.ink}
+          opacity={tokens.guillocheOpacity}
+        />
+
+        {/* Top row: icon orb + status pill */}
+        <View style={heroStyles.topRow}>
+          <View
+            style={[
+              heroStyles.iconOrb,
+              { backgroundColor: tokens.secondary, borderRadius: 12 },
+            ]}
+          >
+            {icon}
+          </View>
+          <View
+            style={[
+              heroStyles.statusPill,
+              { backgroundColor: tokens.secondary },
+            ]}
+          >
+            <View
+              style={[
+                heroStyles.statusDot,
+                { backgroundColor: tokens.accent },
+              ]}
+            />
+            <Text
+              style={[
+                heroStyles.statusText,
+                { color: tokens.ink, letterSpacing: 11 * 0.22 },
+              ]}
+            >
+              {statusPillLabel}
+            </Text>
+          </View>
+        </View>
+
+        {/* Kicker or custom slot */}
+        {kickerSlot !== undefined ? (
+          kickerSlot
+        ) : kicker ? (
+          <Text
+            style={[
+              heroStyles.kicker,
+              {
+                color: tokens.ink,
+                letterSpacing: 11 * 0.22,
+                opacity: 0.85,
+              },
+            ]}
+          >
+            {kicker}
+          </Text>
+        ) : null}
+
+        {/* Title */}
+        <Text
+          style={[
+            heroStyles.title,
+            {
+              color: tokens.ink,
+              letterSpacing: -36 * 0.022,
+            },
+          ]}
+          numberOfLines={2}
+        >
+          {title}
+        </Text>
+
+        {/* Subline */}
+        <View style={heroStyles.sublineRow}>{subline}</View>
+
+        {/* Secondary card slot */}
+        {children ? (
+          <View
+            style={[
+              heroStyles.secondaryCard,
+              { backgroundColor: tokens.secondary, borderRadius: 16 },
+            ]}
+          >
+            {children}
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
 
 // ──────────────────────────────────────────────
-// Decorative barcode — purely visual
+// BookingMetaCard — white info card with rows
 // ──────────────────────────────────────────────
 
-const BARCODE_PATTERN = [
-  2, 1, 3, 1, 2, 3, 1, 2, 1, 3, 2, 1, 1, 3, 2, 1, 2, 3, 1, 1, 2, 3, 1, 2, 1,
-  3, 1, 2, 1, 3, 2, 1, 3, 1, 2, 1, 2, 3, 1, 2, 1, 3, 1, 2, 3, 1, 2, 1, 3, 2,
-];
+interface MetaRow {
+  label: string;
+  value?: string | null;
+}
 
-function DecorativeBarcode({ color }: { color: string }) {
+interface BookingMetaCardProps {
+  rows: MetaRow[];
+  colors: ThemeColors;
+}
+
+function BookingMetaCard({ rows, colors }: BookingMetaCardProps) {
+  const visibleRows = rows.filter((r) => r.value != null && r.value !== '');
+  if (visibleRows.length === 0) return null;
+
   return (
-    <View style={bpStyles.barcodeRow}>
-      {BARCODE_PATTERN.map((w, i) => (
+    <View
+      style={[
+        metaStyles.card,
+        { backgroundColor: colors.surface },
+      ]}
+    >
+      {visibleRows.map((row, i) => (
         <View
-          key={i}
-          style={{
-            width: w,
-            height: 40,
-            backgroundColor: color,
-            borderRadius: 1,
-          }}
-        />
+          key={row.label}
+          style={[
+            metaStyles.row,
+            i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+          ]}
+        >
+          <Text style={[metaStyles.label, { color: colors.inkMute }]}>
+            {row.label}
+          </Text>
+          <Text
+            style={[metaStyles.value, { color: colors.ink }]}
+            numberOfLines={2}
+          >
+            {row.value}
+          </Text>
+        </View>
       ))}
     </View>
   );
 }
 
 // ──────────────────────────────────────────────
-// FlightBoardingPass
+// BookingDarkCTA — dark action pill (matches VisaGuideCTA pattern)
 // ──────────────────────────────────────────────
 
-interface FlightBoardingPassProps {
-  booking: BookingDetailData;
+interface BookingDarkCTAProps {
+  kicker: string;
+  label: string;
+  accent: string;
+  icon: React.ReactNode;
+  onPress: () => void;
   colors: ThemeColors;
-  isDark: boolean;
-  typeColor: string;
-  sheetBg: string;
-  statusCfg: { label: string; bg: string; fg: string };
-  dateDisplay: string;
-  formattedCost: string | null;
-  onCopyConfirmation: () => void;
-  onDelete: () => void;
-  onUnlink: () => void;
-  onLinkTrip?: () => void;
 }
 
-function FlightBoardingPass({
-  booking,
-  colors,
-  isDark,
-  typeColor,
-  sheetBg,
-  statusCfg,
-  dateDisplay,
-  formattedCost,
-  onCopyConfirmation,
-  onDelete,
-  onUnlink,
-  onLinkTrip,
-}: FlightBoardingPassProps) {
-  const details = booking.typeDetails ?? {};
-  const airline = details.airline ?? booking.title;
-  const flightNumber = details.flightNumber ?? '';
-  const departure = details.departure ?? '';
-  const arrival = details.arrival ?? '';
-  const travelClass = details.class ?? '';
-
-  // Try to extract airport codes (e.g. "London (LHR)" -> "LHR", "London" remaining)
-  const parseAirport = (raw: string): { code: string; city: string } => {
-    const match = raw.match(/\(([A-Z]{3})\)/);
-    if (match) {
-      return {
-        code: match[1],
-        city: raw.replace(/\s*\([A-Z]{3}\)\s*/, '').trim(),
-      };
-    }
-    // If no code in parens, use first 3 chars uppercase as code
-    const trimmed = raw.trim();
-    if (trimmed.length <= 4) {
-      return { code: trimmed.toUpperCase(), city: trimmed };
-    }
-    return { code: trimmed.slice(0, 3).toUpperCase(), city: trimmed };
-  };
-
-  const dep = parseAirport(departure);
-  const arr = parseAirport(arrival);
-
-  const cardBg = colors.card;
-  const barcodeColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-
+function BookingDarkCTA({ kicker, label, accent, icon, onPress, colors }: BookingDarkCTAProps) {
   return (
-    <View style={bpStyles.wrapper}>
-      {/* ── Top half — slightly lighter than sheet bg for card contrast ──── */}
-      <View style={[bpStyles.topHalf, { backgroundColor: typeColor, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderBottomWidth: 0 }]}>
-        {/* Header row: airline + flight number */}
-        <View style={bpStyles.headerRow}>
-          <View style={bpStyles.airlineRow}>
-            <Plane size={16} color="#FFFFFF" />
-            <Text style={bpStyles.airlineName} numberOfLines={1}>
-              {airline.toUpperCase()}
-            </Text>
-          </View>
-          {flightNumber ? (
-            <Text style={bpStyles.flightNumber}>{flightNumber}</Text>
-          ) : null}
-        </View>
-
-        {/* Route display */}
-        <View style={bpStyles.routeContainer}>
-          <View style={bpStyles.routeEndpoint}>
-            <Text style={bpStyles.airportCode}>{dep.code}</Text>
-            <Text style={bpStyles.cityName} numberOfLines={1}>
-              {dep.city}
-            </Text>
-          </View>
-
-          <View style={bpStyles.routeLine}>
-            <View style={bpStyles.routeDash} />
-            <Plane size={18} color="rgba(255,255,255,0.9)" />
-            <View style={bpStyles.routeDash} />
-          </View>
-
-          <View style={[bpStyles.routeEndpoint, { alignItems: 'flex-end' }]}>
-            <Text style={bpStyles.airportCode}>{arr.code}</Text>
-            <Text style={bpStyles.cityName} numberOfLines={1}>
-              {arr.city}
-            </Text>
-          </View>
-        </View>
-
-        {/* Date + status */}
-        <View style={bpStyles.dateLine}>
-          <Text style={bpStyles.dateText}>{dateDisplay}</Text>
-          <View style={[bpStyles.statusPill, { backgroundColor: statusCfg.bg }]}>
-            <Text style={[bpStyles.statusText, { color: statusCfg.fg }]}>
-              {statusCfg.label}
-            </Text>
-          </View>
-        </View>
-
-        {booking.tripName && (
-          <View style={bpStyles.linkedPill}>
-            <Text style={bpStyles.linkedText}>Linked to {booking.tripName}</Text>
-          </View>
-        )}
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        ctaStyles.pill,
+        { backgroundColor: colors.ink, opacity: pressed ? 0.9 : 1 },
+        Shadows.cardWarm,
+      ]}
+    >
+      <View
+        style={[
+          ctaStyles.iconOrb,
+          { borderColor: accent, backgroundColor: colors.solidOverlayFaint },
+        ]}
+      >
+        {icon}
       </View>
 
-      {/* ── Tear line ──── */}
-      <View style={[bpStyles.tearLineContainer, { backgroundColor: cardBg }]}>
-        {/* Left semicircle cutout */}
-        <View
+      <View style={{ flex: 1 }}>
+        <Text
           style={[
-            bpStyles.tearCircle,
-            bpStyles.tearCircleLeft,
-            { backgroundColor: typeColor },
+            ctaStyles.kicker,
+            { color: accent, letterSpacing: 9 * 0.2 },
           ]}
-        />
-        {/* Dashed line */}
-        <View style={[bpStyles.tearDash, { borderColor: colors.borderSubtle }]} />
-        {/* Right semicircle cutout */}
-        <View
-          style={[
-            bpStyles.tearCircle,
-            bpStyles.tearCircleRight,
-            { backgroundColor: typeColor },
-          ]}
-        />
-      </View>
-
-      {/* ── Bottom half — card background ──── */}
-      <View style={[bpStyles.bottomHalf, { backgroundColor: cardBg, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderTopWidth: 0 }]}>
-        {/* Detail grid — 2 columns */}
-        <View style={bpStyles.detailGrid}>
-          <View style={bpStyles.detailBox}>
-            <Text style={[bpStyles.detailBoxLabel, { color: colors.textSecondary }]}>
-              CLASS
-            </Text>
-            <Text style={[bpStyles.detailBoxValue, { color: colors.foreground }]}>
-              {travelClass || '\u2014'}
-            </Text>
-          </View>
-          <View style={bpStyles.detailBox}>
-            <Text style={[bpStyles.detailBoxLabel, { color: colors.textSecondary }]}>
-              CONFIRMATION
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text
-                style={[bpStyles.detailBoxValue, { color: colors.foreground }]}
-                numberOfLines={1}
-              >
-                {booking.confirmationNumber || '\u2014'}
-              </Text>
-              {booking.confirmationNumber ? (
-                <TouchableOpacity
-                  onPress={onCopyConfirmation}
-                  hitSlop={8}
-                  style={[styles.copyBtn, { backgroundColor: colors.primaryBg }]}
-                >
-                  <Copy size={11} color={colors.primary} />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
-        </View>
-
-        <View style={bpStyles.detailGrid}>
-          <View style={bpStyles.detailBox}>
-            <Text style={[bpStyles.detailBoxLabel, { color: colors.textSecondary }]}>
-              COST
-            </Text>
-            <Text
-              style={[
-                bpStyles.detailBoxValue,
-                { color: formattedCost ? colors.primary : colors.textMuted },
-              ]}
-            >
-              {formattedCost || '\u2014'}
-            </Text>
-          </View>
-          <View style={bpStyles.detailBox}>
-            <Text style={[bpStyles.detailBoxLabel, { color: colors.textSecondary }]}>
-              GATE
-            </Text>
-            <Text style={[bpStyles.detailBoxValue, { color: colors.textMuted }]}>
-              {'\u2014'}
-            </Text>
-          </View>
-        </View>
-
-        {/* Notes */}
-        {booking.notes ? (
-          <View style={[bpStyles.notesSection, { borderTopColor: colors.borderSubtle }]}>
-            <Text style={[bpStyles.detailBoxLabel, { color: colors.textSecondary }]}>
-              NOTES
-            </Text>
-            <Text style={[bpStyles.notesText, { color: colors.foreground }]}>
-              {booking.notes}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Barcode */}
-        <DecorativeBarcode color={barcodeColor} />
-      </View>
-
-      {/* ── Actions ──── */}
-      <View style={styles.actionsRow}>
-        {booking.tripId ? (
-          <TouchableOpacity
-            onPress={onUnlink}
-            activeOpacity={0.7}
-            style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-          >
-            <Unlink size={15} color="#FFFFFF" />
-            <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Unlink</Text>
-          </TouchableOpacity>
-        ) : onLinkTrip ? (
-          <TouchableOpacity
-            onPress={onLinkTrip}
-            activeOpacity={0.7}
-            style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-          >
-            <Link2 size={15} color="#FFFFFF" />
-            <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Link to Trip</Text>
-          </TouchableOpacity>
-        ) : null}
-
-        <TouchableOpacity
-          onPress={onDelete}
-          activeOpacity={0.7}
-          style={[styles.actionBtn, { backgroundColor: colors.danger }]}
+          numberOfLines={1}
         >
-          <Trash2 size={15} color="#FFFFFF" />
-          <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Delete</Text>
-        </TouchableOpacity>
+          {kicker}
+        </Text>
+        <Text
+          style={ctaStyles.label}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
       </View>
+
+      <View style={ctaStyles.arrowWrap}>
+        <View style={[ctaStyles.arrowCircle, { backgroundColor: accent }]}>
+          {/* Arrow right chevron */}
+          <Text style={[ctaStyles.arrowText, { color: colors.ink }]}>›</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+// ──────────────────────────────────────────────
+// BookingActionRow — Unlink + Delete pair
+// ──────────────────────────────────────────────
+
+interface BookingActionRowProps {
+  canUnlink: boolean;
+  onUnlink: () => void;
+  onDelete: () => void;
+  colors: ThemeColors;
+}
+
+function BookingActionRow({
+  canUnlink,
+  onUnlink,
+  onDelete,
+  colors,
+}: BookingActionRowProps) {
+  return (
+    <View style={actionStyles.row}>
+      {canUnlink && (
+        <Pressable
+          onPress={onUnlink}
+          accessibilityRole="button"
+          accessibilityLabel="Unlink from trip"
+          style={({ pressed }) => [
+            actionStyles.btn,
+            { backgroundColor: 'rgba(255,255,255,0.10)', opacity: pressed ? 0.75 : 1 },
+          ]}
+        >
+          <Link2Off size={15} color="#FFFFFF" strokeWidth={2} />
+          <Text style={[actionStyles.btnText, { color: '#FFFFFF' }]}>Unlink</Text>
+        </Pressable>
+      )}
+      <Pressable
+        onPress={onDelete}
+        accessibilityRole="button"
+        accessibilityLabel="Delete booking"
+        style={({ pressed }) => [
+          actionStyles.btn,
+          { flex: 1, backgroundColor: colors.danger, opacity: pressed ? 0.85 : 1 },
+        ]}
+      >
+        <Trash2 size={15} color="#FFFFFF" strokeWidth={2} />
+        <Text style={[actionStyles.btnText, { color: '#FFFFFF' }]}>Delete</Text>
+      </Pressable>
     </View>
   );
 }
 
-// ════════════════════════════════════════════════
-// BookingDetailSheet
-// ════════════════════════════════════════════════
+// ──────────────────────────────────────────────
+// SublineText — helper for the common "date · location" subline pattern
+// ──────────────────────────────────────────────
+
+function SublineText({
+  text,
+  location,
+  tokens,
+}: {
+  text: string;
+  location?: string;
+  tokens: (typeof bookingTypeColors)[BookingHeroType];
+}) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+      <Text style={[heroStyles.sublineText, { color: tokens.inkSoft }]}>{text}</Text>
+      {location ? (
+        <>
+          <MapPin size={12} color={tokens.inkSoft} />
+          <Text style={[heroStyles.sublineText, { color: tokens.inkSoft }]}>{location}</Text>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+// ══════════════════════════════════════════════
+// Per-type renderers
+// ══════════════════════════════════════════════
+
+interface RendererProps {
+  booking: BookingDetailData;
+  colors: ThemeColors;
+  onUnlink: () => void;
+  onDelete: () => void;
+}
+
+// ──────────────────────────────────────────────
+// 1. Restaurant
+// ──────────────────────────────────────────────
+
+function RestaurantSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+  const tokens = bookingTypeColors.restaurant;
+  const details = booking.typeDetails ?? {};
+  const partySize = details.partySize ?? '';
+  const cuisine = details.cuisine ?? '';
+  const time = details.time ?? fmtTime(booking.startDate);
+  const phone = details.phone ?? '';
+  const restaurantName = details.name ?? booking.title;
+
+  const partySizeNum = parseInt(partySize, 10);
+  const kicker =
+    partySize && !isNaN(partySizeNum)
+      ? `A TABLE FOR ${numberWord(partySizeNum)}`
+      : 'RESERVATION';
+
+  const dateDisplay = fmtShortDate(booking.startDate);
+  const sublineText = `${dateDisplay} · ${time}`;
+
+  // CTA
+  let ctaUrl: string | null = null;
+  let ctaLabel = '';
+  let ctaKicker = '';
+  let ctaIsPhone = false;
+  if (phone) {
+    ctaUrl = buildTelUrl(phone);
+    ctaLabel = 'Call the restaurant';
+    ctaKicker = 'DIRECT DIAL';
+    ctaIsPhone = true;
+  } else {
+    ctaUrl = buildMapsSearchUrl({
+      name: restaurantName,
+      location: booking.location,
+      countryCode: booking.countryCode,
+    });
+    ctaLabel = 'Open in Maps';
+    ctaKicker = 'DIRECTIONS';
+  }
+
+  // Held-until time: +15 min from reservation time
+  let heldUntil: string | null = null;
+  if (time && /^\d{1,2}:\d{2}$/.test(time)) {
+    const [hStr, mStr] = time.split(':');
+    const h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    const totalMin = h * 60 + m + 15;
+    heldUntil = `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+  }
+
+  return (
+    <>
+      <BookingHero
+        heroType="restaurant"
+        icon={<UtensilsCrossed size={20} color="#FFFFFF" strokeWidth={2} />}
+        statusPillLabel={booking.status.toUpperCase()}
+        kicker={kicker}
+        title={restaurantName}
+        subline={
+          <SublineText
+            text={sublineText}
+            location={booking.location}
+            tokens={tokens}
+          />
+        }
+      >
+        {/* Secondary card: party-size block + cuisine */}
+        <View style={{ flexDirection: 'row', gap: 14 }}>
+          <View style={restStyles.guestBlock}>
+            <Text style={[restStyles.guestNum, { color: tokens.ink }]}>
+              {partySize || '2'}
+            </Text>
+            <Text style={[restStyles.guestLabel, { color: tokens.ink }]}>
+              GUESTS
+            </Text>
+          </View>
+          <View style={{ flex: 1, justifyContent: 'center', gap: 4 }}>
+            <Text
+              style={[
+                restStyles.cuisineKicker,
+                { color: tokens.accent, letterSpacing: 9 * 0.22 },
+              ]}
+            >
+              {cuisine ? cuisine.toUpperCase() : 'CUISINE'} · TASTING
+            </Text>
+            <Text
+              style={[restStyles.notesLine, { color: tokens.ink }]}
+              numberOfLines={2}
+            >
+              {details.notes ?? "Chef's selection"}
+            </Text>
+          </View>
+        </View>
+      </BookingHero>
+
+      <BookingMetaCard
+        colors={colors}
+        rows={[
+          { label: 'CONFIRMATION', value: booking.confirmationNumber },
+          { label: 'HELD UNTIL', value: heldUntil },
+          { label: 'PHONE', value: phone || null },
+        ]}
+      />
+
+      {ctaUrl ? (
+        <BookingDarkCTA
+          kicker={ctaKicker}
+          label={ctaLabel}
+          accent={tokens.accent}
+          icon={
+            ctaIsPhone
+              ? <Phone size={14} color={tokens.accent} strokeWidth={2} />
+              : <MapPin size={14} color={tokens.accent} strokeWidth={2} />
+          }
+          onPress={() => Linking.openURL(ctaUrl!)}
+          colors={colors}
+        />
+      ) : null}
+
+      <BookingActionRow
+        canUnlink={!!booking.tripId}
+        onUnlink={onUnlink}
+        onDelete={onDelete}
+        colors={colors}
+      />
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────
+// 2. Insurance
+// ──────────────────────────────────────────────
+
+function InsuranceSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+  const tokens = bookingTypeColors.insurance;
+  const details = booking.typeDetails ?? {};
+
+  const startFmt = fmtShortDate(booking.startDate);
+  const endFmt = booking.endDate ? fmtShortDate(booking.endDate) : '—';
+  const sublineText = `${startFmt} → ${endFmt}`;
+
+  const coverageLabel = (details.coverage ?? 'MEDICAL').toUpperCase();
+  const formattedCost = fmtCurrency(booking.cost, booking.currency);
+
+  return (
+    <>
+      <BookingHero
+        heroType="insurance"
+        icon={<ShieldCheck size={20} color="#FFFFFF" strokeWidth={2} />}
+        statusPillLabel="ACTIVE COVER"
+        kicker="POLICY · CERTIFICATE"
+        title={details.provider ?? booking.title}
+        subline={
+          <SublineText text={sublineText} tokens={tokens} />
+        }
+      >
+        {/* Secondary card: coverage amount headline */}
+        <View style={{ gap: 6 }}>
+          <Text
+            style={[
+              insStyles.coverageKicker,
+              { color: tokens.accent, letterSpacing: 9 * 0.22 },
+            ]}
+          >
+            {coverageLabel} · UP TO
+          </Text>
+          {formattedCost ? (
+            <Text style={[insStyles.coverageValue, { color: tokens.ink }]}>
+              {formattedCost}
+            </Text>
+          ) : null}
+          <Text style={[insStyles.coverageBody, { color: tokens.inkSoft }]}>
+            Covers medical, evacuation, trip interruption & lost baggage.
+          </Text>
+        </View>
+      </BookingHero>
+
+      <BookingMetaCard
+        colors={colors}
+        rows={[
+          { label: 'POLICY NO.', value: details.policyNumber },
+          { label: 'PLAN', value: details.coverage ?? 'Standard' },
+          { label: 'EMERGENCY', value: '—' },
+        ]}
+      />
+
+      <BookingActionRow
+        canUnlink={!!booking.tripId}
+        onUnlink={onUnlink}
+        onDelete={onDelete}
+        colors={colors}
+      />
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────
+// 3. Car (mapped from car_rental)
+// ──────────────────────────────────────────────
+
+function CarSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+  const tokens = bookingTypeColors.car;
+  const details = booking.typeDetails ?? {};
+
+  const pickupLocation = details.pickupLocation ?? '';
+  const dropoffLocation = details.dropoffLocation ?? '';
+  const dateDisplay = fmtShortDate(booking.startDate);
+  const pickupTime = fmtTime(booking.startDate);
+
+  // Approx dropoff: +90 min
+  let dropoffTime: string | null = null;
+  try {
+    const d = new Date(booking.startDate);
+    if (!isNaN(d.getTime())) {
+      d.setMinutes(d.getMinutes() + 90);
+      dropoffTime = `~${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const title =
+    pickupLocation && dropoffLocation
+      ? `${pickupLocation} → ${dropoffLocation}`
+      : details.company ?? booking.title;
+
+  // Status pill copy
+  const humanDateShort = (() => {
+    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    try {
+      const d = new Date(booking.startDate);
+      return `${d.getDate()} ${months[d.getMonth()]}`;
+    } catch { return ''; }
+  })();
+
+  const statusPillLabel = `PICKUP · ${humanDateShort} · ${pickupTime}`;
+  const formattedCost = fmtCurrency(booking.cost, booking.currency);
+
+  // CTA
+  const ctaUrl = pickupLocation
+    ? buildMapsSearchUrl({ name: pickupLocation, countryCode: booking.countryCode })
+    : null;
+
+  return (
+    <>
+      <BookingHero
+        heroType="car"
+        icon={<Car size={20} color="#FFFFFF" strokeWidth={2} />}
+        statusPillLabel={statusPillLabel}
+        kicker="PRIVATE TRANSFER"
+        title={title}
+        subline={
+          <SublineText
+            text={dateDisplay}
+            location={pickupLocation || booking.location}
+            tokens={tokens}
+          />
+        }
+      >
+        {/* Secondary card: pickup → dropoff timeline */}
+        <View style={{ gap: 8 }}>
+          {pickupLocation ? (
+            <View style={carStyles.timelineRow}>
+              <View style={[carStyles.dotFilled, { backgroundColor: tokens.accent, borderRadius: 3 }]} />
+              <Text style={[carStyles.timelineLocation, { color: tokens.ink }]} numberOfLines={1}>
+                {pickupLocation}
+              </Text>
+              <Text style={[carStyles.timelineTime, { color: tokens.inkSoft }]}>
+                {pickupTime}
+              </Text>
+            </View>
+          ) : null}
+
+          {pickupLocation && dropoffLocation ? (
+            <View style={carStyles.connectorRow}>
+              <View style={{ width: 6 }} />
+              <View
+                style={[carStyles.verticalDash, { borderColor: tokens.divider }]}
+              />
+            </View>
+          ) : null}
+
+          {dropoffLocation ? (
+            <View style={carStyles.timelineRow}>
+              <View style={[carStyles.squareDot, { backgroundColor: tokens.accent }]} />
+              <Text style={[carStyles.timelineLocation, { color: tokens.ink }]} numberOfLines={1}>
+                {dropoffLocation}
+              </Text>
+              {dropoffTime ? (
+                <Text style={[carStyles.timelineTime, { color: tokens.inkSoft }]}>
+                  {dropoffTime}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      </BookingHero>
+
+      <BookingMetaCard
+        colors={colors}
+        rows={[
+          { label: 'VEHICLE', value: details.carType },
+          { label: 'DRIVER', value: '—' },
+          { label: 'COST', value: formattedCost },
+        ]}
+      />
+
+      {ctaUrl ? (
+        <BookingDarkCTA
+          kicker="DIRECTIONS"
+          label="Open pickup location"
+          accent={tokens.accent}
+          icon={<MapPin size={14} color={tokens.accent} strokeWidth={2} />}
+          onPress={() => Linking.openURL(ctaUrl!)}
+          colors={colors}
+        />
+      ) : null}
+
+      <BookingActionRow
+        canUnlink={!!booking.tripId}
+        onUnlink={onUnlink}
+        onDelete={onDelete}
+        colors={colors}
+      />
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────
+// 4. Experience
+// ──────────────────────────────────────────────
+
+function ExperienceSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+  const tokens = bookingTypeColors.experience;
+  const details = booking.typeDetails ?? {};
+
+  const activityName = details.activityName ?? booking.title;
+  const duration = details.duration ?? '';
+  const meetingPoint = details.meetingPoint ?? '';
+  const groupSize = details.groupSize ?? '';
+  const time = fmtTime(booking.startDate);
+  const dateDisplay = fmtShortDate(booking.startDate);
+
+  // Status pill: UPCOMING · TUE 29
+  const statusPillLabel = (() => {
+    const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+    try {
+      const d = new Date(booking.startDate);
+      return `UPCOMING · ${DAYS[d.getDay()]} ${d.getDate()}`;
+    } catch { return 'UPCOMING'; }
+  })();
+
+  const sublineText = `${dateDisplay} · ${time}`;
+
+  // CTA
+  const ctaUrl = meetingPoint
+    ? buildMapsSearchUrl({
+        name: meetingPoint,
+        location: booking.location,
+        countryCode: booking.countryCode,
+      })
+    : null;
+
+  return (
+    <>
+      <BookingHero
+        heroType="experience"
+        icon={<Compass size={20} color="#FFFFFF" strokeWidth={2} />}
+        statusPillLabel={statusPillLabel}
+        kicker="ADMIT ONE"
+        title={activityName}
+        subline={
+          <SublineText
+            text={sublineText}
+            location={meetingPoint || booking.location}
+            tokens={tokens}
+          />
+        }
+      >
+        {/* Secondary card: duration + group size cells */}
+        <View style={expStyles.cells}>
+          <View style={expStyles.cell}>
+            <Text style={[expStyles.cellKicker, { color: tokens.accent, letterSpacing: 9 * 0.22 }]}>
+              DURATION
+            </Text>
+            <Text style={[expStyles.cellValue, { color: tokens.ink }]}>
+              {duration || '—'}
+            </Text>
+          </View>
+          <View style={[expStyles.divider, { backgroundColor: tokens.divider }]} />
+          <View style={expStyles.cell}>
+            <Text style={[expStyles.cellKicker, { color: tokens.accent, letterSpacing: 9 * 0.22 }]}>
+              GROUP
+            </Text>
+            <Text style={[expStyles.cellValue, { color: tokens.ink }]}>
+              {groupSize ? `${groupSize} ppl` : '—'}
+            </Text>
+          </View>
+        </View>
+      </BookingHero>
+
+      <BookingMetaCard
+        colors={colors}
+        rows={[
+          { label: 'OPERATOR', value: booking.provider },
+          {
+            label: 'MEETING',
+            value:
+              meetingPoint
+                ? `${details.meetingTime ?? time} · ${meetingPoint}`
+                : details.meetingTime ?? null,
+          },
+          { label: 'LANGUAGES', value: details.languages ?? 'EN' },
+        ]}
+      />
+
+      {ctaUrl ? (
+        <BookingDarkCTA
+          kicker="DIRECTIONS"
+          label="Open meeting point"
+          accent={tokens.accent}
+          icon={<MapPin size={14} color={tokens.accent} strokeWidth={2} />}
+          onPress={() => Linking.openURL(ctaUrl!)}
+          colors={colors}
+        />
+      ) : null}
+
+      <BookingActionRow
+        canUnlink={!!booking.tripId}
+        onUnlink={onUnlink}
+        onDelete={onDelete}
+        colors={colors}
+      />
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────
+// 5. Hotel
+// ──────────────────────────────────────────────
+
+function HotelSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+  const tokens = bookingTypeColors.hotel;
+  const details = booking.typeDetails ?? {};
+  const hotelName = details.hotelName ?? booking.title;
+
+  // Nights count
+  const nights = (() => {
+    if (!booking.endDate) return 0;
+    try {
+      const start = new Date(booking.startDate);
+      const end = new Date(booking.endDate);
+      return Math.max(
+        0,
+        Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
+      );
+    } catch { return 0; }
+  })();
+
+  // Nights stayed so far
+  const nightsStayed = (() => {
+    try {
+      const today = new Date();
+      const start = new Date(booking.startDate);
+      const stayed = Math.round(
+        (today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      return Math.max(0, Math.min(stayed, nights));
+    } catch { return 0; }
+  })();
+
+  const startFmt = fmtShortDate(booking.startDate);
+  const endFmt = booking.endDate ? fmtShortDate(booking.endDate) : '—';
+  const sublineText = `${startFmt} → ${endFmt} · ${nights} night${nights !== 1 ? 's' : ''}`;
+  const formattedCost = fmtCurrency(booking.cost, booking.currency);
+
+  // Check-in relative label
+  const checkInRelative = formatRelativeDate(booking.startDate);
+
+  // CTA
+  const ctaUrl = buildMapsSearchUrl({
+    name: details.address || hotelName,
+    location: booking.location,
+    countryCode: booking.countryCode,
+  });
+
+  return (
+    <>
+      <BookingHero
+        heroType="hotel"
+        icon={<BedDouble size={20} color="#FFFFFF" strokeWidth={2} />}
+        statusPillLabel={`CHECK-IN ${checkInRelative.toUpperCase()}`}
+        kicker="ROOM KEY"
+        title={hotelName}
+        subline={
+          <SublineText
+            text={sublineText}
+            location={booking.location}
+            tokens={tokens}
+          />
+        }
+      >
+        {/* Secondary card: night progress dots */}
+        <View style={hotelStyles.nightRow}>
+          {/* Avatar dot */}
+          <View style={[hotelStyles.avatarDot, { backgroundColor: tokens.accent }]} />
+
+          {/* Progress dots */}
+          <View style={hotelStyles.dotsRow}>
+            {nights > 0
+              ? Array.from({ length: Math.min(nights, 14) }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      hotelStyles.nightDot,
+                      i < nightsStayed
+                        ? { backgroundColor: tokens.accent }
+                        : {
+                            backgroundColor: 'transparent',
+                            borderWidth: 1,
+                            borderColor: tokens.divider,
+                          },
+                    ]}
+                  />
+                ))
+              : null}
+          </View>
+
+          {/* Room label */}
+          {details.roomType ? (
+            <Text
+              style={[
+                hotelStyles.roomLabel,
+                { color: tokens.accent, letterSpacing: 9 * 0.22 },
+              ]}
+            >
+              RM · {details.roomType}
+            </Text>
+          ) : null}
+        </View>
+      </BookingHero>
+
+      <BookingMetaCard
+        colors={colors}
+        rows={[
+          { label: 'COST', value: formattedCost },
+          { label: 'CONFIRMATION', value: booking.confirmationNumber },
+          { label: 'NOTES', value: booking.notes },
+        ]}
+      />
+
+      {ctaUrl ? (
+        <BookingDarkCTA
+          kicker="DIRECTIONS"
+          label="Open in Maps"
+          accent={tokens.accent}
+          icon={<MapPin size={14} color={tokens.accent} strokeWidth={2} />}
+          onPress={() => Linking.openURL(ctaUrl!)}
+          colors={colors}
+        />
+      ) : null}
+
+      <BookingActionRow
+        canUnlink={!!booking.tripId}
+        onUnlink={onUnlink}
+        onDelete={onDelete}
+        colors={colors}
+      />
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────
+// 6. Flight — boarding pass with big italic airport codes
+// ──────────────────────────────────────────────
+
+function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
+  const tokens = bookingTypeColors.flight;
+  const details = booking.typeDetails ?? {};
+
+  const dep = parseAirport(details.departure ?? '');
+  const arr = parseAirport(details.arrival ?? '');
+  const airline = details.airline ?? booking.provider ?? '';
+  const flightNumber = details.flightNumber ?? '';
+  const dateDisplay = fmtShortDate(booking.startDate);
+
+  // Departure and arrival times
+  const departTime = fmtTime(booking.startDate);
+  const arrivalTime = booking.endDate ? fmtTime(booking.endDate) : '—';
+
+  // +N DAY label for arrival
+  const plusDays = (() => {
+    if (!booking.endDate) return '';
+    try {
+      const s = new Date(booking.startDate);
+      const e = new Date(booking.endDate);
+      const days = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+      return days > 0 ? `+${days} DAY` : '';
+    } catch { return ''; }
+  })();
+
+  // Flight status pill
+  const statusPillLabel = (() => {
+    try {
+      const now = new Date();
+      const start = new Date(booking.startDate);
+      const end = booking.endDate ? new Date(booking.endDate) : null;
+      const diffH = (start.getTime() - now.getTime()) / (1000 * 60 * 60);
+      if (end && now > end) return 'LANDED';
+      if (now > start && diffH < 0 && (!end || now < end)) return 'IN FLIGHT';
+      if (diffH >= 0) {
+        const h = Math.round(diffH);
+        return `BOARDING IN ${h}H`;
+      }
+      if (diffH > -24) return 'IN FLIGHT';
+      return 'LANDED';
+    } catch { return 'UPCOMING'; }
+  })();
+
+  // Flight duration
+  const flightDuration = (() => {
+    if (details.duration) return details.duration.toUpperCase();
+    if (booking.startDate && booking.endDate) {
+      try {
+        const diffMs = new Date(booking.endDate).getTime() - new Date(booking.startDate).getTime();
+        const totalMin = Math.floor(diffMs / (1000 * 60));
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        if (h > 0) return `${h}H ${m > 0 ? m + 'M' : ''}`.trim();
+      } catch { /* ignore */ }
+    }
+    return null;
+  })();
+
+  const stops = details.stops ?? 'DIRECT';
+  const flightInfo = flightDuration ? `${flightDuration} · ${stops}` : stops;
+
+  // Route block to use as kicker slot
+  const routeBlock = (
+    <View style={flightStyles.routeBlock}>
+      {/* Left: departure */}
+      <View style={flightStyles.routeEndLeft}>
+        <Text style={[flightStyles.cityLabel, { color: tokens.inkSoft }]}>
+          {dep.city}
+        </Text>
+        <Text style={[flightStyles.airportCode, { color: tokens.ink }]}>
+          {dep.code}
+        </Text>
+      </View>
+
+      {/* Middle: dotted line + flight info */}
+      <View style={flightStyles.routeMiddle}>
+        <Text style={[flightStyles.flightInfoText, { color: tokens.inkSoft }]}>
+          {flightInfo}
+        </Text>
+        <Svg width="100%" height={16} style={{ marginVertical: 2 }}>
+          <Path
+            d={`M 0 8 L 100% 8`}
+            stroke={tokens.inkSoft}
+            strokeWidth={1}
+            strokeDasharray="3 4"
+          />
+        </Svg>
+      </View>
+
+      {/* Right: arrival */}
+      <View style={flightStyles.routeEndRight}>
+        <Text style={[flightStyles.cityLabel, { color: tokens.inkSoft }]}>
+          {arr.city}
+        </Text>
+        <Text style={[flightStyles.airportCode, { color: tokens.ink }]}>
+          {arr.code}
+        </Text>
+      </View>
+    </View>
+  );
+
+  // Subline below route block
+  const sublineContent = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+      <Text style={[heroStyles.sublineText, { color: tokens.inkSoft }]}>
+        {dateDisplay}
+        {airline ? ` · ${airline}` : ''}
+        {flightNumber ? ` ${flightNumber}` : ''}
+      </Text>
+    </View>
+  );
+
+  return (
+    <>
+      <BookingHero
+        heroType="flight"
+        icon={<Plane size={20} color="#FFFFFF" strokeWidth={2} />}
+        statusPillLabel={statusPillLabel}
+        kickerSlot={routeBlock}
+        title=""
+        subline={sublineContent}
+      >
+        {/* Secondary card: dark depart/arrive split */}
+        <View style={flightStyles.splitCard}>
+          <View style={flightStyles.splitCell}>
+            <Text
+              style={[
+                flightStyles.splitKicker,
+                { color: tokens.accent, letterSpacing: 9 * 0.22 },
+              ]}
+            >
+              DEPART
+            </Text>
+            <Text
+              style={[
+                flightStyles.splitTime,
+                { color: tokens.accent, fontFamily: FontFamily.monoMedium },
+              ]}
+            >
+              {departTime}
+            </Text>
+            <Text style={[flightStyles.splitCity, { color: tokens.inkSoft }]}>
+              {dep.city}
+            </Text>
+          </View>
+          <View style={[flightStyles.splitDivider, { backgroundColor: tokens.divider }]} />
+          <View style={flightStyles.splitCell}>
+            <Text
+              style={[
+                flightStyles.splitKicker,
+                { color: tokens.accent, letterSpacing: 9 * 0.22 },
+              ]}
+            >
+              ARRIVE
+            </Text>
+            <Text
+              style={[
+                flightStyles.splitTime,
+                { color: tokens.accent, fontFamily: FontFamily.monoMedium },
+              ]}
+            >
+              {arrivalTime}
+            </Text>
+            <Text style={[flightStyles.splitCity, { color: tokens.inkSoft }]}>
+              {plusDays || arr.city}
+            </Text>
+          </View>
+        </View>
+      </BookingHero>
+
+      <BookingMetaCard
+        colors={colors}
+        rows={[
+          { label: 'CLASS', value: details.class },
+          { label: 'GATE', value: '—' },
+          { label: 'CONFIRMATION', value: booking.confirmationNumber },
+        ]}
+      />
+
+      <BookingActionRow
+        canUnlink={!!booking.tripId}
+        onUnlink={onUnlink}
+        onDelete={onDelete}
+        colors={colors}
+      />
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════
+// Main component
+// ══════════════════════════════════════════════
+
+const SHEET_RENDERERS: Record<BookingType, React.ComponentType<RendererProps>> = {
+  restaurant: RestaurantSheet,
+  insurance: InsuranceSheet,
+  car_rental: CarSheet,
+  experience: ExperienceSheet,
+  hotel: HotelSheet,
+  flight: FlightSheet,
+};
 
 const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetProps>(
   ({ onDelete, onUnlink }, ref) => {
-    const { colors, isDark } = useTheme();
+    const { colors } = useTheme();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const [booking, setBooking] = useState<BookingDetailData | null>(null);
 
@@ -410,11 +1293,6 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
         bottomSheetRef.current?.dismiss();
       },
     }));
-
-    const handleCopyConfirmation = useCallback(() => {
-      if (!booking?.confirmationNumber) return;
-      Alert.alert('Copied', booking.confirmationNumber);
-    }, [booking?.confirmationNumber]);
 
     const handleDelete = useCallback(() => {
       if (!booking) return;
@@ -464,171 +1342,31 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
       );
     }, [booking, unlinkBookingFromTrip, onUnlink]);
 
-    if (!booking) {
-      return (
-        <AppBottomSheet ref={bottomSheetRef}>
-          <View />
-        </AppBottomSheet>
-      );
-    }
+    const sheetBg = booking
+      ? bookingTypeColors[bookingTypeToHeroType(booking.type)].bgFrom
+      : colors.background;
 
-    const config = BOOKING_TYPES[booking.type];
-    const typeColor = getBookingColor(booking.type, isDark);
-    const IconComponent = config.icon;
-    const statusCfg = STATUS_STYLES[booking.status];
-
-    const dateDisplay = formatBookingDates(
-      new Date(booking.startDate),
-      booking.endDate ? new Date(booking.endDate) : undefined,
-    );
-
-    const formattedCost =
-      booking.cost != null
-        ? `${booking.currency ?? 'USD'} ${booking.cost.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`
-        : null;
-
-    const typeDetailRows: { label: string; value: string }[] = [];
-    if (booking.typeDetails) {
-      for (const field of config.fields) {
-        const val = booking.typeDetails[field.key];
-        if (val) {
-          typeDetailRows.push({ label: field.label, value: val });
-        }
-      }
-    }
-
-    const isFlight = booking.type === 'flight';
-    const sheetBg = typeColor; // Always use the booking type color
-    const handleColor = 'rgba(255,255,255,0.5)';
+    const SheetRenderer = booking ? SHEET_RENDERERS[booking.type] : null;
 
     return (
       <AppBottomSheet
         ref={bottomSheetRef}
         backgroundColor={sheetBg}
-        handleColor={handleColor}
+        handleColor="rgba(255,255,255,0.45)"
       >
         <BottomSheetScrollView
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={sheetStyles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {isFlight ? (
-            <FlightBoardingPass
+          {SheetRenderer && booking ? (
+            <SheetRenderer
               booking={booking}
               colors={colors}
-              isDark={isDark}
-              typeColor={typeColor}
-              sheetBg={sheetBg}
-              statusCfg={statusCfg}
-              dateDisplay={dateDisplay}
-              formattedCost={formattedCost}
-              onCopyConfirmation={handleCopyConfirmation}
-              onDelete={handleDelete}
               onUnlink={handleUnlink}
+              onDelete={handleDelete}
             />
           ) : (
-            <>
-              {/* ── Hero header — colored background ──── */}
-              <View style={styles.hero}>
-                <View style={styles.heroTop}>
-                  <View style={styles.heroIconWrap}>
-                    <IconComponent size={24} color="#FFFFFF" />
-                  </View>
-                  <View style={[styles.statusPill, { backgroundColor: statusCfg.bg }]}>
-                    <Text style={[styles.statusText, { color: statusCfg.fg }]}>
-                      {statusCfg.label}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text style={styles.heroTitle} numberOfLines={2}>{booking.title}</Text>
-
-                <View style={styles.heroMeta}>
-                  <Text style={styles.heroDate}>{dateDisplay}</Text>
-                  {booking.location && (
-                    <View style={styles.heroLocationRow}>
-                      <MapPin size={12} color="rgba(255,255,255,0.7)" />
-                      <Text style={styles.heroLocation}>{booking.location}</Text>
-                    </View>
-                  )}
-                </View>
-
-                {booking.tripName && (
-                  <View style={styles.linkedPill}>
-                    <Text style={styles.linkedText}>Linked to {booking.tripName}</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* ── Info card — white/card background ──── */}
-              <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-                {booking.provider && booking.provider !== 'Manual' && (
-                  <DetailRow label="Provider" value={booking.provider} colors={colors} />
-                )}
-
-                {formattedCost && (
-                  <DetailRow label="Cost" value={formattedCost} colors={colors} accent />
-                )}
-
-                {booking.confirmationNumber && (
-                  <View style={styles.detailRow}>
-                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
-                      Confirmation
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Text style={[styles.detailValue, { color: colors.foreground }]}>
-                        {booking.confirmationNumber}
-                      </Text>
-                      <TouchableOpacity
-                        onPress={handleCopyConfirmation}
-                        hitSlop={8}
-                        style={[styles.copyBtn, { backgroundColor: colors.primaryBg }]}
-                      >
-                        <Copy size={12} color={colors.primary} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-
-                {typeDetailRows.map((row) => (
-                  <DetailRow key={row.label} label={row.label} value={row.value} colors={colors} />
-                ))}
-
-                {booking.notes && (
-                  <View style={[styles.notesSection, { borderTopColor: colors.borderSubtle }]}>
-                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Notes</Text>
-                    <Text style={[styles.notesText, { color: colors.foreground }]}>
-                      {booking.notes}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* ── Actions ──── */}
-              <View style={styles.actionsRow}>
-                {booking.tripId && (
-                  <TouchableOpacity
-                    onPress={handleUnlink}
-                    activeOpacity={0.7}
-                    style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-                  >
-                    <Unlink size={15} color="#FFFFFF" />
-                    <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Unlink</Text>
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity
-                  onPress={handleDelete}
-                  activeOpacity={0.7}
-                  style={[styles.actionBtn, { backgroundColor: colors.danger }]}
-                >
-                  <Trash2 size={15} color="#FFFFFF" />
-                  <Text style={[styles.actionText, { color: '#FFFFFF' }]}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </>
+            <View style={{ height: 20 }} />
           )}
         </BottomSheetScrollView>
       </AppBottomSheet>
@@ -639,346 +1377,412 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
 BookingDetailSheet.displayName = 'BookingDetailSheet';
 export default BookingDetailSheet;
 
-// ──────────────────────────────────────────────
+// ══════════════════════════════════════════════
 // Styles
-// ──────────────────────────────────────────────
+// ══════════════════════════════════════════════
 
-const styles = StyleSheet.create({
-  // Hero
-  hero: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.xl,
+const heroStyles = StyleSheet.create({
+  outerWrapper: {
+    marginHorizontal: 14,
+    borderRadius: 22,
   },
-  heroTop: {
+  inner: {
+    overflow: 'hidden',
+    borderRadius: 22,
+    paddingTop: 22,
+    paddingHorizontal: 22,
+    paddingBottom: 20,
+  },
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.md,
+    marginBottom: 16,
   },
-  heroIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  iconOrb: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 999,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
   },
   statusText: {
-    fontFamily: FontFamily.condensedSemibold,
+    fontFamily: FontFamily.monoMedium,
     fontSize: 11,
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
   },
-  heroTitle: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize['2xl'],
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
+  kicker: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
     marginBottom: 6,
   },
-  heroMeta: {
-    gap: 4,
+  title: {
+    fontFamily: FontFamily.displayItalic,
+    fontSize: 36,
+    lineHeight: 38,
+    marginBottom: 8,
   },
-  heroDate: {
+  sublineRow: {
+    marginTop: 2,
+  },
+  sublineText: {
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
   },
-  heroLocationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  secondaryCard: {
+    marginTop: 16,
+    padding: 16,
   },
-  heroLocation: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  linkedPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    marginTop: Spacing.md,
-  },
-  linkedText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 12,
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
+});
 
-  // Info card
-  infoCard: {
-    marginHorizontal: Spacing.md,
-    borderRadius: 20,
-    padding: Spacing.lg,
-    gap: 2,
+const metaStyles = StyleSheet.create({
+  card: {
+    marginHorizontal: 14,
+    marginTop: 14,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 4,
   },
-  detailRow: {
+  row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
   },
-  detailLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 12,
+  label: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 11,
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 11 * 0.1,
   },
-  detailValue: {
-    fontFamily: FontFamily.semibold,
-    fontSize: FontSize.sm,
+  value: {
+    fontFamily: FontFamily.displayItalic,
+    fontSize: 16,
     textAlign: 'right',
     flexShrink: 1,
+    marginLeft: 12,
   },
-  copyBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+});
+
+const ctaStyles = StyleSheet.create({
+  pill: {
+    marginHorizontal: 14,
+    marginTop: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconOrb: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  notesSection: {
-    borderTopWidth: 1,
-    paddingTop: Spacing.sm,
-    marginTop: Spacing.xs,
-    gap: 4,
+  kicker: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
-  notesText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    lineHeight: 20,
+  label: {
+    fontFamily: FontFamily.displayItalic,
+    fontSize: 15,
+    color: '#FFFFFF',
+    marginTop: 2,
+    letterSpacing: -15 * 0.01,
   },
+  arrowWrap: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 22,
+    lineHeight: 24,
+    marginTop: -1,
+  },
+});
 
-  // Actions
-  actionsRow: {
+const actionStyles = StyleSheet.create({
+  row: {
     flexDirection: 'row',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    marginTop: Spacing.lg,
+    gap: 12,
+    marginHorizontal: 14,
+    marginTop: 14,
+    marginBottom: 12,
   },
-  actionBtn: {
+  btn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 16,
+    borderRadius: 999,
+    minHeight: 44,
   },
-  actionText: {
+  btnText: {
     fontFamily: FontFamily.semibold,
-    fontSize: FontSize.sm,
+    fontSize: 14,
   },
 });
 
-// ──────────────────────────────────────────────
-// Boarding Pass Styles
-// ──────────────────────────────────────────────
+const sheetStyles = StyleSheet.create({
+  scrollContent: {
+    paddingBottom: 40,
+  },
+});
 
-const bpStyles = StyleSheet.create({
-  wrapper: {
-    paddingTop: Spacing.xs,
-  },
+// ── Per-type local styles ──
 
-  // Top half — colored
-  topHalf: {
-    marginHorizontal: Spacing.md,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xl,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
-  },
-  airlineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 1,
-  },
-  airlineName: {
-    fontFamily: FontFamily.condensedBold,
-    fontSize: 15,
-    color: '#FFFFFF',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    flexShrink: 1,
-  },
-  flightNumber: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    letterSpacing: 0.8,
-  },
-
-  // Route
-  routeContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
-  },
-  routeEndpoint: {
-    alignItems: 'flex-start',
-    minWidth: 70,
-  },
-  airportCode: {
-    fontFamily: FontFamily.display,
-    fontSize: 44,
-    color: '#FFFFFF',
-    letterSpacing: 2,
-    lineHeight: 48,
-  },
-  cityName: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    color: 'rgba(255,255,255,0.75)',
-    marginTop: 2,
-  },
-  routeLine: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 16,
-    paddingHorizontal: 8,
-  },
-  routeDash: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
-
-  // Date + status row
-  dateLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dateText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.85)',
-  },
-  statusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  statusText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  linkedPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    marginTop: Spacing.md,
-  },
-  linkedText: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 12,
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-
-  // Tear line
-  tearLineContainer: {
-    marginHorizontal: Spacing.md,
-    height: 24,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  tearDash: {
-    borderTopWidth: 1.5,
-    borderStyle: 'dashed',
-    marginHorizontal: 20,
-  },
-  tearCircle: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    top: 0,
-  },
-  tearCircleLeft: {
-    left: -12,
-  },
-  tearCircleRight: {
-    right: -12,
-  },
-
-  // Bottom half — card color
-  bottomHalf: {
-    marginHorizontal: Spacing.md,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xl,
-  },
-  detailGrid: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  detailBox: {
-    flex: 1,
-    gap: 4,
-  },
-  detailBoxLabel: {
-    fontFamily: FontFamily.condensedSemibold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  detailBoxValue: {
-    fontFamily: FontFamily.semibold,
-    fontSize: FontSize.sm,
-  },
-
-  // Notes
-  notesSection: {
-    borderTopWidth: 1,
-    paddingTop: Spacing.sm,
-    marginBottom: Spacing.md,
-    gap: 4,
-  },
-  notesText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    lineHeight: 20,
-    marginTop: 2,
-  },
-
-  // Barcode
-  barcodeRow: {
-    flexDirection: 'row',
+const restStyles = StyleSheet.create({
+  guestBlock: {
+    width: 92,
+    height: 92,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    marginTop: Spacing.md,
-    paddingVertical: Spacing.sm,
+  },
+  guestNum: {
+    fontFamily: FontFamily.displayItalic,
+    fontSize: 56,
+    lineHeight: 56,
+  },
+  guestLabel: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    fontWeight: '600',
+    opacity: 0.7,
+    textTransform: 'uppercase',
+  },
+  cuisineKicker: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  notesLine: {
+    fontFamily: FontFamily.displayItalic,
+    fontSize: 18,
+    lineHeight: 22,
+  },
+});
+
+const insStyles = StyleSheet.create({
+  coverageKicker: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  coverageValue: {
+    fontFamily: FontFamily.displaySemiboldItalic,
+    fontSize: 44,
+    fontWeight: '500',
+    lineHeight: 46,
+  },
+  coverageBody: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+});
+
+const carStyles = StyleSheet.create({
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dotFilled: {
+    width: 6,
+    height: 6,
+  },
+  squareDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 1,
+  },
+  timelineLocation: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14,
+    flex: 1,
+  },
+  timelineTime: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 12,
+  },
+  connectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 12,
+  },
+  verticalDash: {
+    width: 1,
+    height: 12,
+    borderLeftWidth: 1,
+    borderStyle: 'dashed',
+    marginLeft: 2.5,
+  },
+});
+
+const expStyles = StyleSheet.create({
+  cells: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cell: {
+    flex: 1,
+    gap: 4,
+  },
+  divider: {
+    width: 1,
+    height: 44,
+    marginHorizontal: 12,
+  },
+  cellKicker: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  cellValue: {
+    fontFamily: FontFamily.displayItalic,
+    fontSize: 22,
+    lineHeight: 26,
+  },
+});
+
+const hotelStyles = StyleSheet.create({
+  nightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatarDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  dotsRow: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    alignItems: 'center',
+  },
+  nightDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  roomLabel: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+});
+
+const flightStyles = StyleSheet.create({
+  routeBlock: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  routeEndLeft: {
+    alignItems: 'flex-start',
+    minWidth: 70,
+  },
+  routeEndRight: {
+    alignItems: 'flex-end',
+    minWidth: 70,
+  },
+  cityLabel: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 9 * 0.18,
+    marginBottom: 2,
+  },
+  airportCode: {
+    fontFamily: FontFamily.displayItalic,
+    fontSize: 56,
+    lineHeight: 58,
+  },
+  routeMiddle: {
+    flex: 1,
+    paddingHorizontal: 8,
+    paddingBottom: 10,
+    gap: 0,
+  },
+  flightInfoText: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: 9 * 0.14,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  splitCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  splitCell: {
+    flex: 1,
+    gap: 3,
+  },
+  splitDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    marginHorizontal: 12,
+  },
+  splitKicker: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  splitTime: {
+    fontSize: 32,
+    lineHeight: 34,
+  },
+  splitCity: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: 9 * 0.14,
   },
 });
