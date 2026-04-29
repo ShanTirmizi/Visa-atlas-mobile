@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   TextInput,
   Modal,
   FlatList,
@@ -20,13 +21,13 @@ import Animated, {
   withRepeat,
   withSequence,
   Easing,
-  interpolate,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plus, Search, X, RefreshCw, ArrowLeftRight } from 'lucide-react-native';
+import { Search, X, RefreshCw, ArrowLeftRight } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
-import { Shadows } from '@/constants/theme';
+import { FontFamily, Shadows } from '@/constants/theme';
+import { Squiggle } from '@/components/ui/Squiggle';
 import { endpoints } from '@/constants/api';
 import {
   visaData,
@@ -44,11 +45,18 @@ import { CircleBtn } from '@/components/ui/CircleBtn';
 import { SectionKicker } from '@/components/ui/SectionKicker';
 import { Flag } from '@/components/ui/Flag';
 import { VisaBadge } from '@/components/ui/Badge';
-import {
-  CompareCountryCard,
-  type CompareCountryData,
-} from '@/components/compare/CompareCountryCard';
 import { WinnerList, type WinnerRow } from '@/components/compare/WinnerList';
+import { VsPickerCard } from '@/components/compare/VsPickerCard';
+import { FaceoffRow } from '@/components/compare/FaceoffRow';
+import {
+  CompareCountryCardV2,
+  toAlpha2,
+} from '@/components/compare/CompareCountryCardV2';
+import { CategoryScoresCard } from '@/components/compare/CategoryScoresCard';
+import { VerdictCard } from '@/components/compare/VerdictCard';
+import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
+import { useRouter } from 'expo-router';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 
 // ---------------------------------------------------------------------------
 // Enable LayoutAnimation on Android
@@ -88,17 +96,26 @@ interface AIComparison {
   valueComparison: string;
 }
 
-const SCORE_CATEGORIES: { key: keyof AIScores; label: string; emoji: string }[] = [
-  { key: 'food', label: 'Food', emoji: '🍜' },
-  { key: 'adventure', label: 'Adventure', emoji: '⛰️' },
-  { key: 'culture', label: 'Culture', emoji: '🏛️' },
-  { key: 'relaxation', label: 'Relaxation', emoji: '🏖️' },
-  { key: 'nightlife', label: 'Nightlife', emoji: '🌙' },
-  { key: 'nature', label: 'Nature', emoji: '🌲' },
+const SCORE_CATEGORIES: { key: keyof AIScores; label: string }[] = [
+  { key: 'food',       label: 'FOOD' },
+  { key: 'adventure',  label: 'ADVENTURE' },
+  { key: 'culture',    label: 'CULTURE' },
+  { key: 'relaxation', label: 'RELAXATION' },
+  { key: 'nightlife',  label: 'NIGHTLIFE' },
+  { key: 'nature',     label: 'NATURE' },
 ];
 
 // ---------------------------------------------------------------------------
-// ISO alpha-3 → alpha-2 (for Flag component)
+// Popular face-offs
+// ---------------------------------------------------------------------------
+const POPULAR_FACEOFFS = [
+  { codeA: 'JPN', nameA: 'Japan',    codeB: 'VNM', nameB: 'Vietnam' },
+  { codeA: 'PRT', nameA: 'Portugal', codeB: 'ESP', nameB: 'Spain' },
+  { codeA: 'THA', nameA: 'Thailand', codeB: 'IDN', nameB: 'Indonesia' },
+];
+
+// ---------------------------------------------------------------------------
+// ISO alpha-3 → alpha-2 (for Flag component and isoToFlagEmoji)
 // ---------------------------------------------------------------------------
 
 /* prettier-ignore */
@@ -200,160 +217,6 @@ const CATEGORY_RANK: Record<VisaCategory, number> = {
 };
 
 // ---------------------------------------------------------------------------
-// Score Bar — animated, Reanimated
-// ---------------------------------------------------------------------------
-
-function ScoreBar({
-  label,
-  emoji,
-  scoreA,
-  scoreB,
-  nameA,
-  nameB,
-}: {
-  label: string;
-  emoji: string;
-  scoreA: number;
-  scoreB: number;
-  nameA: string;
-  nameB: string;
-}) {
-  const { colors } = useTheme();
-  const aWins = scoreA >= scoreB;
-  const bWins = scoreB >= scoreA;
-
-  const progressA = useSharedValue(0);
-  const progressB = useSharedValue(0);
-
-  useEffect(() => {
-    progressA.value = withTiming(scoreA / 10, { duration: 700, easing: Easing.out(Easing.quad) });
-    progressB.value = withTiming(scoreB / 10, { duration: 700, easing: Easing.out(Easing.quad) });
-  }, [scoreA, scoreB]);
-
-  // Available bar width: screen - paddings - number labels - center label
-  const barMaxWidth = (SCREEN_WIDTH - 28 * 2 - 60 - 24) / 2;
-
-  const styleA = useAnimatedStyle(() => ({
-    width: interpolate(progressA.value, [0, 1], [0, barMaxWidth]),
-    opacity: aWins ? 1 : 0.3,
-  }));
-
-  const styleB = useAnimatedStyle(() => ({
-    width: interpolate(progressB.value, [0, 1], [0, barMaxWidth]),
-    opacity: bWins ? 1 : 0.3,
-  }));
-
-  return (
-    <View style={scoreStyles.row}>
-      {/* A side — bar grows from right to left */}
-      <View style={scoreStyles.sideA}>
-        <Text style={[scoreStyles.num, { color: aWins ? colors.ink : colors.inkMute }]}>
-          {scoreA}
-        </Text>
-        <View style={[scoreStyles.trackA, { backgroundColor: colors.line, width: barMaxWidth }]}>
-          <Animated.View
-            style={[
-              scoreStyles.fillA,
-              { backgroundColor: colors.ink, borderRadius: 3.5 },
-              styleA,
-            ]}
-          />
-        </View>
-      </View>
-
-      {/* Center label */}
-      <View style={scoreStyles.labelBox}>
-        <Text style={scoreStyles.emoji}>{emoji}</Text>
-        <Text style={[scoreStyles.labelText, { color: colors.inkMute }]}>{label}</Text>
-      </View>
-
-      {/* B side — bar grows left to right */}
-      <View style={scoreStyles.sideB}>
-        <View style={[scoreStyles.trackB, { backgroundColor: colors.line, width: barMaxWidth }]}>
-          <Animated.View
-            style={[
-              scoreStyles.fillB,
-              { backgroundColor: colors.ink, borderRadius: 3.5 },
-              styleB,
-            ]}
-          />
-        </View>
-        <Text style={[scoreStyles.num, { color: bWins ? colors.ink : colors.inkMute }]}>
-          {scoreB}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-const scoreStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  sideA: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 6,
-  },
-  sideB: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  trackA: {
-    height: 7,
-    borderRadius: 3.5,
-    overflow: 'hidden',
-    alignItems: 'flex-end',
-  },
-  trackB: {
-    height: 7,
-    borderRadius: 3.5,
-    overflow: 'hidden',
-  },
-  fillA: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-  },
-  fillB: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-  },
-  num: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 11,
-    minWidth: 16,
-    textAlign: 'center',
-  },
-  labelBox: {
-    width: 60,
-    alignItems: 'center',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    gap: 1,
-  },
-  emoji: {
-    fontSize: 11,
-  },
-  labelText: {
-    fontFamily: 'JetBrainsMono_500Medium',
-    fontSize: 8.5,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-});
-
-// ---------------------------------------------------------------------------
 // Skeleton shimmer for loading state
 // ---------------------------------------------------------------------------
 
@@ -396,19 +259,15 @@ function LoadingState() {
       <Text style={[Type.body13, { color: colors.inkMute, marginBottom: 18 }]}>
         Analysing visa requirements, costs, and experiences…
       </Text>
-
-      {/* Skeleton score rows */}
       {SCORE_CATEGORIES.map((cat) => (
         <View key={cat.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <SkeletonBar widthPct={4} />
-          <View style={{ width: 60, alignItems: 'center' }}>
-            <Text style={scoreStyles.emoji}>{cat.emoji}</Text>
+          <View style={{ width: 80, alignItems: 'center' }}>
+            <Text style={[styles.skeletonCatLabel, { color: colors.inkMute }]}>{cat.label}</Text>
           </View>
           <SkeletonBar widthPct={4} />
         </View>
       ))}
-
-      {/* Skeleton verdict lines */}
       <View style={{ marginTop: 12, gap: 8 }}>
         <View style={{ flexDirection: 'row' }}>
           <SkeletonBar widthPct={9} />
@@ -561,36 +420,16 @@ function CountryPickerModal({
 }
 
 // ---------------------------------------------------------------------------
-// Empty slot tile (dashed "+Pick a country" card)
-// ---------------------------------------------------------------------------
-
-function EmptySlotTile({ onPress }: { onPress: () => void }) {
-  const { colors } = useTheme();
-  return (
-    <TouchableOpacity
-      style={[
-        styles.emptySlot,
-        { backgroundColor: colors.surface, borderColor: colors.inkFaint },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.plusCircle, { borderColor: colors.inkMute }]}>
-        <Plus size={20} color={colors.inkMute} strokeWidth={1.8} />
-      </View>
-      <Text style={[Type.body13, { color: colors.inkMute, marginTop: 10 }]}>Pick a country</Text>
-    </TouchableOpacity>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Main Screen
 // ---------------------------------------------------------------------------
 
 export default function CompareScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { heldVisas, residence } = useVisa();
+  const plannerRef = useRef<TripPlannerSheetRef>(null);
+  const [planTarget, setPlanTarget] = useState<'a' | 'b'>('a');
 
   // No defaults — clean empty state
   const [countryA, setCountryA] = useState('');
@@ -707,40 +546,18 @@ export default function CompareScreen() {
 
   // ── Build card data ───────────────────────────────────────────────────────
 
-  function buildStats(code: string): Array<[string, string]> {
+  function buildFlightHours(code: string): number | null {
     const travel = travelData[code];
-    const flightH = getFlightHours(residence ?? 'GBR', code) ?? travel?.flightHoursFromLondon;
-    const flight = flightH != null ? `${flightH}h` : '—';
-    const budget = travel?.dailyBudget ?? '—';
-    const best = travel?.bestTimeNote?.split(' ')[0] ?? '—';
-    const costSymbol = travel?.costLevel === 1 ? '$' : travel?.costLevel === 2 ? '$$' : '$$$';
-    return [
-      ['Flight', flight],
-      ['Budget', budget],
-      ['Cost', costSymbol],
-      ['Best', best],
-    ];
+    return getFlightHours(residence ?? 'GBR', code) ?? travel?.flightHoursFromLondon ?? null;
   }
 
-  const cardA: CompareCountryData | null =
-    selectedA && resolvedA
-      ? {
-          name: selectedA.name,
-          flagCode: alpha3ToAlpha2(selectedA.code),
-          visaCategory: toCat(resolvedA.category),
-          stats: buildStats(selectedA.code),
-        }
-      : null;
+  function buildBudget(code: string): string {
+    return travelData[code]?.dailyBudget ?? '—';
+  }
 
-  const cardB: CompareCountryData | null =
-    selectedB && resolvedB
-      ? {
-          name: selectedB.name,
-          flagCode: alpha3ToAlpha2(selectedB.code),
-          visaCategory: toCat(resolvedB.category),
-          stats: buildStats(selectedB.code),
-        }
-      : null;
+  function buildBestTime(code: string): string {
+    return travelData[code]?.bestTimeNote?.split(' ')[0] ?? '—';
+  }
 
   // ── Compute winners ───────────────────────────────────────────────────────
 
@@ -750,18 +567,15 @@ export default function CompareScreen() {
     const tA = travelData[selectedA.code];
     const tB = travelData[selectedB.code];
 
-    // Cheapest — lower costLevel wins
     let cheapestWinner = '—';
     if (tA && tB) {
       cheapestWinner = tA.costLevel <= tB.costLevel ? selectedA.name : selectedB.name;
     }
 
-    // Easiest visa
     const rankA = CATEGORY_RANK[resolvedA.category] ?? 3;
     const rankB = CATEGORY_RANK[resolvedB.category] ?? 3;
     const easyWinner = rankA < rankB ? selectedA.name : rankB < rankA ? selectedB.name : '—';
 
-    // Shortest flight
     const fA = getFlightHours(residence ?? 'GBR', selectedA.code) ?? tA?.flightHoursFromLondon ?? 99;
     const fB = getFlightHours(residence ?? 'GBR', selectedB.code) ?? tB?.flightHoursFromLondon ?? 99;
     const flightWinner = fA <= fB ? selectedA.name : selectedB.name;
@@ -773,10 +587,66 @@ export default function CompareScreen() {
     ];
   }, [selectedA, selectedB, resolvedA, resolvedB, residence]);
 
+  // ── Determine overall winner (for card badge) ─────────────────────────────
+
+  const overallWinner = useMemo<'a' | 'b' | null>(() => {
+    if (!aiData || !selectedA || !selectedB) return null;
+    const scoresA = SCORE_CATEGORIES.map((c) => aiData.countryA.scores[c.key] ?? 5);
+    const scoresB = SCORE_CATEGORIES.map((c) => aiData.countryB.scores[c.key] ?? 5);
+    const sumA = scoresA.reduce((a, b) => a + b, 0);
+    const sumB = scoresB.reduce((a, b) => a + b, 0);
+    if (sumA === sumB) return null;
+    return sumA > sumB ? 'a' : 'b';
+  }, [aiData, selectedA, selectedB]);
+
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // Dynamic header title
+  const titleNode = bothSelected && selectedA && selectedB ? (
+    <Text
+      style={{
+        fontFamily: FontFamily.display,
+        fontSize: 32,
+        fontWeight: '500',
+        letterSpacing: -32 * 0.022,
+        lineHeight: 34,
+        color: colors.ink,
+        marginTop: 4,
+      }}
+    >
+      <Text style={{ fontFamily: FontFamily.displayItalic, fontStyle: 'italic' }}>
+        {selectedA.name}
+      </Text>
+      {' vs '}
+      <Text style={{ fontFamily: FontFamily.displayItalic, fontStyle: 'italic' }}>
+        {selectedB.name}
+      </Text>
+      <Text style={{ color: colors.coral }}>.</Text>
+    </Text>
+  ) : (
+    <Text
+      style={{
+        fontFamily: FontFamily.display,
+        fontSize: 38,
+        fontWeight: '500',
+        letterSpacing: -38 * 0.022,
+        lineHeight: 40,
+        color: colors.ink,
+        marginTop: 4,
+      }}
+    >
+      Compare{' '}
+      <Text style={{ fontFamily: FontFamily.displayItalic, fontStyle: 'italic' }}>
+        two
+      </Text>
+      <Text style={{ color: colors.coral }}>.</Text>
+    </Text>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <TopSafeAreaBlur />
+
       {/* Country Picker Modal */}
       <CountryPickerModal
         visible={pickerTarget !== null}
@@ -798,352 +668,442 @@ export default function CompareScreen() {
       >
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <View style={styles.header}>
-          <View>
-            <Text style={[Type.display26, { color: colors.ink }]}>Compare</Text>
-            <Text style={[Type.body14, { color: colors.inkMute, marginTop: 4 }]}>
-              Pick two destinations to compare visa, budget, weather and vibe.
-            </Text>
-          </View>
+          <Text style={[Type.kicker, { color: colors.inkMute }]}>SIDE BY SIDE</Text>
+          {titleNode}
+          <Squiggle
+            width={bothSelected ? 160 : 110}
+            color={colors.coral}
+            style={{ marginTop: 6 }}
+          />
         </View>
 
-        {/* ── Country cards row ────────────────────────────────────────────── */}
-        <View style={styles.cardsRow}>
-          {/* Slot A */}
-          {cardA ? (
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              onPress={() => setPickerTarget('a')}
-              activeOpacity={0.85}
-            >
-              <CompareCountryCard country={cardA} />
-            </TouchableOpacity>
-          ) : (
-            <EmptySlotTile onPress={() => setPickerTarget('a')} />
-          )}
-
-          {/* Swap / divider column */}
-          <View style={styles.midCol}>
-            {(countryA && countryB) ? (
-              <TouchableOpacity
-                style={[styles.swapBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                onPress={swap}
-                activeOpacity={0.7}
-              >
-                <ArrowLeftRight size={14} color={colors.inkMute} />
-              </TouchableOpacity>
-            ) : (
-              <View style={[styles.midDivider, { backgroundColor: colors.line }]} />
-            )}
-          </View>
-
-          {/* Slot B */}
-          {cardB ? (
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              onPress={() => setPickerTarget('b')}
-              activeOpacity={0.85}
-            >
-              <CompareCountryCard country={cardB} />
-            </TouchableOpacity>
-          ) : (
-            <EmptySlotTile onPress={() => setPickerTarget('b')} />
-          )}
-        </View>
-
-        {/* ── Empty state guidance (neither selected) ───────────────────────── */}
-        {!countryA && !countryB && (
-          <View style={[styles.emptyGuidance, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-            <Text style={[Type.body14, { color: colors.inkMute, textAlign: 'center', lineHeight: 22 }]}>
-              Tap a tile above to search for a country. Once both are selected, we'll generate an AI-powered comparison.
-            </Text>
-          </View>
-        )}
-
-        {/* ── Loading (shimmer skeletons) ────────────────────────────────── */}
-        {bothSelected && loading && (
-          <View style={styles.section}>
-            <LoadingState />
-          </View>
-        )}
-
-        {/* ── Error ────────────────────────────────────────────────────────── */}
-        {bothSelected && error && !loading && (
-          <TouchableOpacity
-            style={[styles.card, styles.section, { backgroundColor: colors.surface, borderColor: colors.line }]}
-            onPress={retry}
-            activeOpacity={0.7}
-          >
-            <RefreshCw size={18} color={colors.inkMute} />
-            <Text style={[Type.body13, { color: colors.inkMute, marginTop: 8, textAlign: 'center' }]}>
-              {error}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* ── Full comparison results ────────────────────────────────────── */}
-        {bothSelected && aiData && !loading && (
+        {/* ════════════════════════════════════════════════════════════════
+            LANDING STATE — no countries selected
+        ════════════════════════════════════════════════════════════════ */}
+        {!bothSelected && (
           <>
-            {/* ─ Score Bars ─────────────────────────────────────────────── */}
-            <View style={[styles.section]}>
-              <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 28 }}>
-                CATEGORY SCORES
-              </SectionKicker>
-              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                {/* Score header row */}
-                <View style={[styles.scoreHeader, { borderBottomColor: colors.line }]}>
-                  <Text
-                    style={[Type.title14, { color: colors.ink, flex: 1, textAlign: 'right', paddingRight: 8 }]}
-                    numberOfLines={1}
-                  >
-                    {selectedA!.name}
-                  </Text>
-                  <View style={{ width: 60 }} />
-                  <Text
-                    style={[Type.title14, { color: colors.ink, flex: 1, paddingLeft: 8 }]}
-                    numberOfLines={1}
-                  >
-                    {selectedB!.name}
-                  </Text>
-                </View>
+            {/* VsPickerCard */}
+            <VsPickerCard
+              onPickFirst={() => setPickerTarget('a')}
+              onPickSecond={() => setPickerTarget('b')}
+              firstLabel={selectedA?.name}
+              secondLabel={selectedB?.name}
+            />
 
-                {SCORE_CATEGORIES.map((cat) => (
-                  <ScoreBar
-                    key={cat.key}
-                    label={cat.label}
-                    emoji={cat.emoji}
-                    scoreA={aiData.countryA.scores[cat.key] ?? 5}
-                    scoreB={aiData.countryB.scores[cat.key] ?? 5}
-                    nameA={selectedA!.name}
-                    nameB={selectedB!.name}
+            {/* Popular face-offs */}
+            <View style={styles.faceoffSection}>
+              <View style={styles.faceoffHeader}>
+                <Text style={[Type.kicker, { color: colors.inkMute }]}>
+                  Popular face-offs
+                </Text>
+                <Squiggle width={80} color={colors.coral} style={{ marginTop: 3 }} />
+              </View>
+              <View
+                style={[
+                  styles.faceoffCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.line,
+                  },
+                ]}
+              >
+                {POPULAR_FACEOFFS.map((fo, i) => (
+                  <FaceoffRow
+                    key={`${fo.codeA}-${fo.codeB}`}
+                    codeA={fo.codeA}
+                    nameA={fo.nameA}
+                    codeB={fo.codeB}
+                    nameB={fo.nameB}
+                    hasDivider={i > 0}
+                    onOpen={() => {
+                      setCountryA(fo.codeA);
+                      setCountryB(fo.codeB);
+                    }}
                   />
                 ))}
               </View>
             </View>
+          </>
+        )}
 
-            {/* ─ AI Verdict ─────────────────────────────────────────────── */}
-            <View style={styles.section}>
-              <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 28 }}>
-                VERDICT
-              </SectionKicker>
-              <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                <Text style={[Type.body14, { color: colors.ink, lineHeight: 22 }]}>
-                  {aiData.verdict}
-                </Text>
-                {aiData.valueComparison ? (
-                  <Text
+        {/* ════════════════════════════════════════════════════════════════
+            RESULTS STATE — both countries selected
+        ════════════════════════════════════════════════════════════════ */}
+        {bothSelected && (
+          <>
+            {/* ── Country cards row with swap button ──────────────────── */}
+            <View style={styles.cardsRowWrapper}>
+              <View style={styles.cardsRow}>
+                {/* Card A */}
+                <TouchableOpacity
+                  style={{ flex: 1 }}
+                  onPress={() => setPickerTarget('a')}
+                  activeOpacity={0.85}
+                >
+                  <CompareCountryCardV2
+                    countryName={selectedA!.name}
+                    countryCode={selectedA!.code}
+                    visaCategory={toCat(resolvedA!.category)}
+                    flightHours={buildFlightHours(selectedA!.code)}
+                    dailyBudget={buildBudget(selectedA!.code)}
+                    bestTime={buildBestTime(selectedA!.code)}
+                    isWinner={overallWinner === 'a'}
+                  />
+                </TouchableOpacity>
+
+                {/* Swap button — centered absolutely between cards */}
+                <View style={styles.swapBtnContainer}>
+                  <TouchableOpacity
                     style={[
-                      Type.body13,
-                      {
-                        color: colors.inkMute,
-                        marginTop: 12,
-                        lineHeight: 20,
-                        paddingTop: 12,
-                        borderTopWidth: 1,
-                        borderTopColor: colors.line,
-                      },
+                      styles.swapBtn,
+                      { backgroundColor: colors.ink },
                     ]}
+                    onPress={swap}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Swap countries"
                   >
-                    {aiData.valueComparison}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-
-            {/* ─ Highlights (2-column) ───────────────────────────────────── */}
-            <View style={styles.section}>
-              <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 28 }}>
-                HIGHLIGHTS
-              </SectionKicker>
-              <View style={styles.highlightsRow}>
-                {/* Country A highlights */}
-                <View style={[styles.highlightCol, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                    <Flag code={alpha3ToAlpha2(selectedA!.code)} size={16} />
-                    <Text style={[Type.title14, { color: colors.ink }]} numberOfLines={1}>
-                      {selectedA!.name}
-                    </Text>
-                  </View>
-                  {aiData.countryA.highlights.map((h, i) => (
-                    <View key={i} style={styles.bulletRow}>
-                      <View style={[styles.bullet, { backgroundColor: colors.ink }]} />
-                      <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 18, flex: 1 }]}>
-                        {h}
-                      </Text>
-                    </View>
-                  ))}
+                    <ArrowLeftRight size={13} color="#FFFFFF" strokeWidth={2} />
+                  </TouchableOpacity>
                 </View>
 
-                {/* Country B highlights */}
-                <View style={[styles.highlightCol, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                    <Flag code={alpha3ToAlpha2(selectedB!.code)} size={16} />
-                    <Text style={[Type.title14, { color: colors.ink }]} numberOfLines={1}>
-                      {selectedB!.name}
-                    </Text>
-                  </View>
-                  {aiData.countryB.highlights.map((h, i) => (
-                    <View key={i} style={styles.bulletRow}>
-                      <View style={[styles.bullet, { backgroundColor: colors.ink }]} />
-                      <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 18, flex: 1 }]}>
-                        {h}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </View>
-
-            {/* ─ Best For ─────────────────────────────────────────────────── */}
-            <View style={styles.section}>
-              <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 28 }}>
-                BEST FOR
-              </SectionKicker>
-              <View style={styles.highlightsRow}>
-                <View
-                  style={[
-                    styles.bestForCard,
-                    { backgroundColor: colors.surface, borderColor: colors.line },
-                  ]}
+                {/* Card B */}
+                <TouchableOpacity
+                  style={{ flex: 1 }}
+                  onPress={() => setPickerTarget('b')}
+                  activeOpacity={0.85}
                 >
-                  <Text style={[Type.kicker, { color: colors.inkMute, marginBottom: 6 }]}>
-                    {selectedA!.name}
-                  </Text>
-                  <Text style={[Type.body14, { color: colors.ink, lineHeight: 20 }]}>
-                    {aiData.countryA.bestFor}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.bestForCard,
-                    { backgroundColor: colors.surface, borderColor: colors.line },
-                  ]}
-                >
-                  <Text style={[Type.kicker, { color: colors.inkMute, marginBottom: 6 }]}>
-                    {selectedB!.name}
-                  </Text>
-                  <Text style={[Type.body14, { color: colors.ink, lineHeight: 20 }]}>
-                    {aiData.countryB.bestFor}
-                  </Text>
-                </View>
+                  <CompareCountryCardV2
+                    countryName={selectedB!.name}
+                    countryCode={selectedB!.code}
+                    visaCategory={toCat(resolvedB!.category)}
+                    flightHours={buildFlightHours(selectedB!.code)}
+                    dailyBudget={buildBudget(selectedB!.code)}
+                    bestTime={buildBestTime(selectedB!.code)}
+                    isWinner={overallWinner === 'b'}
+                  />
+                </TouchableOpacity>
               </View>
             </View>
 
-            {/* ─ Weather Verdict ──────────────────────────────────────────── */}
-            {(aiData.countryA.weatherVerdict || aiData.countryB.weatherVerdict) && (
+            {/* ── Loading ──────────────────────────────────────────────── */}
+            {loading && (
               <View style={styles.section}>
-                <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 28 }}>
-                  WEATHER
-                </SectionKicker>
-                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  {aiData.countryA.weatherVerdict ? (
-                    <View style={aiData.countryB.weatherVerdict ? { marginBottom: 12 } : {}}>
-                      <Text style={[Type.meta10_5, { color: colors.inkMute, marginBottom: 4 }]}>
-                        {selectedA!.name}
-                      </Text>
-                      <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 19 }]}>
-                        {aiData.countryA.weatherVerdict}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {aiData.countryA.weatherVerdict && aiData.countryB.weatherVerdict && (
-                    <View style={[styles.sectionDivider, { backgroundColor: colors.line }]} />
-                  )}
-                  {aiData.countryB.weatherVerdict ? (
-                    <View>
-                      <Text style={[Type.meta10_5, { color: colors.inkMute, marginBottom: 4 }]}>
-                        {selectedB!.name}
-                      </Text>
-                      <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 19 }]}>
-                        {aiData.countryB.weatherVerdict}
-                      </Text>
-                    </View>
-                  ) : null}
+                <LoadingState />
+              </View>
+            )}
+
+            {/* ── Error ─────────────────────────────────────────────────── */}
+            {error && !loading && (
+              <TouchableOpacity
+                style={[
+                  styles.card,
+                  styles.section,
+                  { backgroundColor: colors.surface, borderColor: colors.line, alignItems: 'center' },
+                ]}
+                onPress={retry}
+                activeOpacity={0.7}
+              >
+                <RefreshCw size={18} color={colors.inkMute} />
+                <Text style={[Type.body13, { color: colors.inkMute, marginTop: 8, textAlign: 'center' }]}>
+                  {error}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* ── Full comparison results ────────────────────────────── */}
+            {aiData && !loading && (
+              <>
+                {/* ─ Category Scores Card ──────────────────────────────── */}
+                <View style={[styles.section, { paddingHorizontal: 14 }]}>
+                  <CategoryScoresCard
+                    scoresA={SCORE_CATEGORIES.map((c) => aiData.countryA.scores[c.key] ?? 5)}
+                    scoresB={SCORE_CATEGORIES.map((c) => aiData.countryB.scores[c.key] ?? 5)}
+                    nameA={selectedA!.name}
+                    nameB={selectedB!.name}
+                    categories={SCORE_CATEGORIES.map((c) => c.label)}
+                  />
                 </View>
-              </View>
-            )}
 
-            {/* ─ Value Comparison ─────────────────────────────────────────── */}
-            {aiData.valueComparison && (
-              <View style={styles.section}>
-                <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 28 }}>
-                  VALUE
-                </SectionKicker>
-                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  <Text style={[Type.body14, { color: colors.ink, lineHeight: 22 }]}>
-                    {aiData.valueComparison}
-                  </Text>
+                {/* ─ Verdict Card — dark ink bg ────────────────────────── */}
+                <View style={[styles.section, { paddingHorizontal: 14 }]}>
+                  <VerdictCard text={aiData.verdict} />
                 </View>
-              </View>
-            )}
 
-            {/* ─ Winner by Category ───────────────────────────────────────── */}
-            {winners.length > 0 && (
-              <View style={[styles.section, { paddingHorizontal: 28 }]}>
-                <WinnerList winners={winners} />
-              </View>
-            )}
-
-            {/* ─ Practical Details ────────────────────────────────────────── */}
-            {metaA && metaB && travelA && travelB && (
-              <View style={styles.section}>
-                <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 28 }}>
-                  PRACTICAL DETAILS
-                </SectionKicker>
-                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                  {[
-                    { label: 'Capital', a: metaA.capital, b: metaB.capital },
-                    { label: 'Currency', a: metaA.currencyCode, b: metaB.currencyCode },
-                    { label: 'Language', a: metaA.language, b: metaB.language },
-                    { label: 'Timezone', a: metaA.timezone, b: metaB.timezone },
-                    { label: 'Budget', a: travelA.dailyBudget, b: travelB.dailyBudget },
-                    { label: 'Best Time', a: travelA.bestTimeNote, b: travelB.bestTimeNote },
-                  ].map((row, i) => (
-                    <View
-                      key={row.label}
-                      style={[
-                        styles.detailRow,
-                        i > 0 && { borderTopWidth: 1, borderTopColor: colors.line },
-                      ]}
-                    >
-                      <Text
-                        style={[Type.body13, { color: colors.inkSoft, flex: 1, textAlign: 'right' }]}
-                        numberOfLines={2}
-                      >
-                        {row.a}
-                      </Text>
-                      <View style={styles.detailLabelBox}>
-                        <Text style={[Type.kicker, { color: colors.inkMute, textAlign: 'center' }]}>
-                          {row.label}
+                {/* ─ Highlights (2-column) ─────────────────────────────── */}
+                <View style={styles.section}>
+                  <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                    HIGHLIGHTS
+                  </SectionKicker>
+                  <View style={styles.highlightsRow}>
+                    {/* Country A highlights */}
+                    <View style={[styles.highlightCol, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <Flag code={alpha3ToAlpha2(selectedA!.code)} size={16} />
+                        <Text style={[Type.title14, { color: colors.ink }]} numberOfLines={1}>
+                          {selectedA!.name}
                         </Text>
                       </View>
-                      <Text
-                        style={[Type.body13, { color: colors.inkSoft, flex: 1 }]}
-                        numberOfLines={2}
-                      >
-                        {row.b}
+                      {aiData.countryA.highlights.map((h, i) => (
+                        <View key={i} style={styles.bulletRow}>
+                          <View style={[styles.bullet, { backgroundColor: colors.ink }]} />
+                          <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 18, flex: 1 }]}>
+                            {h}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Country B highlights */}
+                    <View style={[styles.highlightCol, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <Flag code={alpha3ToAlpha2(selectedB!.code)} size={16} />
+                        <Text style={[Type.title14, { color: colors.ink }]} numberOfLines={1}>
+                          {selectedB!.name}
+                        </Text>
+                      </View>
+                      {aiData.countryB.highlights.map((h, i) => (
+                        <View key={i} style={styles.bulletRow}>
+                          <View style={[styles.bullet, { backgroundColor: colors.ink }]} />
+                          <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 18, flex: 1 }]}>
+                            {h}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                {/* ─ Best For ──────────────────────────────────────────── */}
+                <View style={styles.section}>
+                  <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                    BEST FOR
+                  </SectionKicker>
+                  <View style={styles.highlightsRow}>
+                    <View style={[styles.bestForCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <Text style={[Type.kicker, { color: colors.inkMute, marginBottom: 6 }]}>
+                        {selectedA!.name}
+                      </Text>
+                      <Text style={[Type.body14, { color: colors.ink, lineHeight: 20 }]}>
+                        {aiData.countryA.bestFor}
                       </Text>
                     </View>
-                  ))}
+                    <View style={[styles.bestForCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <Text style={[Type.kicker, { color: colors.inkMute, marginBottom: 6 }]}>
+                        {selectedB!.name}
+                      </Text>
+                      <Text style={[Type.body14, { color: colors.ink, lineHeight: 20 }]}>
+                        {aiData.countryB.bestFor}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            )}
 
-            {/* ─ Bottom action bar: swap + refresh ────────────────────────── */}
-            <View style={[styles.actionBar, { paddingBottom: 8 }]}>
-              <CircleBtn size={44} onPress={swap} accessibilityLabel="Swap countries">
-                <ArrowLeftRight size={18} color={colors.ink} />
-              </CircleBtn>
-              <CircleBtn
-                size={44}
-                onPress={retry}
-                accessibilityLabel="Regenerate comparison"
-              >
-                <RefreshCw size={18} color={colors.ink} />
-              </CircleBtn>
-            </View>
+                {/* ─ Weather Verdict ───────────────────────────────────── */}
+                {(aiData.countryA.weatherVerdict || aiData.countryB.weatherVerdict) && (
+                  <View style={styles.section}>
+                    <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                      WEATHER
+                    </SectionKicker>
+                    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      {aiData.countryA.weatherVerdict ? (
+                        <View style={aiData.countryB.weatherVerdict ? { marginBottom: 12 } : {}}>
+                          <Text style={[Type.meta10_5, { color: colors.inkMute, marginBottom: 4 }]}>
+                            {selectedA!.name}
+                          </Text>
+                          <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 19 }]}>
+                            {aiData.countryA.weatherVerdict}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {aiData.countryA.weatherVerdict && aiData.countryB.weatherVerdict && (
+                        <View style={[styles.sectionDivider, { backgroundColor: colors.line }]} />
+                      )}
+                      {aiData.countryB.weatherVerdict ? (
+                        <View>
+                          <Text style={[Type.meta10_5, { color: colors.inkMute, marginBottom: 4 }]}>
+                            {selectedB!.name}
+                          </Text>
+                          <Text style={[Type.body13, { color: colors.inkSoft, lineHeight: 19 }]}>
+                            {aiData.countryB.weatherVerdict}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                )}
+
+                {/* ─ Value Comparison ──────────────────────────────────── */}
+                {aiData.valueComparison && (
+                  <View style={styles.section}>
+                    <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                      VALUE
+                    </SectionKicker>
+                    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <Text style={[Type.body14, { color: colors.ink, lineHeight: 22 }]}>
+                        {aiData.valueComparison}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* ─ Winner by Category ────────────────────────────────── */}
+                {winners.length > 0 && (
+                  <View style={[styles.section, { paddingHorizontal: 14 }]}>
+                    <WinnerList winners={winners} />
+                  </View>
+                )}
+
+                {/* ─ Practical Details ─────────────────────────────────── */}
+                {metaA && metaB && travelA && travelB && (
+                  <View style={styles.section}>
+                    <SectionKicker style={{ marginBottom: 12, paddingHorizontal: 14 }}>
+                      PRACTICAL DETAILS
+                    </SectionKicker>
+                    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      {[
+                        { label: 'Capital', a: metaA.capital, b: metaB.capital },
+                        { label: 'Currency', a: metaA.currencyCode, b: metaB.currencyCode },
+                        { label: 'Language', a: metaA.language, b: metaB.language },
+                        { label: 'Timezone', a: metaA.timezone, b: metaB.timezone },
+                        { label: 'Budget', a: travelA.dailyBudget, b: travelB.dailyBudget },
+                        { label: 'Best Time', a: travelA.bestTimeNote, b: travelB.bestTimeNote },
+                      ].map((row, i) => (
+                        <View
+                          key={row.label}
+                          style={[
+                            styles.detailRow,
+                            i > 0 && { borderTopWidth: 1, borderTopColor: colors.line },
+                          ]}
+                        >
+                          <Text
+                            style={[Type.body13, { color: colors.inkSoft, flex: 1, textAlign: 'right' }]}
+                            numberOfLines={2}
+                          >
+                            {row.a}
+                          </Text>
+                          <View style={styles.detailLabelBox}>
+                            <Text style={[Type.kicker, { color: colors.inkMute, textAlign: 'center' }]}>
+                              {row.label}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[Type.body13, { color: colors.inkSoft, flex: 1 }]}
+                            numberOfLines={2}
+                          >
+                            {row.b}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* ─ Plan-a-trip CTAs ───────────────────────────────────── */}
+                {selectedA && selectedB && (
+                  <View style={styles.planRow}>
+                    <Pressable
+                      onPress={() => {
+                        setPlanTarget('a');
+                        plannerRef.current?.present();
+                      }}
+                      style={({ pressed }) => [
+                        styles.planBtn,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.line,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
+                        PLAN
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: FontFamily.displayItalic,
+                          fontStyle: 'italic',
+                          fontSize: 15,
+                          fontWeight: '500',
+                          color: colors.ink,
+                          marginTop: 2,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {selectedA.name}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        setPlanTarget('b');
+                        plannerRef.current?.present();
+                      }}
+                      style={({ pressed }) => [
+                        styles.planBtn,
+                        {
+                          backgroundColor: colors.coral,
+                          borderColor: colors.coral,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[Type.kickerSm, { color: 'rgba(255,255,255,0.85)', fontSize: 9 }]}>
+                        PLAN
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: FontFamily.displayItalic,
+                          fontStyle: 'italic',
+                          fontSize: 15,
+                          fontWeight: '500',
+                          color: '#FFFFFF',
+                          marginTop: 2,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {selectedB.name}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {/* ─ Bottom action bar: swap + refresh ─────────────────── */}
+                <View style={[styles.actionBar, { paddingBottom: 8 }]}>
+                  <CircleBtn size={44} onPress={swap} accessibilityLabel="Swap countries">
+                    <ArrowLeftRight size={18} color={colors.ink} />
+                  </CircleBtn>
+                  <CircleBtn
+                    size={44}
+                    onPress={retry}
+                    accessibilityLabel="Regenerate comparison"
+                  >
+                    <RefreshCw size={18} color={colors.ink} />
+                  </CircleBtn>
+                </View>
+              </>
+            )}
           </>
         )}
       </ScrollView>
+
+      {/* ── Planner sheet — opens for whichever side was tapped ─── */}
+      {(() => {
+        const c = planTarget === 'a' ? selectedA : selectedB;
+        const m = planTarget === 'a' ? metaA : metaB;
+        const t = planTarget === 'a' ? travelA : travelB;
+        const r = planTarget === 'a' ? resolvedA : resolvedB;
+        if (!c || !r) return null;
+        return (
+          <TripPlannerSheet
+            ref={plannerRef}
+            country={c}
+            meta={m}
+            travel={t}
+            resolved={r}
+            heldVisas={heldVisasSet}
+            onTripCreated={(tripId) => router.push(`/trip/${tripId}` as never)}
+          />
+        );
+      })()}
     </View>
   );
 }
@@ -1162,66 +1122,38 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    paddingHorizontal: 28,
-    marginBottom: 20,
+    paddingHorizontal: 22,
+    marginBottom: 24,
   },
 
-  // Country cards row
+  // Country cards wrapper (with overflow: visible for TOP PICK badge)
+  cardsRowWrapper: {
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    paddingTop: 14, // space for badge
+  },
   cardsRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    paddingHorizontal: 14,
-    gap: 0,
-    marginBottom: 16,
+    gap: 10,
+    position: 'relative',
   },
 
-  midCol: {
-    width: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  midDivider: {
-    width: 1,
-    height: 40,
-    borderRadius: 1,
+  // Swap button between cards
+  swapBtnContainer: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    marginLeft: -14,
+    marginTop: -14,
+    zIndex: 20,
   },
   swapBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  // Empty slot tile
-  emptySlot: {
-    flex: 1,
-    minHeight: 180,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-  },
-  plusCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Empty guidance (neither selected)
-  emptyGuidance: {
-    marginHorizontal: 14,
-    marginTop: 4,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 20,
   },
 
   // Section wrapper
@@ -1236,17 +1168,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     padding: 18,
-    alignItems: 'center',
     ...Shadows.subtle,
   },
 
-  // Score header
-  scoreHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: 10,
-    marginBottom: 4,
-    borderBottomWidth: 1,
+  // Popular face-offs section
+  faceoffSection: {
+    paddingHorizontal: 22,
+  },
+  faceoffHeader: {
+    marginBottom: 12,
+  },
+  faceoffCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...Shadows.subtle,
+    shadowColor: '#1F1A14',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
   },
 
   // Highlights 2-column layout
@@ -1301,6 +1241,21 @@ const styles = StyleSheet.create({
     width: 72,
     alignItems: 'center',
     paddingHorizontal: 4,
+  },
+
+  // Plan CTAs
+  planRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 14,
+    marginTop: 8,
+  },
+  planBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    borderWidth: 1,
   },
 
   // Action bar
@@ -1384,5 +1339,14 @@ const styles = StyleSheet.create({
   emptySearch: {
     padding: 28,
     alignItems: 'center',
+  },
+
+  // Skeleton cat label
+  skeletonCatLabel: {
+    fontFamily: 'JetBrainsMono_500Medium',
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: 9 * 0.14,
+    fontWeight: '600',
   },
 });
