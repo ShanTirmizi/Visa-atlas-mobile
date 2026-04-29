@@ -47,6 +47,7 @@ import {
   formatRelativeDate,
 } from '@/constants/bookings';
 import { buildMapsSearchUrl, buildTelUrl } from '@/utils/maps';
+import { LinearGradient } from 'expo-linear-gradient';
 import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
 import { Guilloche } from '@/components/ui/Guilloche';
 
@@ -130,12 +131,12 @@ function parseAirport(raw: string): { code: string; city: string } {
 function fmtTime(iso: string): string {
   try {
     const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    const h = String(d.getHours()).padStart(2, '0');
-    const m = String(d.getMinutes()).padStart(2, '0');
-    return `${h}:${m}`;
+    if (isNaN(d.getTime())) return '';
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
   } catch {
-    return iso;
+    return '';
   }
 }
 
@@ -156,6 +157,7 @@ function fmtShortDate(iso: string): string {
   ];
   try {
     const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
   } catch {
     return iso;
@@ -206,9 +208,16 @@ function BookingHero({
       <View
         style={[
           heroStyles.inner,
-          { backgroundColor: tokens.bgFrom, borderRadius: 22 },
+          { borderRadius: 22 },
         ]}
       >
+        <LinearGradient
+          colors={[tokens.bgFrom, tokens.bgTo]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.4, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
         <Guilloche
           variant="wavy"
           color={tokens.ink}
@@ -228,7 +237,7 @@ function BookingHero({
           <View
             style={[
               heroStyles.statusPill,
-              { backgroundColor: tokens.secondary },
+              { backgroundColor: tokens.secondary, maxWidth: '60%', flexShrink: 1 },
             ]}
           >
             <View
@@ -242,6 +251,7 @@ function BookingHero({
                 heroStyles.statusText,
                 { color: tokens.ink, letterSpacing: 11 * 0.22 },
               ]}
+              numberOfLines={1}
             >
               {statusPillLabel}
             </Text>
@@ -544,7 +554,7 @@ function RestaurantSheet({ booking, colors, onUnlink, onDelete }: RendererProps)
     const h = parseInt(hStr, 10);
     const m = parseInt(mStr, 10);
     const totalMin = h * 60 + m + 15;
-    heldUntil = `${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+    heldUntil = `${String(Math.floor(totalMin / 60) % 24).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
   }
 
   return (
@@ -679,7 +689,7 @@ function InsuranceSheet({ booking, colors, onUnlink, onDelete }: RendererProps) 
         rows={[
           { label: 'POLICY NO.', value: details.policyNumber },
           { label: 'PLAN', value: details.coverage ?? 'Standard' },
-          { label: 'EMERGENCY', value: '—' },
+          { label: 'EMERGENCY', value: details.emergencyPhone ?? null },
         ]}
       />
 
@@ -773,9 +783,16 @@ function CarSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
           {pickupLocation && dropoffLocation ? (
             <View style={carStyles.connectorRow}>
               <View style={{ width: 6 }} />
-              <View
-                style={[carStyles.verticalDash, { borderColor: tokens.divider }]}
-              />
+              <View style={{ height: 12, marginLeft: 3, alignItems: 'center', justifyContent: 'center' }}>
+                <Svg width={2} height={12}>
+                  <Path
+                    d="M 1 0 L 1 12"
+                    stroke={tokens.divider}
+                    strokeWidth={1}
+                    strokeDasharray="2 2"
+                  />
+                </Svg>
+              </View>
             </View>
           ) : null}
 
@@ -799,7 +816,7 @@ function CarSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
         colors={colors}
         rows={[
           { label: 'VEHICLE', value: details.carType },
-          { label: 'DRIVER', value: '—' },
+          { label: 'DRIVER', value: details.driver ?? null },
           { label: 'COST', value: formattedCost },
         ]}
       />
@@ -904,12 +921,11 @@ function ExperienceSheet({ booking, colors, onUnlink, onDelete }: RendererProps)
           { label: 'OPERATOR', value: booking.provider },
           {
             label: 'MEETING',
-            value:
-              meetingPoint
-                ? `${details.meetingTime ?? time} · ${meetingPoint}`
-                : details.meetingTime ?? null,
+            value: meetingPoint
+              ? (details.meetingTime ? `${details.meetingTime} · ${meetingPoint}` : meetingPoint)
+              : null,
           },
-          { label: 'LANGUAGES', value: details.languages ?? 'EN' },
+          { label: 'LANGUAGES', value: details.languages ?? null },
         ]}
       />
 
@@ -1076,6 +1092,7 @@ function HotelSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
 function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
   const tokens = bookingTypeColors.flight;
   const details = booking.typeDetails ?? {};
+  const [routeLineWidth, setRouteLineWidth] = useState(0);
 
   const dep = parseAirport(details.departure ?? '');
   const arr = parseAirport(details.arrival ?? '');
@@ -1108,8 +1125,8 @@ function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
       if (end && now > end) return 'LANDED';
       if (now > start && diffH < 0 && (!end || now < end)) return 'IN FLIGHT';
       if (diffH >= 0) {
-        const h = Math.round(diffH);
-        return `BOARDING IN ${h}H`;
+        if (diffH < 1) return 'BOARDING NOW';
+        return `BOARDING IN ${Math.ceil(diffH)}H`;
       }
       if (diffH > -24) return 'IN FLIGHT';
       return 'LANDED';
@@ -1148,18 +1165,42 @@ function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
       </View>
 
       {/* Middle: dotted line + flight info */}
-      <View style={flightStyles.routeMiddle}>
+      <View
+        style={flightStyles.routeMiddle}
+        onLayout={(e) => setRouteLineWidth(e.nativeEvent.layout.width)}
+      >
         <Text style={[flightStyles.flightInfoText, { color: tokens.inkSoft }]}>
           {flightInfo}
         </Text>
-        <Svg width="100%" height={16} style={{ marginVertical: 2 }}>
-          <Path
-            d={`M 0 8 L 100% 8`}
-            stroke={tokens.inkSoft}
-            strokeWidth={1}
-            strokeDasharray="3 4"
-          />
-        </Svg>
+        {routeLineWidth > 0 ? (
+          <Svg width={routeLineWidth} height={16} style={{ marginVertical: 2 }}>
+            <Path
+              d={`M 0 8 L ${routeLineWidth} 8`}
+              stroke={tokens.inkSoft}
+              strokeWidth={1}
+              strokeDasharray="3 4"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </Svg>
+        ) : null}
+        {/* Accent arrow at midpoint */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: '52%',
+            top: 2,
+            transform: [{ translateX: -7 }],
+          }}
+        >
+          <Svg width={14} height={12} viewBox="0 0 14 12">
+            <Path
+              d="M 1 1 L 12 6 L 1 11 Z"
+              fill={tokens.accent}
+            />
+          </Svg>
+        </View>
       </View>
 
       {/* Right: arrival */}
@@ -1247,7 +1288,7 @@ function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
         colors={colors}
         rows={[
           { label: 'CLASS', value: details.class },
-          { label: 'GATE', value: '—' },
+          { label: 'GATE', value: details.gate ?? null },
           { label: 'CONFIRMATION', value: booking.confirmationNumber },
         ]}
       />
@@ -1352,7 +1393,6 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
       <AppBottomSheet
         ref={bottomSheetRef}
         backgroundColor={sheetBg}
-        handleColor="rgba(255,255,255,0.45)"
       >
         <BottomSheetScrollView
           contentContainerStyle={sheetStyles.scrollContent}
