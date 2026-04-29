@@ -49,22 +49,10 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       }
       return "visaatlas://";
     },
-    // Override the default createOrUpdateUser to gracefully handle the
-    // "orphan account" case: if an account record points to a userId
-    // whose user doc has been deleted (typical in dev / wipe-and-retry
-    // workflows), the default impl tries to patch a nonexistent doc and
-    // throws "Update on nonexistent document ID ...". We treat that as a
-    // signal to insert a fresh user instead.
-    async createOrUpdateUser(ctx, { existingUserId, profile }) {
-      if (existingUserId) {
-        const existing = await ctx.db.get(existingUserId);
-        if (existing) {
-          await ctx.db.patch(existingUserId, profile);
-          return existingUserId;
-        }
-        // Orphan — fall through to insert a new user.
-      }
-      return await ctx.db.insert("users", profile);
-    },
+    // No createOrUpdateUser override — using Convex Auth's default which
+    // does the right thing for OAuth providers (links by verified email)
+    // and properly sets emailVerificationTime for OAuth users. If we ever
+    // orphan a user doc again, run wipeTestData:wipeAuthAccountByEmail to
+    // clean it up manually rather than papering over it in the callback.
   },
 });
