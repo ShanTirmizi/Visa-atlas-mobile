@@ -44,7 +44,6 @@ import {
 } from '@/constants/theme';
 import BackButton from '@/components/ui/BackButton';
 import VisaChatSheet, { type VisaChatSheetRef } from '@/components/guides/VisaChatSheet';
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -374,7 +373,6 @@ export default function GuideDetailScreen() {
   ];
 
   return (
-    <BottomSheetModalProvider>
     <View
       style={[
         styles.container,
@@ -840,7 +838,6 @@ export default function GuideDetailScreen() {
         guideJson={guide.guide}
       />
     </View>
-    </BottomSheetModalProvider>
   );
 }
 
