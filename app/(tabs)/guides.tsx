@@ -1,16 +1,18 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useConvexAuth } from 'convex/react';
+import { useConvexAuth, useMutation } from 'convex/react';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily } from '@/constants/theme';
 import { Type } from '@/constants/typography';
@@ -51,6 +53,33 @@ export default function GuidesScreen() {
   const guides = useOfflineQuery(
     api.visaGuides.listGuides,
     isAuthenticated ? {} : 'skip',
+  );
+  const deleteGuide = useMutation(api.visaGuides.deleteGuide);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = useCallback(
+    (id: Id<'visaGuides'>, countryName: string) => {
+      Alert.alert(
+        'Delete visa guide',
+        `Are you sure you want to delete the ${countryName} visa guide? Your checklist progress will be lost.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              setDeletingId(id);
+              try {
+                await deleteGuide({ id });
+              } finally {
+                setDeletingId(null);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [deleteGuide],
   );
 
   // Derived totals for the OPEN APPS / DOCS READY tiles.
@@ -159,7 +188,11 @@ export default function GuidesScreen() {
                     status={guide.status as GuideStatus}
                     checked={progress.checked}
                     total={progress.total}
+                    deleting={deletingId === guide._id}
                     onPress={() => router.push(`/guide/${guide._id}` as never)}
+                    onDelete={() =>
+                      handleDelete(guide._id as Id<'visaGuides'>, guide.countryName)
+                    }
                   />
                 );
               })}

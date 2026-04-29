@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { ChevronRight, Clock } from 'lucide-react-native';
+import { ChevronRight, Clock, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily } from '@/constants/theme';
 import { Flag } from '@/components/ui/Flag';
@@ -20,6 +20,11 @@ interface Props {
   /** Optional ISO date string for the deadline; hidden when absent. */
   deadline?: string;
   onPress: () => void;
+  /** Optional delete handler. When provided, a small trash button is rendered
+   *  next to the chevron, AND long-pressing the card triggers the same flow. */
+  onDelete?: () => void;
+  /** Set to true while the delete mutation is in flight to dim the card. */
+  deleting?: boolean;
 }
 
 /** Visual variants for the status pill. The 'preparing' status splits into
@@ -64,6 +69,8 @@ export function GuideApplicationCard({
   total,
   deadline,
   onPress,
+  onDelete,
+  deleting,
 }: Props) {
   const { colors } = useTheme();
   const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
@@ -75,6 +82,8 @@ export function GuideApplicationCard({
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onDelete}
+      delayLongPress={420}
       accessibilityRole="button"
       accessibilityLabel={`Open ${countryName} visa guide`}
       style={({ pressed }) => [
@@ -82,7 +91,7 @@ export function GuideApplicationCard({
         {
           backgroundColor: colors.surface,
           borderColor: colors.line,
-          opacity: pressed ? 0.94 : 1,
+          opacity: deleting ? 0.45 : pressed ? 0.94 : 1,
         },
       ]}
     >
@@ -205,13 +214,36 @@ export function GuideApplicationCard({
             ) : null}
           </View>
 
-          <View
-            style={[
-              styles.chevron,
-              { borderColor: colors.line },
-            ]}
-          >
-            <ChevronRight size={14} color={colors.inkMute} strokeWidth={2} />
+          <View style={styles.iconCluster}>
+            {onDelete ? (
+              <Pressable
+                onPress={onDelete}
+                hitSlop={6}
+                accessibilityLabel="Delete guide"
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  {
+                    borderColor: colors.line,
+                    backgroundColor: pressed ? colors.dangerBg : 'transparent',
+                  },
+                ]}
+              >
+                <Trash2
+                  size={13}
+                  color={colors.inkMute}
+                  strokeWidth={1.75}
+                />
+              </Pressable>
+            ) : null}
+
+            <View
+              style={[
+                styles.iconBtn,
+                { borderColor: colors.line },
+              ]}
+            >
+              <ChevronRight size={14} color={colors.inkMute} strokeWidth={2} />
+            </View>
           </View>
         </View>
       </View>
@@ -406,7 +438,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
-  chevron: {
+  iconCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
