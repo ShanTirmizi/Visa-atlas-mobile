@@ -237,7 +237,7 @@ function BookingHero({
           <View
             style={[
               heroStyles.statusPill,
-              { backgroundColor: tokens.secondary, maxWidth: '60%', flexShrink: 1 },
+              { backgroundColor: tokens.secondary, maxWidth: '68%', flexShrink: 1 },
             ]}
           >
             <View
@@ -665,18 +665,20 @@ function InsuranceSheet({ booking, colors, onUnlink, onDelete }: RendererProps) 
       >
         {/* Secondary card: coverage amount headline */}
         <View style={{ gap: 6 }}>
-          <Text
-            style={[
-              insStyles.coverageKicker,
-              { color: tokens.accent, letterSpacing: 9 * 0.22 },
-            ]}
-          >
-            {coverageLabel} · UP TO
-          </Text>
           {formattedCost ? (
-            <Text style={[insStyles.coverageValue, { color: tokens.ink }]}>
-              {formattedCost}
-            </Text>
+            <>
+              <Text
+                style={[
+                  insStyles.coverageKicker,
+                  { color: tokens.accent, letterSpacing: 9 * 0.22 },
+                ]}
+              >
+                {coverageLabel} · UP TO
+              </Text>
+              <Text style={[insStyles.coverageValue, { color: tokens.ink }]}>
+                {formattedCost}
+              </Text>
+            </>
           ) : null}
           <Text style={[insStyles.coverageBody, { color: tokens.inkSoft }]}>
             Covers medical, evacuation, trip interruption & lost baggage.
@@ -742,7 +744,9 @@ function CarSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
     } catch { return ''; }
   })();
 
-  const statusPillLabel = `PICKUP · ${humanDateShort} · ${pickupTime}`;
+  const statusPillLabel = pickupTime
+    ? `PICKUP · ${humanDateShort} ${pickupTime}`
+    : `PICKUP · ${humanDateShort}`;
   const formattedCost = fmtCurrency(booking.cost, booking.currency);
 
   // CTA
@@ -766,50 +770,52 @@ function CarSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
           />
         }
       >
-        {/* Secondary card: pickup → dropoff timeline */}
-        <View style={{ gap: 8 }}>
-          {pickupLocation ? (
-            <View style={carStyles.timelineRow}>
-              <View style={[carStyles.dotFilled, { backgroundColor: tokens.accent, borderRadius: 3 }]} />
-              <Text style={[carStyles.timelineLocation, { color: tokens.ink }]} numberOfLines={1}>
-                {pickupLocation}
-              </Text>
-              <Text style={[carStyles.timelineTime, { color: tokens.inkSoft }]}>
-                {pickupTime}
-              </Text>
-            </View>
-          ) : null}
-
-          {pickupLocation && dropoffLocation ? (
-            <View style={carStyles.connectorRow}>
-              <View style={{ width: 6 }} />
-              <View style={{ height: 12, marginLeft: 3, alignItems: 'center', justifyContent: 'center' }}>
-                <Svg width={2} height={12}>
-                  <Path
-                    d="M 1 0 L 1 12"
-                    stroke={tokens.divider}
-                    strokeWidth={1}
-                    strokeDasharray="2 2"
-                  />
-                </Svg>
-              </View>
-            </View>
-          ) : null}
-
-          {dropoffLocation ? (
-            <View style={carStyles.timelineRow}>
-              <View style={[carStyles.squareDot, { backgroundColor: tokens.accent }]} />
-              <Text style={[carStyles.timelineLocation, { color: tokens.ink }]} numberOfLines={1}>
-                {dropoffLocation}
-              </Text>
-              {dropoffTime ? (
-                <Text style={[carStyles.timelineTime, { color: tokens.inkSoft }]}>
-                  {dropoffTime}
+        {/* Secondary card: pickup → dropoff timeline — only show when there's location data */}
+        {(pickupLocation || dropoffLocation) ? (
+          <View style={{ gap: 8 }}>
+            {pickupLocation ? (
+              <View style={carStyles.timelineRow}>
+                <View style={[carStyles.dotFilled, { backgroundColor: tokens.accent, borderRadius: 3 }]} />
+                <Text style={[carStyles.timelineLocation, { color: tokens.ink }]} numberOfLines={1}>
+                  {pickupLocation}
                 </Text>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
+                <Text style={[carStyles.timelineTime, { color: tokens.inkSoft }]}>
+                  {pickupTime}
+                </Text>
+              </View>
+            ) : null}
+
+            {pickupLocation && dropoffLocation ? (
+              <View style={carStyles.connectorRow}>
+                <View style={{ width: 6 }} />
+                <View style={{ height: 12, marginLeft: 3, alignItems: 'center', justifyContent: 'center' }}>
+                  <Svg width={2} height={12}>
+                    <Path
+                      d="M 1 0 L 1 12"
+                      stroke={tokens.divider}
+                      strokeWidth={1}
+                      strokeDasharray="2 2"
+                    />
+                  </Svg>
+                </View>
+              </View>
+            ) : null}
+
+            {dropoffLocation ? (
+              <View style={carStyles.timelineRow}>
+                <View style={[carStyles.squareDot, { backgroundColor: tokens.accent }]} />
+                <Text style={[carStyles.timelineLocation, { color: tokens.ink }]} numberOfLines={1}>
+                  {dropoffLocation}
+                </Text>
+                {dropoffTime ? (
+                  <Text style={[carStyles.timelineTime, { color: tokens.inkSoft }]}>
+                    {dropoffTime}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
       </BookingHero>
 
       <BookingMetaCard
@@ -1015,44 +1021,44 @@ function HotelSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
           />
         }
       >
-        {/* Secondary card: night progress dots */}
-        <View style={hotelStyles.nightRow}>
-          {/* Avatar dot */}
-          <View style={[hotelStyles.avatarDot, { backgroundColor: tokens.accent }]} />
+        {/* Secondary card: night progress dots — only render when there's something to show */}
+        {nights > 0 ? (
+          <View style={hotelStyles.nightRow}>
+            {/* Avatar dot */}
+            <View style={[hotelStyles.avatarDot, { backgroundColor: tokens.accent }]} />
 
-          {/* Progress dots */}
-          <View style={hotelStyles.dotsRow}>
-            {nights > 0
-              ? Array.from({ length: Math.min(nights, 14) }).map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      hotelStyles.nightDot,
-                      i < nightsStayed
-                        ? { backgroundColor: tokens.accent }
-                        : {
-                            backgroundColor: 'transparent',
-                            borderWidth: 1,
-                            borderColor: tokens.divider,
-                          },
-                    ]}
-                  />
-                ))
-              : null}
+            {/* Progress dots */}
+            <View style={hotelStyles.dotsRow}>
+              {Array.from({ length: Math.min(nights, 14) }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    hotelStyles.nightDot,
+                    i < nightsStayed
+                      ? { backgroundColor: tokens.accent }
+                      : {
+                          backgroundColor: 'transparent',
+                          borderWidth: 1,
+                          borderColor: tokens.divider,
+                        },
+                  ]}
+                />
+              ))}
+            </View>
+
+            {/* Room label — only when a real roomType is set */}
+            {details.roomType ? (
+              <Text
+                style={[
+                  hotelStyles.roomLabel,
+                  { color: tokens.accent, letterSpacing: 9 * 0.22 },
+                ]}
+              >
+                RM · {details.roomType}
+              </Text>
+            ) : null}
           </View>
-
-          {/* Room label */}
-          {details.roomType ? (
-            <Text
-              style={[
-                hotelStyles.roomLabel,
-                { color: tokens.accent, letterSpacing: 9 * 0.22 },
-              ]}
-            >
-              RM · {details.roomType}
-            </Text>
-          ) : null}
-        </View>
+        ) : null}
       </BookingHero>
 
       <BookingMetaCard
@@ -1152,13 +1158,18 @@ function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
   const flightInfo = flightDuration ? `${flightDuration} · ${stops}` : stops;
 
   // Route block to use as kicker slot
+  const showDepCity = !!(dep.city && dep.city.toUpperCase() !== dep.code.toUpperCase());
+  const showArrCity = !!(arr.city && arr.city.toUpperCase() !== arr.code.toUpperCase());
+
   const routeBlock = (
     <View style={flightStyles.routeBlock}>
       {/* Left: departure */}
       <View style={flightStyles.routeEndLeft}>
-        <Text style={[flightStyles.cityLabel, { color: tokens.inkSoft }]}>
-          {dep.city}
-        </Text>
+        {showDepCity ? (
+          <Text style={[flightStyles.cityLabel, { color: tokens.inkSoft }]}>
+            {dep.city.toUpperCase()}
+          </Text>
+        ) : null}
         <Text style={[flightStyles.airportCode, { color: tokens.ink }]}>
           {dep.code}
         </Text>
@@ -1169,29 +1180,41 @@ function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
         style={flightStyles.routeMiddle}
         onLayout={(e) => setRouteLineWidth(e.nativeEvent.layout.width)}
       >
-        <Text style={[flightStyles.flightInfoText, { color: tokens.inkSoft }]}>
-          {flightInfo}
-        </Text>
+        {/* Dashed line — absolutely positioned centerline */}
         {routeLineWidth > 0 ? (
-          <Svg width={routeLineWidth} height={16} style={{ marginVertical: 2 }}>
-            <Path
-              d={`M 0 8 L ${routeLineWidth} 8`}
-              stroke={tokens.inkSoft}
-              strokeWidth={1}
-              strokeDasharray="3 4"
-              strokeLinecap="round"
-              fill="none"
-            />
-          </Svg>
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: '50%',
+              marginTop: -1,
+              height: 2,
+            }}
+          >
+            <Svg width={routeLineWidth} height={2}>
+              <Path
+                d={`M 0 1 L ${routeLineWidth} 1`}
+                stroke={tokens.inkSoft}
+                strokeWidth={1}
+                strokeDasharray="3 4"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </Svg>
+          </View>
         ) : null}
-        {/* Accent arrow at midpoint */}
+
+        {/* Yellow accent triangle on midpoint of line */}
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            left: '52%',
-            top: 2,
-            transform: [{ translateX: -7 }],
+            left: '50%',
+            top: '50%',
+            marginLeft: -7,
+            marginTop: -6,
           }}
         >
           <Svg width={14} height={12} viewBox="0 0 14 12">
@@ -1201,13 +1224,33 @@ function FlightSheet({ booking, colors, onUnlink, onDelete }: RendererProps) {
             />
           </Svg>
         </View>
+
+        {/* Caption below the line */}
+        <Text
+          style={[
+            flightStyles.flightInfoText,
+            {
+              color: tokens.inkSoft,
+              position: 'absolute',
+              bottom: 6,
+              left: 0,
+              right: 0,
+              textAlign: 'center',
+            },
+          ]}
+          numberOfLines={1}
+        >
+          {flightInfo}
+        </Text>
       </View>
 
       {/* Right: arrival */}
       <View style={flightStyles.routeEndRight}>
-        <Text style={[flightStyles.cityLabel, { color: tokens.inkSoft }]}>
-          {arr.city}
-        </Text>
+        {showArrCity ? (
+          <Text style={[flightStyles.cityLabel, { color: tokens.inkSoft }]}>
+            {arr.city.toUpperCase()}
+          </Text>
+        ) : null}
         <Text style={[flightStyles.airportCode, { color: tokens.ink }]}>
           {arr.code}
         </Text>
@@ -1784,9 +1827,9 @@ const flightStyles = StyleSheet.create({
   },
   routeMiddle: {
     flex: 1,
+    position: 'relative',
     paddingHorizontal: 8,
-    paddingBottom: 10,
-    gap: 0,
+    minHeight: 56,
   },
   flightInfoText: {
     fontFamily: FontFamily.monoMedium,
