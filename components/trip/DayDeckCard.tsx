@@ -104,7 +104,9 @@ function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit }: Da
           </View>
         ) : null}
 
-        {/* Italic Fraunces title with coral period */}
+        {/* Italic Fraunces title with coral period — fixed size, 2-line wrap.
+            (Previously used adjustsFontSizeToFit which shrunk long titles
+            below the place line, inverting the hierarchy.) */}
         <Text
           style={[
             styles.title,
@@ -115,8 +117,6 @@ function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit }: Da
             },
           ]}
           numberOfLines={2}
-          adjustsFontSizeToFit
-          minimumFontScale={0.82}
         >
           {title}
           <Text style={{ color: colors.coral }}>.</Text>
@@ -132,7 +132,7 @@ function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit }: Da
           <Text
             style={[
               styles.placeText,
-              { color: colors.inkMute, letterSpacing: 10 * 0.18 },
+              { color: colors.inkMute, letterSpacing: 11 * 0.14 },
             ]}
             numberOfLines={1}
           >
@@ -253,14 +253,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   title: {
-    fontSize: 22,
-    lineHeight: 26,
-    letterSpacing: -22 * 0.018,
+    fontSize: 24,
+    lineHeight: 28,
+    letterSpacing: -24 * 0.018,
     fontWeight: '500',
   },
   placeText: {
     fontFamily: FontFamily.monoMedium,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
   },
 
