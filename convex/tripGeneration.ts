@@ -90,12 +90,14 @@ export { generateTripArgs };
  * Patch a single section's content into the trip doc. Called by the
  * streaming action as each section completes (and per-day for itinerary).
  *
- * Three modes:
+ * Four modes (priority order):
  *   - failed=true       → adds `section` to failedSections, does not
  *                         touch the field
  *   - "itinerary-day:N" → parses content as one ItineraryDay JSON, sets
  *                         it at index N in the parsed itinerary array,
  *                         re-stringifies
+ *   - "heroImage"       → patches the heroImage field directly with the
+ *                         JSON-stringified image record
  *   - other             → looks up field via SECTION_FIELD_MAP, writes
  *                         content directly
  */
@@ -124,7 +126,7 @@ export const patchTripSection = internalMutation({
     // Itinerary day-by-day stream
     if (args.section.startsWith("itinerary-day:")) {
       const idx = Number(args.section.split(":")[1]);
-      if (!Number.isFinite(idx) || idx < 0) return;
+      if (!Number.isInteger(idx) || idx < 0) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const days: any[] = trip.itinerary ? safeParseArray(trip.itinerary) : [];
       try {
@@ -132,9 +134,11 @@ export const patchTripSection = internalMutation({
       } catch {
         // Malformed day payload — record as failed without touching itinerary.
         const existing = trip.failedSections ?? [];
-        await ctx.db.patch(args.tripId, {
-          failedSections: [...existing, args.section],
-        });
+        if (!existing.includes(args.section)) {
+          await ctx.db.patch(args.tripId, {
+            failedSections: [...existing, args.section],
+          });
+        }
         return;
       }
       await ctx.db.patch(args.tripId, { itinerary: JSON.stringify(days) });
