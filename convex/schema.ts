@@ -16,7 +16,12 @@ export default defineSchema({
     language: v.string(),
     timezone: v.string(),
     iataCode: v.string(),
-    status: v.union(v.literal("planned"), v.literal("completed")),
+    status: v.union(
+      v.literal("planned"),
+      v.literal("completed"),
+      v.literal("generating"),
+      v.literal("failed"),
+    ),
     duration: v.number(),
     costLevel: v.number(),
     dailyBudget: v.string(),
@@ -52,6 +57,14 @@ export default defineSchema({
     // User-pinned trip — heart on the trip detail header. Distinct from
     // country-level favorites (which live in client-side AsyncStorage).
     starred: v.optional(v.boolean()),
+    // Streaming generation tracking. `failedSections` lists section keys that
+    // errored during a streaming run; `originalInputs` is a JSON-stringified
+    // snapshot of the original create-trip inputs (for resume/retry); and
+    // `generationStartedAt` is the ms-epoch timestamp the stream kicked off,
+    // used to detect timeouts.
+    failedSections: v.optional(v.array(v.string())),
+    originalInputs: v.optional(v.string()),
+    generationStartedAt: v.optional(v.number()),
   })
     .index("by_status", ["status"])
     .index("by_country", ["countryCode"])
