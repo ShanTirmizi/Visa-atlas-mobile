@@ -24,6 +24,7 @@ import type * as tripCollaborators from "../tripCollaborators.js";
 import type * as tripGeneration from "../tripGeneration.js";
 import type * as tripInvites from "../tripInvites.js";
 import type * as tripPresence from "../tripPresence.js";
+import type * as tripRefinement from "../tripRefinement.js";
 import type * as tripVotes from "../tripVotes.js";
 import type * as trips from "../trips.js";
 import type * as userProfiles from "../userProfiles.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   tripGeneration: typeof tripGeneration;
   tripInvites: typeof tripInvites;
   tripPresence: typeof tripPresence;
+  tripRefinement: typeof tripRefinement;
   tripVotes: typeof tripVotes;
   trips: typeof trips;
   userProfiles: typeof userProfiles;
