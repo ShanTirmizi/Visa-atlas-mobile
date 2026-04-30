@@ -34,6 +34,7 @@ import { Squiggle } from '@/components/ui/Squiggle';
 import { TripOverviewHero } from '@/components/trip/overview/TripOverviewHero';
 import { NextUpCard } from '@/components/trip/overview/NextUpCard';
 import { HighlightsStrip, type HighlightItem } from '@/components/trip/overview/HighlightsStrip';
+import { TripBriefReadout } from '@/components/trip/TripBriefReadout';
 import { CountryTipsView } from '@/components/tips/CountryTipsView';
 
 // ── Bookings ───────────────────────────────────────────────
@@ -476,6 +477,13 @@ export default function TripDetailScreen() {
                 onPress={() => router.push(`/trip/${id}/day/0` as const)}
               />
             )}
+
+            {/* Editorial readout of the user's brief — italic Fraunces with
+                coral curly quotes. Renders nothing when userNotes is empty
+                so it takes zero space for trips without notes. Sits above
+                the day deck so it explains *why* the trip looks the way it
+                does before the user sees the day breakdown. */}
+            <TripBriefReadout notes={trip.userNotes} />
 
             {/* Highlights strip — driven by itinerary days (the strip maps
                 first 6 days to cards). Show skeleton while no days have
