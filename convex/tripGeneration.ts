@@ -439,3 +439,23 @@ export const runGenerationStream = internalAction({
     }
   },
 });
+
+/**
+ * Public entry point. Inserts a stub trip row, schedules the streaming
+ * action, returns the trip ID immediately so the client can navigate.
+ */
+export const generateTrip = action({
+  args: generateTripArgs,
+  handler: async (ctx, args): Promise<Id<"trips">> => {
+    const userId = await requireAuth(ctx);
+    const tripId: Id<"trips"> = await ctx.runMutation(
+      internal.tripGeneration.insertGenerationStub,
+      { userId, input: args },
+    );
+    await ctx.scheduler.runAfter(0, internal.tripGeneration.runGenerationStream, {
+      tripId,
+      input: args,
+    });
+    return tripId;
+  },
+});

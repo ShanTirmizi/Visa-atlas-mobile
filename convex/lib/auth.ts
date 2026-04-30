@@ -1,8 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { QueryCtx, MutationCtx } from "../_generated/server";
+import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import type { Id, Doc } from "../_generated/dataModel";
 
 type AuthCtx = QueryCtx | MutationCtx;
+type AnyAuthCtx = QueryCtx | MutationCtx | ActionCtx;
 
 const roleLevels: Record<string, number> = {
   viewer: 0,
@@ -12,8 +13,11 @@ const roleLevels: Record<string, number> = {
 
 /**
  * Returns the authenticated user's Id<"users">, or throws "Not authenticated".
+ *
+ * Works for queries, mutations, and actions — only depends on `getAuthUserId`,
+ * which doesn't need `ctx.db`.
  */
-export async function requireAuth(ctx: AuthCtx): Promise<Id<"users">> {
+export async function requireAuth(ctx: AnyAuthCtx): Promise<Id<"users">> {
   const userId = await getAuthUserId(ctx);
   if (userId === null) {
     throw new Error("Not authenticated");
