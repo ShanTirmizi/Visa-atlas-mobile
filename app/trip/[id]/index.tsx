@@ -297,17 +297,10 @@ export default function TripDetailScreen() {
 
   // ── Derived: HighlightsStrip data ───────────────────────
   const highlights = useMemo<HighlightItem[]>(() => {
-    if (itinerary.length === 0) {
-      // Stub fallback
-      return [
-        { label: 'Kyoto temples', dayStamp: 'DAY 2', tone: 'sunset' },
-        { label: 'Ramen tour', dayStamp: 'DAY 3', tone: 'forest' },
-        { label: 'Mt. Fuji', dayStamp: 'DAY 5', tone: 'mountain' },
-      ];
-    }
+    if (itinerary.length === 0) return [];
     return itinerary.slice(0, 6).map((day, idx) => ({
       label: day.morning,
-      dayStamp: `DAY ${day.day}`,
+      dayStamp: `DAY ${day.day ?? idx + 1}`,
       imageUri: dayImages[idx]?.thumb ?? dayImages[idx]?.url ?? undefined,
       onPress: () => router.push(`/trip/${id}/day/${idx}` as never),
     }));
@@ -485,21 +478,16 @@ export default function TripDetailScreen() {
               />
             )}
 
-            {/* Highlights strip — real strip when ready, shimmer pills while
-                pending, retry card on failure. */}
-            {trip.highlights ? (
+            {/* Highlights strip — driven by itinerary days (the strip maps
+                first 6 days to cards). Show skeleton while no days have
+                streamed yet; show real strip as soon as Day 1 lands. */}
+            {itinerary.length > 0 ? (
               <HighlightsStrip
                 items={highlights}
                 onSeeAll={() => setActiveTab('Itinerary')}
               />
-            ) : isSectionPending(trip, 'highlights') ? (
+            ) : generating ? (
               <HighlightsSkeleton />
-            ) : hasFailed(trip, 'highlights') ? (
-              <SectionRetryCard
-                tripId={trip._id}
-                section="highlights"
-                label="highlights"
-              />
             ) : null}
 
             {/* AI chat — opens the conversational tweaker for the itinerary */}

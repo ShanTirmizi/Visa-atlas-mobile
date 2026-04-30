@@ -346,23 +346,36 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setIsLoading(true);
       setError('');
       try {
-        const tripId = await generateTripAction({
-          countryCode: eff.country.code,
-          countryName: eff.country.name,
-          capital: eff.meta?.capital ?? eff.country.name,
-          duration: days,
-          heldVisas: [...heldVisas],
-          vibe,
-          budget,
-          interests: [...activeVibes].join(', ') || 'culture, food, sightseeing',
-          activityStyles: [...activeVibes],
-          travelParty: travelers > 1 ? party : 'solo',
-          companions: travelers > 1 ? JSON.stringify({ party, count: travelers }) : undefined,
-          startDate: dreaming ? undefined : startDate.toISOString().slice(0, 10),
-          endDate: dreaming ? undefined : endDate.toISOString().slice(0, 10),
-        });
+        // Run the action and a minimum-display timer in parallel so the
+        // user always gets ~700ms of the "Starting your trip…" orb. The
+        // action usually resolves in 200-400ms (just inserts the stub +
+        // schedules the streaming work) — without the floor, the sheet
+        // would feel like it just "snapped" closed.
+        const minDisplay = new Promise<void>((r) => setTimeout(r, 700));
+        const [tripId] = await Promise.all([
+          generateTripAction({
+            countryCode: eff.country.code,
+            countryName: eff.country.name,
+            capital: eff.meta?.capital ?? eff.country.name,
+            duration: days,
+            heldVisas: [...heldVisas],
+            vibe,
+            budget,
+            interests: [...activeVibes].join(', ') || 'culture, food, sightseeing',
+            activityStyles: [...activeVibes],
+            travelParty: travelers > 1 ? party : 'solo',
+            companions: travelers > 1 ? JSON.stringify({ party, count: travelers }) : undefined,
+            startDate: dreaming ? undefined : startDate.toISOString().slice(0, 10),
+            endDate: dreaming ? undefined : endDate.toISOString().slice(0, 10),
+          }),
+          minDisplay,
+        ]);
+        // Dismiss the sheet, then give its slide-down animation ~250ms
+        // to play before pushing the trip detail screen — the sheet
+        // disappearing reveals the trips list briefly, then the trip
+        // detail slides in from the right. Smooth handoff.
         bottomSheetRef.current?.dismiss();
-        onTripCreated(String(tripId));
+        setTimeout(() => onTripCreated(String(tripId)), 250);
       } catch {
         setError("Couldn't start your trip. Please try again.");
         setIsLoading(false);

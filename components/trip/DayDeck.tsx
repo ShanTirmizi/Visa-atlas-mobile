@@ -86,30 +86,48 @@ interface DayDotsRowProps {
 
 function DayDotsRow({ total, streamingIndex }: DayDotsRowProps) {
   const { colors } = useTheme();
+  const completed = streamingIndex ?? 0;
+  const remaining = Math.max(0, total - completed);
   return (
-    <View style={styles.dotsRowStreaming}>
-      {Array.from({ length: total }, (_, i) => {
-        const isDone = streamingIndex != null && i < streamingIndex;
-        const isStreaming = i === streamingIndex;
-        return (
-          <View
-            key={i}
-            style={[
-              styles.dotStreaming,
-              isDone && { backgroundColor: colors.coral },
-              isStreaming && {
-                backgroundColor: colors.coral,
-                shadowColor: colors.coral,
-                shadowOpacity: 0.5,
-                shadowRadius: 3,
-                shadowOffset: { width: 0, height: 0 },
-                elevation: 3,
-              },
-              !isDone && !isStreaming && { backgroundColor: colors.line },
-            ]}
-          />
-        );
-      })}
+    <View style={{ alignItems: 'center', marginTop: 10, gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text
+          style={{
+            fontSize: 9,
+            letterSpacing: 0.08 * 9,
+            textTransform: 'uppercase',
+            color: colors.coral,
+            fontFamily: FontFamily.semibold,
+          }}
+        >
+          {completed} of {total} ready · {remaining} more arriving
+        </Text>
+        <TypingDots color={colors.coral} size="sm" gap={3} />
+      </View>
+      <View style={styles.dotsRowStreaming}>
+        {Array.from({ length: total }, (_, i) => {
+          const isDone = streamingIndex != null && i < streamingIndex;
+          const isStreaming = i === streamingIndex;
+          return (
+            <View
+              key={i}
+              style={[
+                styles.dotStreaming,
+                isDone && { backgroundColor: colors.coral },
+                isStreaming && {
+                  backgroundColor: colors.coral,
+                  shadowColor: colors.coral,
+                  shadowOpacity: 0.5,
+                  shadowRadius: 3,
+                  shadowOffset: { width: 0, height: 0 },
+                  elevation: 3,
+                },
+                !isDone && !isStreaming && { backgroundColor: colors.line },
+              ]}
+            />
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -536,13 +554,12 @@ const styles = StyleSheet.create({
   dotsRowStreaming: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 4,
-    marginTop: 8,
+    gap: 6,
   },
   dotStreaming: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   hint: {
     marginTop: 14,

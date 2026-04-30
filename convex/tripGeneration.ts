@@ -152,7 +152,11 @@ export const patchTripSection = internalMutation({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const days: any[] = trip.itinerary ? safeParseArray(trip.itinerary) : [];
       try {
-        days[idx] = JSON.parse(args.content);
+        const parsed = JSON.parse(args.content);
+        // Inject the 1-indexed day number — the LLM doesn't emit it but
+        // every consumer (DayDeck, HighlightsStrip, day detail screen)
+        // expects `day.day` to be set. Without this they render "DAY · undefined".
+        days[idx] = { ...parsed, day: idx + 1 };
       } catch {
         // Malformed day payload — record as failed without touching itinerary.
         const existing = trip.failedSections ?? [];
