@@ -396,6 +396,7 @@ export default function TripsScreen() {
               endDate={trip.endDate}
               heroImage={trip.heroImage}
               starred={Boolean(trip.starred)}
+              status={trip.status}
             />
           ))}
         </Animated.View>

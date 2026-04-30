@@ -1,5 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Heart } from 'lucide-react-native';
 import { Type } from '@/constants/typography';
@@ -59,6 +66,44 @@ function formatMonoDate(startDate: string | undefined, endDate: string | undefin
 }
 
 // ──────────────────────────────────────────────
+// GeneratingProgressStrip — thin animated coral bar at the bottom of the
+// thumbnail while a trip is being generated.
+// ──────────────────────────────────────────────
+function GeneratingProgressStrip() {
+  const { colors } = useTheme();
+  const x = useSharedValue(0);
+  useEffect(() => {
+    x.value = withRepeat(
+      withTiming(1, { duration: 1800, easing: Easing.linear }),
+      -1,
+      false,
+    );
+  }, [x]);
+  const s = useAnimatedStyle(() => ({
+    transform: [{ translateX: -50 + x.value * 100 }],
+  }));
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 2,
+        overflow: 'hidden',
+        borderBottomLeftRadius: 14,
+        borderBottomRightRadius: 14,
+      }}
+      pointerEvents="none"
+    >
+      <Animated.View
+        style={[{ width: 50, height: 2, backgroundColor: colors.coral }, s]}
+      />
+    </View>
+  );
+}
+
+// ──────────────────────────────────────────────
 // TripRow — Signature v2 (with flag-on-thumb + stacked right side)
 // ──────────────────────────────────────────────
 interface TripRowProps {
@@ -73,6 +118,11 @@ interface TripRowProps {
   /** Show a small coral heart corner badge on the thumbnail when the user
    *  has starred this trip from the trip detail header. */
   starred?: boolean;
+  /** Trip generation status. When `'generating'`, the row shows a placeholder
+   *  hero, a GENERATING pill in place of the visa badge, and an animated
+   *  coral progress strip. When `'failed'`, shows a FAILED pill. Permissive
+   *  string type — legacy trips may pass undefined. */
+  status?: string;
 }
 
 export function TripRow({
@@ -85,6 +135,7 @@ export function TripRow({
   endDate,
   heroImage,
   starred,
+  status,
 }: TripRowProps) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -94,6 +145,8 @@ export function TripRow({
   const cat = toCat(visaCategory);
   const dateStr = formatMonoDate(startDate, endDate);
   const displayName = name || countryName;
+  const isGenerating = status === 'generating';
+  const isFailed = status === 'failed';
 
   return (
     <Pressable
@@ -117,7 +170,7 @@ export function TripRow({
       {/* Thumbnail with flag badge bottom-right + (optional) starred heart top-right */}
       <View style={styles.thumbWrap}>
         <Photo
-          uri={imageUri ?? undefined}
+          uri={isGenerating ? undefined : (imageUri ?? undefined)}
           tone="mountain"
           radius={14}
           style={styles.thumb}
@@ -126,7 +179,7 @@ export function TripRow({
         <View style={[styles.flagBadge, { borderColor: colors.surface }]}>
           <Flag code={a2} size={20} />
         </View>
-        {starred ? (
+        {starred && !isGenerating ? (
           <View
             style={[
               styles.starredBadge,
@@ -139,6 +192,7 @@ export function TripRow({
             <Heart size={10} color="#FFFFFF" fill="#FFFFFF" strokeWidth={0} />
           </View>
         ) : null}
+        {isGenerating && <GeneratingProgressStrip />}
       </View>
 
       {/* Title + mono date */}
@@ -169,7 +223,51 @@ export function TripRow({
 
       {/* Right rail: visa pill on top, chevron below */}
       <View style={styles.rightRail}>
-        <VisaBadge cat={cat} size="sm" />
+        {isGenerating ? (
+          <View
+            style={{
+              backgroundColor: colors.coralBg,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.coral,
+                fontSize: 9,
+                fontWeight: '600',
+                letterSpacing: 0.05 * 9,
+                textTransform: 'uppercase',
+              }}
+            >
+              Generating
+            </Text>
+          </View>
+        ) : isFailed ? (
+          <View
+            style={{
+              backgroundColor: colors.coralBg,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.coral,
+                fontSize: 9,
+                fontWeight: '600',
+                letterSpacing: 0.05 * 9,
+                textTransform: 'uppercase',
+              }}
+            >
+              Failed
+            </Text>
+          </View>
+        ) : (
+          <VisaBadge cat={cat} size="sm" />
+        )}
         <ChevronRight size={18} color={colors.inkMute} strokeWidth={2} />
       </View>
     </Pressable>
