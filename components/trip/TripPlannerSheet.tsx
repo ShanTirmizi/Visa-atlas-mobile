@@ -27,6 +27,7 @@ import {
 } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import { visaData, resolveCountry, type CountryVisa, type HeldVisaType, type VisaCategory } from '@/data/visaData';
+import { POPULAR_COUNTRY_CODE_SET, POPULAR_COUNTRY_RANK } from '@/data/popularCountries';
 import { countryMeta, type CountryMeta } from '@/data/countryMeta';
 import { travelData, type TravelInfo } from '@/data/travelData';
 import { Flag } from '@/components/ui/Flag';
@@ -223,10 +224,34 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
 
     const filteredPickerCountries = useMemo(() => {
       const q = pickerSearch.trim().toLowerCase();
-      return visaData
+      const all = visaData
         .filter((c) => c.category !== 'home')
-        .filter((c) => !q || c.name.toLowerCase().includes(q))
-        .slice(0, 80);
+        .filter((c) => !q || c.name.toLowerCase().includes(q));
+
+      if (q) {
+        // While searching, sort matches alphabetically — predictable for the user.
+        return all
+          .slice()
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .slice(0, 80);
+      }
+
+      // Default order: curated popular destinations first (in their hand-ranked
+      // order), then everything else alphabetically. Far more useful than the
+      // default visaData order, which groups by visa-category.
+      const popular: typeof all = [];
+      const rest: typeof all = [];
+      for (const c of all) {
+        if (POPULAR_COUNTRY_CODE_SET.has(c.code)) popular.push(c);
+        else rest.push(c);
+      }
+      popular.sort(
+        (a, b) =>
+          (POPULAR_COUNTRY_RANK.get(a.code) ?? 0) -
+          (POPULAR_COUNTRY_RANK.get(b.code) ?? 0),
+      );
+      rest.sort((a, b) => a.name.localeCompare(b.name));
+      return [...popular, ...rest].slice(0, 80);
     }, [pickerSearch]);
 
     // ── Date state ──────────────────────────────────────────────
@@ -684,7 +709,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                 <View style={s.travelersLeft}>
                   <Text style={[s.dateCardLabel, { color: colors.inkMute }]}>Travelers</Text>
                   <Text style={[s.dateCardValue, { color: colors.ink }]}>
-                    {travelers} {travelers === 1 ? 'adult' : 'adults'}
+                    {travelers} {travelers === 1 ? 'person' : 'people'}
                   </Text>
                 </View>
                 <View style={s.travelersRight}>
