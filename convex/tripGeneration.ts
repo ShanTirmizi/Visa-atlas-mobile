@@ -17,6 +17,17 @@ import {
   makeItineraryStreamParser,
 } from "./lib/anthropicStream";
 
+/** Coerce a value into a string. Strings pass through; arrays/objects get
+ * JSON.stringify'd; nullish becomes the supplied fallback (use "[]" for
+ * fields that should hold JSON-stringified arrays). Guards transforms
+ * against Claude inlining a JS array where a JSON-stringified array was
+ * requested — Convex's v.string() validator would otherwise throw. */
+const coerceToString = (v: unknown, fallback: string = "[]"): string => {
+  if (typeof v === "string") return v;
+  if (v == null) return fallback;
+  return JSON.stringify(v);
+};
+
 // Args validator shared by `generateTrip` and `insertGenerationStub`.
 // Mirrors the planner sheet form; deliberately permissive on optional fields.
 const generateTripArgs = {
@@ -378,15 +389,15 @@ export const runGenerationStream = internalAction({
       try {
         const parsed = JSON.parse(raw);
         return [
-          { section: "packingSuggestions", content: parsed.packingSuggestions ?? "[]" },
-          { section: "accommodationTips", content: parsed.accommodationTips ?? "" },
-          { section: "localEssentials", content: parsed.localEssentials ?? "[]" },
+          { section: "packingSuggestions", content: coerceToString(parsed.packingSuggestions, "[]") },
+          { section: "accommodationTips", content: coerceToString(parsed.accommodationTips, "") },
+          { section: "localEssentials", content: coerceToString(parsed.localEssentials, "[]") },
         ];
       } catch {
         return [
-          { section: "packingSuggestions", content: "" },
+          { section: "packingSuggestions", content: "[]" },
           { section: "accommodationTips", content: "" },
-          { section: "localEssentials", content: "" },
+          { section: "localEssentials", content: "[]" },
         ];
       }
     };
@@ -399,13 +410,13 @@ export const runGenerationStream = internalAction({
       try {
         const parsed = JSON.parse(raw);
         return [
-          { section: "visaNotes", content: parsed.visaNotes ?? "" },
-          { section: "visaChecklist", content: parsed.visaChecklist ?? "[]" },
+          { section: "visaNotes", content: coerceToString(parsed.visaNotes, "") },
+          { section: "visaChecklist", content: coerceToString(parsed.visaChecklist, "[]") },
         ];
       } catch {
         return [
           { section: "visaNotes", content: "" },
-          { section: "visaChecklist", content: "" },
+          { section: "visaChecklist", content: "[]" },
         ];
       }
     };
