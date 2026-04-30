@@ -37,6 +37,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Platform } from 'react-native';
 import { DarkOrb } from '@/components/ui/DarkOrb';
 import { SectionKicker } from '@/components/ui/SectionKicker';
+import { TripPlannerNotesField } from './TripPlannerNotesField';
 
 // ── Constants ───────────────────────────────────────────────────────────
 const VIBES = [
@@ -245,6 +246,10 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // ── Vibes state (spec-aligned 8-chip set) ───────────────────
     const [activeVibes, setActiveVibes] = useState<Set<string>>(new Set());
 
+    // ── Free-form "Anything else?" notes (Task 8 — refinement sheet
+    //    intercept lands in Task 10; for now passes straight through).
+    const [userNotes, setUserNotes] = useState('');
+
     // ── Legacy preference state (preserved for payload compat) ──
     const [vibe] = useState('balanced');
     const [budget] = useState('mid');
@@ -276,6 +281,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setEndDate(d.end);
       setTravelers(2);
       setActiveVibes(new Set());
+      setUserNotes('');
       setIsLoading(false);
       setError('');
       setPickedCode('');
@@ -367,6 +373,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             companions: travelers > 1 ? JSON.stringify({ party, count: travelers }) : undefined,
             startDate: dreaming ? undefined : startDate.toISOString().slice(0, 10),
             endDate: dreaming ? undefined : endDate.toISOString().slice(0, 10),
+            userNotes: userNotes.trim() || undefined,
           }),
           minDisplay,
         ]);
@@ -384,6 +391,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       effective, country, meta, travel, resolved, heldVisas,
       days, vibe, budget, activeVibes, travelers, party,
       generateTripAction, onTripCreated, dreaming, startDate, endDate,
+      userNotes,
     ]);
 
     // ── Backdrop ────────────────────────────────────────────────
@@ -696,6 +704,12 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                     );
                   })}
                 </View>
+              </View>
+
+              {/* "Anything else?" — free-form notes that flow into the
+                  generation prompt as userNotes (Task 8). */}
+              <View style={{ marginTop: 18, marginBottom: 24 }}>
+                <TripPlannerNotesField value={userNotes} onChangeText={setUserNotes} />
               </View>
 
               {/* Error */}
