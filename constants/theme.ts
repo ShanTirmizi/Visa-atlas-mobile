@@ -12,6 +12,9 @@ export const LightColors = {
   surface: '#FFFFFF',
   card: '#FFFFFF',
   surfaceMuted: '#EDEDEB',
+  // Warm cream — used by skeleton placeholders so shimmer reads on the
+  // editorial paper background rather than a flat grey.
+  warmBg: '#F5EFE6',
 
   // Ink scale (text, strokes, primary fills)
   ink: '#0E0F0F',
