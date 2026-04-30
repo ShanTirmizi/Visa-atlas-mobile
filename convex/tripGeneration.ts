@@ -358,6 +358,9 @@ export const runGenerationStream = internalAction({
               section: `itinerary-day:${dayIndex}`,
               content: dayJson,
             });
+            if (dayIndex === 0) {
+              await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
+            }
           },
           (err) => console.error("Itinerary parse error:", err),
         );
@@ -365,8 +368,9 @@ export const runGenerationStream = internalAction({
           { apiKey, systemPrompt, userPrompt, maxTokens: 8192 },
           {
             onDelta: (text) => itineraryParser.onDelta(text),
-            onComplete: () => {
+            onComplete: async () => {
               itineraryParser.onComplete();
+              await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
               settle();
             },
             onError: async (err) => {
@@ -608,5 +612,110 @@ export const _clearFailedSection = internalMutation({
     const toRemove = bundleSiblings[section] ?? [section];
     const next = failed.filter((s) => !toRemove.includes(s));
     await ctx.db.patch(tripId, { failedSections: next });
+  },
+});
+
+/**
+ * Fetch trip images via the existing Vercel /api/trip-images endpoint
+ * and patch hero/day/activity images into the trip doc.
+ *
+ * Called from runGenerationStream once Day 1 lands (for fast hero) and
+ * again after the full itinerary streams (to backfill remaining day
+ * images). The endpoint is idempotent — both calls populate the same
+ * fields; the second overwrites the first.
+ */
+export const fetchAndPatchImages = internalAction({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
+    if (!trip || !trip.itinerary) return;
+    let days: Array<{
+      morningPlace?: string;
+      afternoonPlace?: string;
+      eveningPlace?: string;
+      title?: string;
+      heroSubject?: string;
+    }> = [];
+    try {
+      days = JSON.parse(trip.itinerary);
+    } catch {
+      return;
+    }
+    if (days.length === 0) return;
+
+    const activities = days
+      .flatMap((d) => [
+        d.morningPlace ? { name: 'morning', place: d.morningPlace } : null,
+        d.afternoonPlace ? { name: 'afternoon', place: d.afternoonPlace } : null,
+        d.eveningPlace ? { name: 'evening', place: d.eveningPlace } : null,
+      ])
+      .filter(Boolean);
+
+    const dayHeroSubjects = days.map(
+      (d) =>
+        d.heroSubject ??
+        d.morningPlace ??
+        d.afternoonPlace ??
+        d.eveningPlace ??
+        d.title ??
+        '',
+    );
+
+    try {
+      const res = await fetch('https://visa-atlas.vercel.app/api/trip-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          countryName: trip.countryName,
+          capital: trip.capital,
+          activities,
+          dayHeroSubjects,
+        }),
+      });
+      if (!res.ok) return;
+      const imgData = (await res.json()) as {
+        hero?: unknown;
+        activities?: unknown[];
+        dayImages?: unknown[];
+      };
+      if (imgData.hero) {
+        await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+          tripId,
+          section: 'heroImage',
+          content: JSON.stringify(imgData.hero),
+        });
+      }
+      if (imgData.dayImages?.length) {
+        await ctx.runMutation(internal.tripGeneration._patchTripField, {
+          tripId,
+          field: 'dayImages',
+          value: JSON.stringify(imgData.dayImages),
+        });
+      }
+      if (imgData.activities?.length) {
+        await ctx.runMutation(internal.tripGeneration._patchTripField, {
+          tripId,
+          field: 'activityImages',
+          value: JSON.stringify(imgData.activities),
+        });
+      }
+    } catch (err) {
+      console.warn(`Image fetch failed for ${tripId}:`, err);
+    }
+  },
+});
+
+/** Generic internal patch helper for fields not in SECTION_FIELD_MAP. */
+export const _patchTripField = internalMutation({
+  args: {
+    tripId: v.id("trips"),
+    field: v.string(),
+    value: v.string(),
+  },
+  handler: async (ctx, { tripId, field, value }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await ctx.db.patch(tripId, { [field]: value } as any);
   },
 });
