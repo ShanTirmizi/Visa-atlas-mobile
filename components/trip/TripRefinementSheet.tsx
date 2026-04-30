@@ -516,7 +516,7 @@ function Footer({
           }}
         >
           Generate itinerary
-          <Text style={{ color: 'rgba(255,255,255,0.7)' }}>{'  →'}</Text>
+          <Text style={{ color: '#FFFFFF', opacity: 0.7 }}>{'  →'}</Text>
         </Text>
       </Pressable>
     </View>

@@ -41,6 +41,8 @@ export function TripPlannerNotesField({ value, onChangeText }: Props) {
   useEffect(() => {
     if (!isRotating) return;
 
+    let pendingSwap: ReturnType<typeof setTimeout> | null = null;
+
     const interval = setInterval(() => {
       Animated.sequence([
         Animated.timing(opacity, {
@@ -57,15 +59,20 @@ export function TripPlannerNotesField({ value, onChangeText }: Props) {
         }),
       ]).start();
 
-      // swap the prompt at the midpoint of the fade (while it's invisible)
-      const swapTimeout = setTimeout(() => {
+      // swap the prompt at the midpoint of the fade (while it's invisible).
+      // Track the timeout so cleanup can cancel it — otherwise it can fire
+      // after the user focuses or unmounts and bump promptIndex stale.
+      if (pendingSwap) clearTimeout(pendingSwap);
+      pendingSwap = setTimeout(() => {
         setPromptIndex((i) => (i + 1) % PLANNER_PROMPTS.length);
+        pendingSwap = null;
       }, FADE_DURATION_MS);
-
-      return () => clearTimeout(swapTimeout);
     }, ROTATION_INTERVAL_MS);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (pendingSwap) clearTimeout(pendingSwap);
+    };
   }, [isRotating, opacity]);
 
   const counterVisible = value.length >= COUNTER_THRESHOLD;
