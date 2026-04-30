@@ -1,5 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, ImageBackground } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 import { Pencil } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, Shadows } from '@/constants/theme';
@@ -17,9 +24,42 @@ export interface DayDeckCardProps {
   /** Tap handler for the inline edit pencil — small floating button in
    *  the bottom-right corner of the card. */
   onEdit?: () => void;
+  /** When true, renders a blinking coral cursor at the end of the title
+   *  text — used on the day card currently being written during streaming
+   *  generation. */
+  showCursor?: boolean;
 }
 
-function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit }: DayDeckCardProps) {
+// Thin coral bar that blinks at ~2.2 Hz; placed inline at the end of the
+// day-card title on the currently-streaming day during generation.
+function StreamingCursor() {
+  const { colors } = useTheme();
+  const o = useSharedValue(1);
+  useEffect(() => {
+    o.value = withRepeat(
+      withTiming(0, { duration: 450, easing: Easing.steps(2) }),
+      -1,
+      true,
+    );
+  }, [o]);
+  const s = useAnimatedStyle(() => ({ opacity: o.value }));
+  return (
+    <Animated.View
+      style={[
+        {
+          width: 1.5,
+          height: 14,
+          backgroundColor: colors.coral,
+          marginLeft: 2,
+          alignSelf: 'center',
+        },
+        s,
+      ]}
+    />
+  );
+}
+
+function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit, showCursor }: DayDeckCardProps) {
   const { colors } = useTheme();
   const dayLabel = String(dayNumber).padStart(2, '0');
 
@@ -106,21 +146,28 @@ function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit }: Da
 
         {/* Italic Fraunces title with coral period — fixed size, 2-line wrap.
             (Previously used adjustsFontSizeToFit which shrunk long titles
-            below the place line, inverting the hierarchy.) */}
-        <Text
-          style={[
-            styles.title,
-            {
-              color: colors.ink,
-              fontFamily: FontFamily.displayItalic,
-              fontStyle: 'italic',
-            },
-          ]}
-          numberOfLines={2}
-        >
-          {title}
-          <Text style={{ color: colors.coral }}>.</Text>
-        </Text>
+            below the place line, inverting the hierarchy.)
+            When `showCursor` is true (the day is mid-streaming), a thin
+            blinking coral bar sits inline after the period — wrap in a row
+            so the animated <View> sits on the text baseline. */}
+        <View style={styles.titleRow}>
+          <Text
+            style={[
+              styles.title,
+              {
+                color: colors.ink,
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+                flexShrink: 1,
+              },
+            ]}
+            numberOfLines={2}
+          >
+            {title}
+            <Text style={{ color: colors.coral }}>.</Text>
+          </Text>
+          {showCursor ? <StreamingCursor /> : null}
+        </View>
 
         {/* Coral squiggle under the title — signature accent */}
         <View style={{ marginTop: 6, marginBottom: place ? 8 : 0 }}>
@@ -251,6 +298,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.monoMedium,
     fontSize: 10,
     fontWeight: '700',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
   title: {
     fontSize: 24,

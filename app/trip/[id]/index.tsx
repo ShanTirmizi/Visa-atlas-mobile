@@ -72,6 +72,7 @@ import {
   getCompletedSectionCount,
   getTotalSectionCount,
   getTabDotIndicators,
+  getStreamingDayIndex,
 } from './_helpers/sectionState';
 
 // ──────────────────────────────────────────────────────────
@@ -559,6 +560,8 @@ export default function TripDetailScreen() {
               tripHeroImage={heroImage}
               tripStartDate={trip.startDate}
               destination={trip.countryName}
+              streamingDayIndex={getStreamingDayIndex(trip)}
+              expectedDayCount={trip.duration}
             />
           </Animated.View>
         )}

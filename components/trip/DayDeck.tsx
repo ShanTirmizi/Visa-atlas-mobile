@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { router } from 'expo-router';
 import DayDeckCard, { type DayImage } from './DayDeckCard';
 import { DAY_DECK_PHYSICS } from './DayDeck.constants';
@@ -17,6 +18,7 @@ import { Type } from '@/constants/typography';
 import { FontFamily } from '@/constants/theme';
 import { PillButton } from '@/components/ui/PillButton';
 import { Squiggle } from '@/components/ui/Squiggle';
+import { TypingDots } from '@/components/ui/TypingDots';
 
 export interface DayDeckDay {
   day: number;
@@ -41,6 +43,18 @@ interface DayDeckProps {
   /** Tap handler for the inline edit pencil on each day card. The active
    *  index is the JS-side activeIdx, so this always edits the centre day. */
   onEditDay?: (index: number) => void;
+  /**
+   * If the trip is mid-generation, this is the index of the day currently
+   * being written. null/undefined means no day is streaming. The day at
+   * this index renders with a typing-dots suffix in the pill and a
+   * coral cursor at the end of its currently-streaming activity.
+   */
+  streamingDayIndex?: number | null;
+  /**
+   * Total expected days (for the day-dots row). Defaults to days.length
+   * when not generating.
+   */
+  expectedDayCount?: number;
 }
 
 // ── Sizing ────────────────────────────────────────────────────────────
@@ -60,6 +74,46 @@ function pickPlace(day: DayDeckDay): string | undefined {
   return day.morningPlace ?? day.afternoonPlace ?? day.eveningPlace;
 }
 
+// ── DayDotsRow ────────────────────────────────────────────────────────
+// Horizontal row of small dots, one per planned day. Filled dots == done,
+// pulsing-with-halo == currently streaming, dim == pending. Only mounted
+// while `streamingDayIndex` is non-null (i.e., during generation).
+interface DayDotsRowProps {
+  total: number;
+  currentIndex: number;
+  streamingIndex?: number | null;
+}
+
+function DayDotsRow({ total, streamingIndex }: DayDotsRowProps) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.dotsRowStreaming}>
+      {Array.from({ length: total }, (_, i) => {
+        const isDone = streamingIndex != null && i < streamingIndex;
+        const isStreaming = i === streamingIndex;
+        return (
+          <View
+            key={i}
+            style={[
+              styles.dotStreaming,
+              isDone && { backgroundColor: colors.coral },
+              isStreaming && {
+                backgroundColor: colors.coral,
+                shadowColor: colors.coral,
+                shadowOpacity: 0.5,
+                shadowRadius: 3,
+                shadowOffset: { width: 0, height: 0 },
+                elevation: 3,
+              },
+              !isDone && !isStreaming && { backgroundColor: colors.line },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
 // ── DeckCardItem ──────────────────────────────────────────────────────
 // Renders one card. Only the center card (offset === 0) has a live pan gesture.
 // Side cards use spec physics: translateX = offset*50, scale = 1-|o|*0.07,
@@ -75,6 +129,9 @@ interface DeckCardItemProps {
   onCommit: (newIdx: number) => void;
   onTap: () => void;
   numDays: number;
+  /** When true, renders a blinking coral cursor at the end of the title —
+   *  used on the day currently being written during streaming generation. */
+  showCursor?: boolean;
 }
 
 function DeckCardItem({
@@ -88,6 +145,7 @@ function DeckCardItem({
   onCommit,
   onTap,
   numDays,
+  showCursor,
 }: DeckCardItemProps) {
   // Integer offset from center (computed on JS side for render decisions)
   const offset = dayIdx - activeIdxJS;
@@ -162,6 +220,7 @@ function DeckCardItem({
           place={place}
           date={date}
           image={image}
+          showCursor={showCursor}
         />
       </Animated.View>
     </GestureDetector>
@@ -176,12 +235,18 @@ function DayDeck({
   tripHeroImage,
   tripStartDate,
   destination,
+  streamingDayIndex,
+  expectedDayCount,
 }: DayDeckProps) {
   const { colors } = useTheme();
   const [activeIdx, setActiveIdx] = useState(0);
   const dragX = useSharedValue(0);
 
   const numDays = days.length;
+  const isStreaming = streamingDayIndex !== null && streamingDayIndex !== undefined;
+  // If the trip is mid-generation, the spec calls for the day-dots row to
+  // visualize ALL planned days (e.g. 1..10), not just the ones written so far.
+  const totalDayDots = expectedDayCount ?? numDays;
 
   const handleCommit = useCallback((newIdx: number) => {
     setActiveIdx(newIdx);
@@ -190,6 +255,31 @@ function DayDeck({
   const openDay = useCallback(() => {
     router.push(`/trip/${tripId}/day/${activeIdx}`);
   }, [tripId, activeIdx]);
+
+  // Right-chevron should be disabled when there's no next day to advance to
+  // AND streaming is still in flight (i.e., the next day exists in the plan
+  // but hasn't been written yet). When the trip is fully generated this is
+  // simply "we're already on the last day" — that's the existing disabled
+  // semantic in DayDetailScreen, no haptic needed there.
+  const rightDisabled = activeIdx >= numDays - 1 && isStreaming;
+  const leftDisabled = activeIdx <= 0;
+
+  const handlePrevDay = useCallback(() => {
+    if (leftDisabled) return;
+    setActiveIdx((idx) => Math.max(0, idx - 1));
+    Haptics.selectionAsync().catch(() => {});
+  }, [leftDisabled]);
+
+  const handleNextDay = useCallback(() => {
+    if (rightDisabled) {
+      // Day is still being written — block advance and give haptic feedback.
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      return;
+    }
+    if (activeIdx >= numDays - 1) return;
+    setActiveIdx((idx) => Math.min(numDays - 1, idx + 1));
+    Haptics.selectionAsync().catch(() => {});
+  }, [rightDisabled, activeIdx, numDays]);
 
   if (numDays === 0) {
     return (
@@ -237,6 +327,81 @@ function DayDeck({
         <Squiggle width={120} color={colors.coral} style={{ marginTop: 4 }} />
       </View>
 
+      {/* ── Day pill nav (chevrons + label) — shown ONLY during streaming.
+          When the trip is fully generated this is noise; pan/swipe is the
+          primary nav, and the bottom CTA already shows "Open Day N". The
+          pill surfaces the per-day generation status while the model writes. */}
+      {isStreaming && (
+        <View style={styles.dayPillRow}>
+          <View
+            style={[
+              styles.dayPill,
+              {
+                backgroundColor: colors.coralBg,
+                borderColor: colors.coralSoft,
+              },
+            ]}
+          >
+            <Pressable
+              onPress={handlePrevDay}
+              disabled={leftDisabled}
+              accessibilityLabel="Previous day"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.dayPillBtn,
+                { opacity: leftDisabled ? 0.35 : pressed ? 0.7 : 1 },
+              ]}
+            >
+              <ChevronLeft size={16} color={colors.coralDeep} strokeWidth={2.4} />
+            </Pressable>
+
+            <View style={styles.dayPillLabel}>
+              <Text
+                style={[
+                  styles.dayPillText,
+                  { color: colors.coralDeep },
+                ]}
+              >
+                {`Day ${activeIdx + 1} of ${expectedDayCount ?? numDays}`}
+              </Text>
+              {activeIdx === streamingDayIndex && (
+                <>
+                  <Text
+                    style={[
+                      styles.dayPillText,
+                      { color: colors.coralDeep, marginLeft: 6 },
+                    ]}
+                  >
+                    {' '}· writing
+                  </Text>
+                  <View style={{ marginLeft: 6 }}>
+                    <TypingDots color={colors.coralDeep} size="sm" gap={3} />
+                  </View>
+                </>
+              )}
+            </View>
+
+            <Pressable
+              onPress={handleNextDay}
+              accessibilityLabel="Next day"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.dayPillBtn,
+                { opacity: rightDisabled ? 0.3 : pressed ? 0.7 : 1 },
+              ]}
+            >
+              <ChevronRight size={16} color={colors.coralDeep} strokeWidth={2.4} />
+            </Pressable>
+          </View>
+
+          <DayDotsRow
+            total={totalDayDots}
+            currentIndex={activeIdx}
+            streamingIndex={streamingDayIndex}
+          />
+        </View>
+      )}
+
       {/* ── Card Deck ─────────────────────────────────────────────── */}
       <View style={styles.deckArea}>
         {visibleCards.map(({ day, idx }) => (
@@ -252,6 +417,7 @@ function DayDeck({
             onCommit={handleCommit}
             onTap={openDay}
             numDays={numDays}
+            showCursor={isStreaming && idx === streamingDayIndex}
           />
         ))}
       </View>
@@ -331,6 +497,52 @@ const styles = StyleSheet.create({
   },
   dotInactive: {
     width: 6,
+  },
+
+  // ── Streaming UI: pill nav + per-day dots row ──────────────────────
+  dayPillRow: {
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 4,
+    alignItems: 'center',
+  },
+  dayPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    gap: 2,
+  },
+  dayPillBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayPillLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  dayPillText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  dotsRowStreaming: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  dotStreaming: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   hint: {
     marginTop: 14,
