@@ -38,6 +38,7 @@ import { Platform } from 'react-native';
 import { DarkOrb } from '@/components/ui/DarkOrb';
 import { SectionKicker } from '@/components/ui/SectionKicker';
 import { TripPlannerNotesField } from './TripPlannerNotesField';
+import { TripRefinementSheet, type TripRefinementSheetHandle } from './TripRefinementSheet';
 
 // ── Constants ───────────────────────────────────────────────────────────
 const VIBES = [
@@ -192,6 +193,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+    const refinementSheetRef = useRef<TripRefinementSheetHandle>(null);
 
     // ── Core state ──────────────────────────────────────────────
     const [isLoading, setIsLoading] = useState(false);
@@ -330,21 +332,31 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       });
     }, [startDate]);
 
-    // ── Generate trip ───────────────────────────────────────────
-    // Inserts a generation stub via Convex action; the action schedules
-    // server-side streaming so we can dismiss the sheet immediately and
-    // navigate the user onto the trip detail screen, where sections
-    // arrive live as they finish.
-    const generate = useCallback(async () => {
-      // When the sheet has a country prop (opened from country detail) we use
-      // the prop chain. When opened standalone (Trips home) we fall back to
-      // the country picked in the in-sheet picker. Either path must yield a
-      // full effective country before we hit the action.
-      const eff = effective ?? (
+    // ── Resolve the effective country for generation ──────────────
+    // When the sheet has a country prop (opened from country detail) we use
+    // the prop chain. When opened standalone (Trips home) we fall back to
+    // the country picked in the in-sheet picker. Either path must yield a
+    // full effective country before we hit the action.
+    const resolveEffective = useCallback(() => {
+      return effective ?? (
         country && meta && travel && resolved
           ? { country, meta, travel, resolved }
           : null
       );
+    }, [effective, country, meta, travel, resolved]);
+
+    // ── Run generation ────────────────────────────────────────────
+    // Inserts a generation stub via Convex action; the action schedules
+    // server-side streaming so we can dismiss the sheet immediately and
+    // navigate the user onto the trip detail screen, where sections
+    // arrive live as they finish.
+    //
+    // `notesForAction` is the userNotes value already merged with refinement
+    // answers (when the user came through the refinement sheet) or the raw
+    // (trimmed) notes when no refinement was needed. Empty string means no
+    // notes — passed through as undefined.
+    const runGeneration = useCallback(async (notesForAction: string) => {
+      const eff = resolveEffective();
       if (!eff) {
         setError('Pick a destination first.');
         return;
@@ -373,7 +385,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             companions: travelers > 1 ? JSON.stringify({ party, count: travelers }) : undefined,
             startDate: dreaming ? undefined : startDate.toISOString().slice(0, 10),
             endDate: dreaming ? undefined : endDate.toISOString().slice(0, 10),
-            userNotes: userNotes.trim() || undefined,
+            userNotes: notesForAction.trim() || undefined,
           }),
           minDisplay,
         ]);
@@ -388,11 +400,42 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         setIsLoading(false);
       }
     }, [
-      effective, country, meta, travel, resolved, heldVisas,
+      resolveEffective, heldVisas,
       days, vibe, budget, activeVibes, travelers, party,
       generateTripAction, onTripCreated, dreaming, startDate, endDate,
-      userNotes,
     ]);
+
+    // ── Generate trip ─────────────────────────────────────────────
+    // Empty-notes path: generate immediately. Non-empty path: route through
+    // the refinement sheet to surface clarifying questions before generating.
+    const generate = useCallback(() => {
+      const eff = resolveEffective();
+      if (!eff) {
+        setError('Pick a destination first.');
+        return;
+      }
+      const trimmed = userNotes.trim();
+      if (trimmed === '') {
+        void runGeneration('');
+        return;
+      }
+      // Hand off to the refinement sheet. It will call back via
+      // handleRefinementSubmit with the merged brief.
+      refinementSheetRef.current?.present({
+        countryCode: eff.country.code,
+        countryName: eff.country.name,
+        duration: days,
+        vibes: [...activeVibes],
+        userNotes: trimmed,
+      });
+    }, [resolveEffective, userNotes, days, activeVibes, runGeneration]);
+
+    // Called by the refinement sheet on submit (questions answered) or after
+    // its affirmation animation (no questions returned). `mergedNotes` is the
+    // final brief that should land on the trip doc.
+    const handleRefinementSubmit = useCallback((mergedNotes: string) => {
+      void runGeneration(mergedNotes);
+    }, [runGeneration]);
 
     // ── Backdrop ────────────────────────────────────────────────
     const renderBackdrop = useCallback(
@@ -410,6 +453,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const s = useMemo(() => makeStyles(colors), [colors]);
 
     return (
+      <>
       <BottomSheetModal
         ref={bottomSheetRef}
         enableDynamicSizing={true}
@@ -1026,6 +1070,20 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           )}
         </BottomSheetScrollView>
       </BottomSheetModal>
+
+      {/* Refinement sheet — presented when the user has typed free-form
+          notes and taps "Generate itinerary". Calls back into the planner
+          via handleRefinementSubmit with the merged brief, which then
+          drives generation. */}
+      <TripRefinementSheet
+        ref={refinementSheetRef}
+        onSubmit={handleRefinementSubmit}
+        onDismiss={() => {
+          // User dismissed via gesture — leave the planner open with
+          // their notes intact so they can re-tap Generate.
+        }}
+      />
+      </>
     );
   },
 );

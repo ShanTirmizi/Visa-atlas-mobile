@@ -38,10 +38,16 @@ interface AppBottomSheetProps {
    * `rgba(255,255,255,0.5)` when `backgroundColor` is an opaque colour.
    */
   handleColor?: string;
+  /**
+   * Forwards to BottomSheetModal's onChange. Index `-1` means fully closed.
+   * Useful for callers that need to distinguish gesture-dismiss from a
+   * programmatic dismiss-after-submit.
+   */
+  onChange?: (index: number) => void;
 }
 
 export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
-  function AppBottomSheet({ children, backgroundColor, handleColor }, ref) {
+  function AppBottomSheet({ children, backgroundColor, handleColor, onChange }, ref) {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
 
@@ -75,6 +81,7 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: resolvedBg, borderRadius: 24 }}
         handleIndicatorStyle={{ backgroundColor: resolvedHandle, width: 36, height: 4 }}
+        onChange={onChange}
       >
         {children}
       </BottomSheetModal>
