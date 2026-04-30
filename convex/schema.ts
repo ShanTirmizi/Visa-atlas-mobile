@@ -65,6 +65,11 @@ export default defineSchema({
     failedSections: v.optional(v.array(v.string())),
     originalInputs: v.optional(v.string()),
     generationStartedAt: v.optional(v.number()),
+    // User's free-text trip brief — original text plus any merged-in answers
+    // from the refinement clarifying-questions flow. Trimmed; whitespace-only
+    // is normalized to undefined. Capped at 2000 chars in the action handler.
+    // Surfaced on the trip detail page via TripBriefReadout.
+    userNotes: v.optional(v.string()),
   })
     .index("by_status", ["status"])
     .index("by_country", ["countryCode"])
