@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 
 export type TypingDotsSize = 'sm' | 'md';
 
@@ -28,7 +29,7 @@ export function TypingDots({ color, size = 'md', gap = 6 }: TypingDotsProps) {
   const dot3 = useSharedValue(0.4);
 
   useEffect(() => {
-    const anim = (sv: { value: number }, delay: number) => {
+    const anim = (sv: SharedValue<number>, delay: number) => {
       sv.value = withRepeat(
         withSequence(
           withTiming(0.4, { duration: delay }),
@@ -58,3 +59,5 @@ export function TypingDots({ color, size = 'md', gap = 6 }: TypingDotsProps) {
     </View>
   );
 }
+
+export default TypingDots;

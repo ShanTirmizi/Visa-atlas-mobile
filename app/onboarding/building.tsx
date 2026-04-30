@@ -39,6 +39,7 @@ import { passportCountries } from '@/data/passportCountries';
 import { OnboardingScaffold } from '@/components/onboarding/OnboardingScaffold';
 import { VAStamp } from '@/components/auth/VAStamp';
 import { Squiggle } from '@/components/ui/Squiggle';
+import { TypingDots } from '@/components/ui/TypingDots';
 import { Type } from '@/constants/typography';
 
 // ── Alpha-3 → flag emoji ─────────────────────────────────────────────────
@@ -117,42 +118,6 @@ function useGlobeAnimation(isActive: boolean) {
   return useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }, { rotate: `${rotate.value}deg` }],
   }));
-}
-
-// ── Typing dots ──────────────────────────────────────────────────────────
-function TypingDots({ color }: { color: string }) {
-  const dot1 = useSharedValue(0.4);
-  const dot2 = useSharedValue(0.4);
-  const dot3 = useSharedValue(0.4);
-
-  useEffect(() => {
-    const anim = (sv: { value: number }, delay: number) => {
-      sv.value = withRepeat(
-        withSequence(
-          withTiming(0.4, { duration: delay }),
-          withTiming(1, { duration: 400, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0.4, { duration: 400, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-      );
-    };
-    anim(dot1, 0);
-    anim(dot2, 200);
-    anim(dot3, 400);
-  }, [dot1, dot2, dot3]);
-
-  const s1 = useAnimatedStyle(() => ({ transform: [{ scale: dot1.value }], opacity: dot1.value }));
-  const s2 = useAnimatedStyle(() => ({ transform: [{ scale: dot2.value }], opacity: dot2.value }));
-  const s3 = useAnimatedStyle(() => ({ transform: [{ scale: dot3.value }], opacity: dot3.value }));
-  const dotStyle = { width: 6, height: 6, borderRadius: 3, backgroundColor: color };
-
-  return (
-    <View style={{ flexDirection: 'row', gap: 8, marginTop: 24 }}>
-      <Animated.View style={[dotStyle, s1]} />
-      <Animated.View style={[dotStyle, s2]} />
-      <Animated.View style={[dotStyle, s3]} />
-    </View>
-  );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -299,7 +264,9 @@ export default function BuildingScreen() {
             <Text style={{ color: colors.coral }}>…</Text>
           </Animated.Text>
 
-          <TypingDots color={colors.coral} />
+          <View style={{ marginTop: 24 }}>
+            <TypingDots color={colors.coral} gap={8} />
+          </View>
 
           {/* Error card */}
           {error !== '' && (

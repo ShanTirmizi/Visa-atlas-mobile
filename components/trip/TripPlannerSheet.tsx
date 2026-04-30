@@ -1138,7 +1138,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               </Animated.Text>
 
               {/* Typing dots — coral to match the editorial accents */}
-              <TypingDots color={colors.coral} />
+              <View style={{ marginTop: Spacing.lg }}>
+                <TypingDots color={colors.coral} gap={8} />
+              </View>
             </View>
           )}
         </BottomSheetScrollView>
