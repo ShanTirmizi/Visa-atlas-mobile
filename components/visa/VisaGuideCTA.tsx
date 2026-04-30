@@ -57,7 +57,12 @@ export function VisaGuideCTA({ kicker, label, accent, onPress, style }: VisaGuid
             fontFamily: FontFamily.monoMedium,
             fontSize: 9,
             fontWeight: '700',
-            color: accent,
+            // Kicker sits on the dark ink card. The visa-category `accent`
+            // is tuned for the warm gradient hero above (where it pops),
+            // not for dark-on-dark — for e-visa it's literally #3D1810 on
+            // colors.ink. Use a soft white instead so it stays legible
+            // across all categories.
+            color: 'rgba(255,255,255,0.7)',
             letterSpacing: 9 * 0.2,
           }}
           numberOfLines={1}

@@ -410,6 +410,25 @@ export const runGenerationStream = internalAction({
       }
     };
 
+    // Budget returns two fields in one JSON; split into patches so
+    // dailyBudget lands in its own schema field rather than getting
+    // smuggled inside the budgetBreakdown JSON blob (which broke the
+    // featured-trip card on the trips home).
+    const budgetTransform = (raw: string): Array<{ section: string; content: string }> => {
+      try {
+        const parsed = JSON.parse(raw);
+        return [
+          { section: "dailyBudget", content: coerceToString(parsed.dailyBudget, "") },
+          { section: "budgetBreakdown", content: coerceToString(parsed.budgetBreakdown, "[]") },
+        ];
+      } catch {
+        return [
+          { section: "dailyBudget", content: "" },
+          { section: "budgetBreakdown", content: "[]" },
+        ];
+      }
+    };
+
     // Visa returns three fields in one JSON; split into patches.
     // visaCategory is omitted from this v1 — the trip stub leaves it as ""
     // and the UI handles empty visaCategory gracefully. A followup task
@@ -433,7 +452,7 @@ export const runGenerationStream = internalAction({
       await Promise.all([
         runItinerary(),
         runSection("__visa-bundle__", buildVisaUserPrompt(input), 1024, visaTransform),
-        runSection("budgetBreakdown", buildBudgetUserPrompt(input), 1024),
+        runSection("__budget-bundle__", buildBudgetUserPrompt(input), 1024, budgetTransform),
         runSection("highlights", buildHighlightsUserPrompt(input), 512),
         runSection("__tips-bundle__", buildTipsBundleUserPrompt(input), 2048, tipsBundleTransform),
       ]);
@@ -510,6 +529,7 @@ export const retrySection = action({
         userPrompt = buildVisaUserPrompt(input);
         break;
       case "budgetBreakdown":
+      case "dailyBudget":
         userPrompt = buildBudgetUserPrompt(input);
         break;
       case "packingSuggestions":
@@ -527,10 +547,22 @@ export const retrySection = action({
         { apiKey, systemPrompt, userPrompt, maxTokens },
         makeWholeSectionBuffer(
           async (full) => {
-            if (section === "highlights" || section === "budgetBreakdown") {
+            if (section === "highlights") {
               await ctx.runMutation(internal.tripGeneration.patchTripSection, {
                 tripId, section, content: full.trim(),
               });
+            } else if (section === "budgetBreakdown" || section === "dailyBudget") {
+              try {
+                const parsed = JSON.parse(full);
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId, section: "dailyBudget", content: coerceToString(parsed.dailyBudget, ""),
+                });
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId, section: "budgetBreakdown", content: coerceToString(parsed.budgetBreakdown, "[]"),
+                });
+              } catch {
+                // swallow
+              }
             } else if (["visaChecklist", "visaNotes"].includes(section)) {
               try {
                 const parsed = JSON.parse(full);
@@ -609,6 +641,8 @@ export const _clearFailedSection = internalMutation({
     const bundleSiblings: Record<string, string[]> = {
       visaChecklist: ["visaChecklist", "visaNotes"],
       visaNotes: ["visaChecklist", "visaNotes"],
+      budgetBreakdown: ["budgetBreakdown", "dailyBudget"],
+      dailyBudget: ["budgetBreakdown", "dailyBudget"],
       packingSuggestions: ["packingSuggestions", "accommodationTips", "localEssentials"],
       accommodationTips: ["packingSuggestions", "accommodationTips", "localEssentials"],
       localEssentials: ["packingSuggestions", "accommodationTips", "localEssentials"],

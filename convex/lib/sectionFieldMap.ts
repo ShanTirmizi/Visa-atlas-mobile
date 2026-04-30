@@ -17,6 +17,7 @@ export const SECTION_FIELD_MAP = {
   visaChecklist: "visaChecklist",
   visaNotes: "visaNotes",
   budgetBreakdown: "budgetBreakdown",
+  dailyBudget: "dailyBudget",
   packingSuggestions: "packingSuggestions",
   accommodationTips: "accommodationTips",
   localEssentials: "localEssentials",
