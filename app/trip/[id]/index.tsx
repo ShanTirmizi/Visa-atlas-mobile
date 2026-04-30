@@ -57,6 +57,23 @@ import {
 } from '@/data/visaData';
 import { VisaHeroCardForCountry } from '@/components/visa/VisaHeroCardForCountry';
 
+// ── Streaming-generation UI: progress strip, skeletons, retry ──
+import { TripGenerationStrip } from '@/components/trip/TripGenerationStrip';
+import { TripHeroSkeleton } from '@/components/trip/skeletons/TripHeroSkeleton';
+import { HighlightsSkeleton } from '@/components/trip/skeletons/HighlightsSkeleton';
+import { VisaTabSkeleton } from '@/components/trip/skeletons/VisaTabSkeleton';
+import { TipsTabSkeleton } from '@/components/trip/skeletons/TipsTabSkeleton';
+import { SectionRetryCard } from '@/components/trip/skeletons/SectionRetryCard';
+import { TripFailedScreen } from '@/components/trip/TripFailedScreen';
+import {
+  isGenerating,
+  isSectionPending,
+  hasFailed,
+  getCompletedSectionCount,
+  getTotalSectionCount,
+  getTabDotIndicators,
+} from './_helpers/sectionState';
+
 // ──────────────────────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────────────────────
@@ -331,13 +348,35 @@ export default function TripDetailScreen() {
     );
   }
 
+  // ── Failed-generation early return ───────────────────────
+  // Watchdog/timeout failure surface: full-screen error with Try Again /
+  // Delete. Renders BEFORE the normal trip layout to avoid mounting hero,
+  // tabs, sheets, etc. against an incomplete trip doc.
+  if (trip.status === 'failed') {
+    return <TripFailedScreen trip={trip} />;
+  }
+
   const catColor = getVisaCategoryColor(trip.visaCategory, colors);
   const dateRange = formatDateRange(trip.startDate, trip.endDate);
+
+  // ── Streaming-generation derived state ───────────────────
+  const generating = isGenerating(trip);
+  const dotIndicators = getTabDotIndicators(trip);
+  const completedSections = getCompletedSectionCount(trip);
+  const totalSections = getTotalSectionCount();
+  const issueCount = (trip.failedSections ?? []).length;
 
   // ── Render ───────────────────────────────────────────────
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <TopSafeAreaBlur />
+      {generating && (
+        <TripGenerationStrip
+          completed={completedSections}
+          total={totalSections}
+          issueCount={issueCount}
+        />
+      )}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
@@ -412,6 +451,7 @@ export default function TripDetailScreen() {
             value={activeTab}
             onChange={(v) => setActiveTab(v as TabKey)}
             variant="squiggle"
+            dotIndicators={dotIndicators}
           />
         </View>
 
@@ -420,13 +460,19 @@ export default function TripDetailScreen() {
         {/* ── Overview tab ── */}
         {activeTab === 'Overview' && (
           <Animated.View entering={tabSlideIn(tabDirection * 18)}>
-            {/* Hero card */}
-            <TripOverviewHero
-              tripName={trip.routeTitle ?? trip.countryName ?? ''}
-              cityName={cityLabel}
-              heroImageUrl={heroImage?.url}
-              duration={typeof trip.duration === 'number' ? trip.duration : undefined}
-            />
+            {/* Hero card — real card if heroImage is present, shimmer
+                placeholder while it streams in, nothing once final state
+                is reached without an image. */}
+            {trip.heroImage ? (
+              <TripOverviewHero
+                tripName={trip.routeTitle ?? trip.countryName ?? ''}
+                cityName={cityLabel}
+                heroImageUrl={heroImage?.url}
+                duration={typeof trip.duration === 'number' ? trip.duration : undefined}
+              />
+            ) : generating ? (
+              <TripHeroSkeleton />
+            ) : null}
 
             {/* Next up card (only if itinerary has data) */}
             {firstActivity && (
@@ -438,11 +484,22 @@ export default function TripDetailScreen() {
               />
             )}
 
-            {/* Highlights strip */}
-            <HighlightsStrip
-              items={highlights}
-              onSeeAll={() => setActiveTab('Itinerary')}
-            />
+            {/* Highlights strip — real strip when ready, shimmer pills while
+                pending, retry card on failure. */}
+            {trip.highlights ? (
+              <HighlightsStrip
+                items={highlights}
+                onSeeAll={() => setActiveTab('Itinerary')}
+              />
+            ) : isSectionPending(trip, 'highlights') ? (
+              <HighlightsSkeleton />
+            ) : hasFailed(trip, 'highlights') ? (
+              <SectionRetryCard
+                tripId={trip._id}
+                section="highlights"
+                label="highlights"
+              />
+            ) : null}
 
             {/* AI chat — opens the conversational tweaker for the itinerary */}
             <Pressable
@@ -519,6 +576,41 @@ export default function TripDetailScreen() {
 
         {/* ── Visa tab — hero card + editorial framing + value cards ── */}
         {activeTab === 'Visa' && (() => {
+          // While visa-related streamed sections are still arriving, show
+          // a shimmer skeleton instead of the editorial layout. If either
+          // visaChecklist or visaNotes failed during generation, surface
+          // a retry card so the user can re-run just that slice.
+          const visaPending =
+            isSectionPending(trip, 'visaChecklist') ||
+            isSectionPending(trip, 'visaNotes');
+          const visaFailed =
+            hasFailed(trip, 'visaChecklist') || hasFailed(trip, 'visaNotes');
+
+          if (visaPending) {
+            return (
+              <Animated.View
+                entering={tabSlideIn(tabDirection * 18)}
+                style={styles.visaStub}
+              >
+                <VisaTabSkeleton />
+              </Animated.View>
+            );
+          }
+          if (visaFailed) {
+            return (
+              <Animated.View
+                entering={tabSlideIn(tabDirection * 18)}
+                style={styles.visaStub}
+              >
+                <SectionRetryCard
+                  tripId={trip._id}
+                  section="visaChecklist"
+                  label="visa info"
+                />
+              </Animated.View>
+            );
+          }
+
           const country = staticVisaData.find((c) => c.code === trip.countryCode);
           if (!country) return null;
           const resolved = resolveCountry(country, heldVisasSet);
@@ -891,18 +983,54 @@ export default function TripDetailScreen() {
         })()}
 
         {/* ── Tips tab — shared CountryTipsView (same source as the country
-            detail Tips tab so trip + country views stay in lockstep). ── */}
-        {activeTab === 'Tips' && (
-          <Animated.View
-            entering={tabSlideIn(tabDirection * 18)}
-            style={{ paddingHorizontal: 16, paddingTop: 8 }}
-          >
-            <CountryTipsView
-              countryCode={trip.countryCode}
-              countryName={trip.countryName}
-            />
-          </Animated.View>
-        )}
+            detail Tips tab so trip + country views stay in lockstep). While
+            packing / accommodation tips are streaming, show a shimmer
+            skeleton; if they failed, surface a retry card. ── */}
+        {activeTab === 'Tips' && (() => {
+          const tipsPending =
+            isSectionPending(trip, 'packingSuggestions') ||
+            isSectionPending(trip, 'accommodationTips');
+          const tipsFailed =
+            hasFailed(trip, 'packingSuggestions') ||
+            hasFailed(trip, 'accommodationTips');
+
+          if (tipsPending) {
+            return (
+              <Animated.View
+                entering={tabSlideIn(tabDirection * 18)}
+                style={{ paddingHorizontal: 16, paddingTop: 8 }}
+              >
+                <TipsTabSkeleton />
+              </Animated.View>
+            );
+          }
+          if (tipsFailed) {
+            return (
+              <Animated.View
+                entering={tabSlideIn(tabDirection * 18)}
+                style={{ paddingHorizontal: 16, paddingTop: 8 }}
+              >
+                <SectionRetryCard
+                  tripId={trip._id}
+                  section="packingSuggestions"
+                  label="tips"
+                />
+              </Animated.View>
+            );
+          }
+
+          return (
+            <Animated.View
+              entering={tabSlideIn(tabDirection * 18)}
+              style={{ paddingHorizontal: 16, paddingTop: 8 }}
+            >
+              <CountryTipsView
+                countryCode={trip.countryCode}
+                countryName={trip.countryName}
+              />
+            </Animated.View>
+          );
+        })()}
       </ScrollView>
 
       {/* ─── Booking sheets ─── */}
