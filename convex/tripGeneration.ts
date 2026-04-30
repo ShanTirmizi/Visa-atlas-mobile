@@ -48,6 +48,9 @@ const generateTripArgs = {
   companions: v.optional(v.string()),
   surpriseMe: v.optional(v.boolean()),
   vibeTag: v.optional(v.string()),
+  // User's free-text brief, optionally merged with refinement answers.
+  // Trimmed and length-capped (≤2000) in the stub handler.
+  userNotes: v.optional(v.string()),
 };
 
 /**
@@ -62,6 +65,17 @@ export const insertGenerationStub = internalMutation({
   },
   handler: async (ctx, { userId, input }): Promise<Id<"trips">> => {
     const facts = lookupStaticFacts(input.countryCode);
+
+    // Normalize userNotes — trim, treat whitespace-only as undefined,
+    // hard-reject anything over 2000 chars (defense in depth; the client
+    // caps original notes at 500, leaving room for merged refinement answers).
+    const trimmedNotes = input.userNotes?.trim();
+    const normalizedUserNotes =
+      trimmedNotes && trimmedNotes.length > 0 ? trimmedNotes : undefined;
+    if (normalizedUserNotes && normalizedUserNotes.length > 2000) {
+      throw new Error("userNotes exceeds 2000 character limit");
+    }
+
     const tripId = await ctx.db.insert("trips", {
       userId,
       countryCode: input.countryCode,
@@ -95,6 +109,7 @@ export const insertGenerationStub = internalMutation({
       endDate: input.endDate,
       surpriseMe: input.surpriseMe,
       vibeTag: input.vibeTag,
+      userNotes: normalizedUserNotes,
     });
     // Owner collaborator row — same pattern as createTrip
     await ctx.db.insert("tripCollaborators", {
