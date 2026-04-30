@@ -5,6 +5,17 @@ import { requireAuth } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import { lookupStaticFacts } from "../constants/staticTripFacts";
 import { SECTION_FIELD_MAP, STREAMING_SECTIONS } from "./lib/sectionFieldMap";
+import {
+  buildSystemPrompt,
+  buildItineraryUserPrompt,
+  buildVisaUserPrompt,
+  buildBudgetUserPrompt,
+  buildHighlightsUserPrompt,
+  buildTipsBundleUserPrompt,
+  streamAnthropic,
+  makeWholeSectionBuffer,
+  makeItineraryStreamParser,
+} from "./lib/anthropicStream";
 
 // Args validator shared by `generateTrip` and `insertGenerationStub`.
 // Mirrors the planner sheet form; deliberately permissive on optional fields.
@@ -227,6 +238,193 @@ export const checkGenerationTimeout = internalMutation({
     if (!hasAnyContent) {
       await ctx.db.patch(tripId, { status: "failed" });
       console.error(`Trip ${tripId} timed out at 60s with no content`);
+    }
+  },
+});
+
+/**
+ * Orchestrates 5 parallel Anthropic streaming calls. As each section
+ * completes (or each itinerary day), patches the trip doc via
+ * patchTripSection. On success, calls completeGeneration. Errors in
+ * one section don't abort the others.
+ */
+export const runGenerationStream = internalAction({
+  args: {
+    tripId: v.id("trips"),
+    input: v.object(generateTripArgs),
+  },
+  handler: async (ctx, { tripId, input }) => {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      await ctx.runMutation(internal.tripGeneration.failGeneration, {
+        tripId,
+        reason: "ANTHROPIC_API_KEY env var not set",
+      });
+      return;
+    }
+
+    const systemPrompt = buildSystemPrompt(input);
+
+    // Schedule the 60s watchdog
+    await ctx.scheduler.runAfter(60_000, internal.tripGeneration.checkGenerationTimeout, { tripId });
+
+    // Helper that runs one section call and patches the doc on completion
+    const runSection = async (
+      sectionName: string,
+      userPrompt: string,
+      maxTokens: number,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      onDoneTransform?: (raw: string) => Array<{ section: string; content: string }>,
+    ): Promise<void> => {
+      return new Promise((resolve) => {
+        let settled = false;
+        const settle = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        streamAnthropic(
+          { apiKey, systemPrompt, userPrompt, maxTokens },
+          makeWholeSectionBuffer(
+            async (full) => {
+              try {
+                if (onDoneTransform) {
+                  const patches = onDoneTransform(full);
+                  for (const p of patches) {
+                    await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                      tripId,
+                      section: p.section,
+                      content: p.content,
+                    });
+                  }
+                } else {
+                  await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                    tripId,
+                    section: sectionName,
+                    content: full,
+                  });
+                }
+              } catch (err) {
+                console.error(`Section ${sectionName} patch failed:`, err);
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId,
+                  section: sectionName,
+                  content: "",
+                  failed: true,
+                });
+              }
+              settle();
+            },
+            async (err) => {
+              console.error(`Section ${sectionName} stream errored:`, err);
+              await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                tripId,
+                section: sectionName,
+                content: "",
+                failed: true,
+              });
+              settle();
+            },
+          ),
+        );
+      });
+    };
+
+    // Itinerary streams day-by-day with its own parser
+    const runItinerary = async (): Promise<void> => {
+      return new Promise((resolve) => {
+        let settled = false;
+        const settle = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        const userPrompt = buildItineraryUserPrompt(input);
+        const itineraryParser = makeItineraryStreamParser(
+          async (dayIndex, dayJson) => {
+            await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+              tripId,
+              section: `itinerary-day:${dayIndex}`,
+              content: dayJson,
+            });
+          },
+          (err) => console.error("Itinerary parse error:", err),
+        );
+        streamAnthropic(
+          { apiKey, systemPrompt, userPrompt, maxTokens: 8192 },
+          {
+            onDelta: (text) => itineraryParser.onDelta(text),
+            onComplete: () => {
+              itineraryParser.onComplete();
+              settle();
+            },
+            onError: async (err) => {
+              console.error("Itinerary stream errored:", err);
+              await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                tripId,
+                section: "itinerary",
+                content: "",
+                failed: true,
+              });
+              settle();
+            },
+          },
+        );
+      });
+    };
+
+    // Tips bundle returns three sections in one JSON; split into patches
+    const tipsBundleTransform = (raw: string): Array<{ section: string; content: string }> => {
+      try {
+        const parsed = JSON.parse(raw);
+        return [
+          { section: "packingSuggestions", content: parsed.packingSuggestions ?? "[]" },
+          { section: "accommodationTips", content: parsed.accommodationTips ?? "" },
+          { section: "localEssentials", content: parsed.localEssentials ?? "[]" },
+        ];
+      } catch {
+        return [
+          { section: "packingSuggestions", content: "" },
+          { section: "accommodationTips", content: "" },
+          { section: "localEssentials", content: "" },
+        ];
+      }
+    };
+
+    // Visa returns three fields in one JSON; split into patches.
+    // visaCategory is omitted from this v1 — the trip stub leaves it as ""
+    // and the UI handles empty visaCategory gracefully. A followup task
+    // can extend SECTION_FIELD_MAP to include visaCategory.
+    const visaTransform = (raw: string): Array<{ section: string; content: string }> => {
+      try {
+        const parsed = JSON.parse(raw);
+        return [
+          { section: "visaNotes", content: parsed.visaNotes ?? "" },
+          { section: "visaChecklist", content: parsed.visaChecklist ?? "[]" },
+        ];
+      } catch {
+        return [
+          { section: "visaNotes", content: "" },
+          { section: "visaChecklist", content: "" },
+        ];
+      }
+    };
+
+    try {
+      await Promise.all([
+        runItinerary(),
+        runSection("__visa-bundle__", buildVisaUserPrompt(input), 1024, visaTransform),
+        runSection("budgetBreakdown", buildBudgetUserPrompt(input), 1024),
+        runSection("highlights", buildHighlightsUserPrompt(input), 512),
+        runSection("__tips-bundle__", buildTipsBundleUserPrompt(input), 2048, tipsBundleTransform),
+      ]);
+      await ctx.runMutation(internal.tripGeneration.completeGeneration, { tripId });
+    } catch (err) {
+      console.error("runGenerationStream top-level failure:", err);
+      await ctx.runMutation(internal.tripGeneration.failGeneration, {
+        tripId,
+        reason: err instanceof Error ? err.message : String(err),
+      });
     }
   },
 });
