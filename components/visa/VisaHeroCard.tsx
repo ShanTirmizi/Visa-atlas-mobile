@@ -182,7 +182,13 @@ export function VisaHeroCard({
         </View>
       </View>
 
-      {/* CTA — evisa / required only */}
+      {/* CTA — evisa / required only.
+          The category accent is tuned for the warm gradient hero card above
+          (e.g. e-visa's accent is #3D1810, designed to read on peach). On
+          the dark colors.ink CTA card below, that dark-on-dark fails the
+          contrast bar. Use colors.coral as the CTA accent so the icon, the
+          arrow circle, and its inner arrow all read cleanly across every
+          category. */}
       {showCTA && (
         <VisaGuideCTA
           kicker={
@@ -195,7 +201,7 @@ export function VisaHeroCard({
             ctaLabel ??
             (category === 'evisa' ? 'Create my e-visa guide' : 'Create my embassy guide')
           }
-          accent={tokens.accent}
+          accent={colors.coral}
           onPress={onCreateGuide!}
         />
       )}
