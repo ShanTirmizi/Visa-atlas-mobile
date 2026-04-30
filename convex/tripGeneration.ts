@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalAction, action } from "./_generated/server";
+import { internalMutation, internalAction, internalQuery, action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireAuth } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
@@ -457,5 +457,156 @@ export const generateTrip = action({
       input: args,
     });
     return tripId;
+  },
+});
+
+/**
+ * Retry a single section after a failure. Re-runs that one section's
+ * stream and removes it from failedSections on success.
+ *
+ * Auth: ownership is verified via the `_verifyTripOwner` internal query
+ * because actions can't access `ctx.db` directly.
+ */
+export const retrySection = action({
+  args: {
+    tripId: v.id("trips"),
+    section: v.string(),
+  },
+  handler: async (ctx, { tripId, section }) => {
+    const userId = await requireAuth(ctx);
+    const isOwner = await ctx.runQuery(internal.tripGeneration._verifyTripOwner, {
+      tripId,
+      userId,
+    });
+    if (!isOwner) throw new Error("Not authorized");
+
+    const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
+    if (!trip) throw new Error("Trip not found");
+    if (!trip.originalInputs) throw new Error("No original inputs stored — cannot retry");
+
+    const input = JSON.parse(trip.originalInputs);
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+
+    const systemPrompt = buildSystemPrompt(input);
+
+    let userPrompt: string;
+    let maxTokens = 1024;
+    switch (section) {
+      case "highlights":
+        userPrompt = buildHighlightsUserPrompt(input);
+        maxTokens = 512;
+        break;
+      case "visaChecklist":
+      case "visaNotes":
+        userPrompt = buildVisaUserPrompt(input);
+        break;
+      case "budgetBreakdown":
+        userPrompt = buildBudgetUserPrompt(input);
+        break;
+      case "packingSuggestions":
+      case "accommodationTips":
+      case "localEssentials":
+        userPrompt = buildTipsBundleUserPrompt(input);
+        maxTokens = 2048;
+        break;
+      default:
+        throw new Error(`Cannot retry unknown section: ${section}`);
+    }
+
+    await new Promise<void>((resolve) => {
+      streamAnthropic(
+        { apiKey, systemPrompt, userPrompt, maxTokens },
+        makeWholeSectionBuffer(
+          async (full) => {
+            if (section === "highlights" || section === "budgetBreakdown") {
+              await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                tripId, section, content: full.trim(),
+              });
+            } else if (["visaChecklist", "visaNotes"].includes(section)) {
+              try {
+                const parsed = JSON.parse(full);
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId, section: "visaNotes", content: coerceToString(parsed.visaNotes, ""),
+                });
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId, section: "visaChecklist", content: coerceToString(parsed.visaChecklist, "[]"),
+                });
+              } catch {
+                // swallow — leave failedSections intact
+              }
+            } else {
+              try {
+                const parsed = JSON.parse(full);
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId, section: "packingSuggestions", content: coerceToString(parsed.packingSuggestions, "[]"),
+                });
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId, section: "accommodationTips", content: coerceToString(parsed.accommodationTips, ""),
+                });
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId, section: "localEssentials", content: coerceToString(parsed.localEssentials, "[]"),
+                });
+              } catch {
+                // swallow
+              }
+            }
+            await ctx.runMutation(internal.tripGeneration._clearFailedSection, { tripId, section });
+            resolve();
+          },
+          (err) => {
+            console.error(`Retry section ${section} failed:`, err);
+            resolve();
+          },
+        ),
+      );
+    });
+  },
+});
+
+/** Internal query for retrySection to read the trip — keeps the action stateless. */
+export const _getTripForRetry = internalQuery({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => ctx.db.get(tripId),
+});
+
+/**
+ * Verify the caller is the trip owner. The action calls this so it can
+ * run an ownership check from a context where `ctx.db` is available.
+ * (We can't use `checkTripPermission` directly because that helper
+ * accepts only Query/MutationCtx — its `ctx.db` access wouldn't compile
+ * in an action.) Returns `true` only when the caller is the owner.
+ */
+export const _verifyTripOwner = internalQuery({
+  args: { tripId: v.id("trips"), userId: v.id("users") },
+  handler: async (ctx, { tripId, userId }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip) return false;
+    const collab = await ctx.db
+      .query("tripCollaborators")
+      .withIndex("by_trip_and_user", (q) =>
+        q.eq("tripId", tripId).eq("userId", userId))
+      .first();
+    return collab?.role === "owner";
+  },
+});
+
+/** Remove a section (and any siblings from a bundle retry) from failedSections. */
+export const _clearFailedSection = internalMutation({
+  args: { tripId: v.id("trips"), section: v.string() },
+  handler: async (ctx, { tripId, section }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip) return;
+    const failed = trip.failedSections ?? [];
+    const bundleSiblings: Record<string, string[]> = {
+      visaChecklist: ["visaChecklist", "visaNotes"],
+      visaNotes: ["visaChecklist", "visaNotes"],
+      packingSuggestions: ["packingSuggestions", "accommodationTips", "localEssentials"],
+      accommodationTips: ["packingSuggestions", "accommodationTips", "localEssentials"],
+      localEssentials: ["packingSuggestions", "accommodationTips", "localEssentials"],
+    };
+    const toRemove = bundleSiblings[section] ?? [section];
+    const next = failed.filter((s) => !toRemove.includes(s));
+    await ctx.db.patch(tripId, { failedSections: next });
   },
 });
