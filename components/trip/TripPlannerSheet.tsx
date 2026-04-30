@@ -39,6 +39,7 @@ import { toAlpha2 } from '@/utils/countryCode';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Platform } from 'react-native';
 import { DarkOrb } from '@/components/ui/DarkOrb';
+import { VAStamp } from '@/components/auth/VAStamp';
 import { SectionKicker } from '@/components/ui/SectionKicker';
 
 // ── Constants ───────────────────────────────────────────────────────────
@@ -51,12 +52,21 @@ const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
 const BUDGET_OPTIONS = ['budget', 'mid', 'luxury'];
 const COMPANION_OPTIONS = ['solo', 'partner', 'friends', 'family'];
 
+// Travel-flavoured loading copy — drop trailing punctuation; the loader
+// adds an italic coral ellipsis itself so all messages get a consistent
+// editorial tail.
 const LOAD_MSGS = [
-  'Researching your destination...', 'Planning your day-by-day itinerary...',
-  'Finding the best local spots...', 'Scouting hidden gems & restaurants...',
-  'Calculating budget breakdown...', 'Checking visa requirements...',
-  'Packing your suitcase (virtually)...', 'Scouting car rental options...',
-  'Finding the best time to visit...', 'Adding final touches...',
+  'Researching your destination',
+  'Drafting day-by-day itinerary',
+  'Finding the best local spots',
+  'Scouting hidden gems & restaurants',
+  'Calculating budget breakdown',
+  'Checking visa requirements',
+  'Packing your suitcase',
+  'Scouting car rental options',
+  'Finding the best time to visit',
+  'Stamping your passport',
+  'Adding final touches',
 ];
 
 // Avatar tones for traveler stack — warm, forest, sunset palette
@@ -1100,37 +1110,73 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             </View>
           </Modal>
 
-          {/* ── LOADING STATE ───────────────────────────────────── */}
+          {/* ── LOADING STATE — editorial framing + VA stamp ────── */}
           {isLoading && (
             <View style={s.loadingContainer}>
-              {/* Animated sparkle orb */}
-              <Animated.View style={sparkleStyle}>
-                <DarkOrb size={80}>
-                  <Sparkles size={32} color="#FFFFFF" />
-                </DarkOrb>
-              </Animated.View>
-
-              {/* Country context */}
-              <Text style={[s.loadingContext, { color: colors.inkMute }]}>
-                Planning your trip to{' '}
-                <Text style={{ fontFamily: FontFamily.semibold, color: colors.ink }}>
-                  {effective?.country.name ?? country.name}
+              {/* Mono kicker + coral squiggle */}
+              <View style={s.loadingKickerRow}>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.monoMedium,
+                    fontSize: 11,
+                    fontWeight: '700',
+                    letterSpacing: 11 * 0.22,
+                    textTransform: 'uppercase',
+                    color: colors.coralDeep,
+                  }}
+                >
+                  BUILDING YOUR ATLAS
                 </Text>
-                ...
+                <Squiggle width={28} color={colors.coral} />
+              </View>
+
+              {/* Italic Fraunces country name with coral period */}
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 32,
+                  lineHeight: 36,
+                  letterSpacing: -32 * 0.022,
+                  fontWeight: '500',
+                  color: colors.ink,
+                  marginTop: 6,
+                  textAlign: 'center',
+                }}
+              >
+                {effective?.country.name ?? country.name}
+                <Text style={{ color: colors.coral }}>.</Text>
               </Text>
 
-              {/* Rotating status message */}
+              {/* Floating VA passport stamp — same logo as auth + onboarding */}
+              <Animated.View style={[sparkleStyle, { marginTop: 28 }]}>
+                <VAStamp size={140} />
+              </Animated.View>
+
+              {/* Rotating status message — italic Fraunces with coral ellipsis */}
               <Animated.Text
                 key={tick}
                 entering={FadeIn.duration(400)}
                 exiting={FadeOut.duration(200)}
-                style={[s.loadingMsg, { color: colors.ink }]}
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 17,
+                  lineHeight: 22,
+                  letterSpacing: -17 * 0.014,
+                  fontWeight: '500',
+                  color: colors.inkSoft,
+                  textAlign: 'center',
+                  marginTop: 28,
+                  paddingHorizontal: 32,
+                }}
               >
                 {LOAD_MSGS[tick % LOAD_MSGS.length]}
+                <Text style={{ color: colors.coral }}>…</Text>
               </Animated.Text>
 
-              {/* Typing dots */}
-              <TypingDots color={colors.ink} />
+              {/* Typing dots — coral to match the editorial accents */}
+              <TypingDots color={colors.coral} />
             </View>
           )}
         </BottomSheetScrollView>
@@ -1319,19 +1365,12 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: Spacing['5xl'],
+      paddingHorizontal: Spacing.lg,
     },
-    loadingContext: {
-      fontFamily: FontFamily.regular,
-      fontSize: FontSize.sm,
-      textAlign: 'center',
-      marginTop: Spacing.xl,
-      marginBottom: Spacing.md,
-    },
-    loadingMsg: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.base,
-      textAlign: 'center',
-      minHeight: 20,
+    loadingKickerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
 
     // ── Country picker modal ──────────────────────────────────
