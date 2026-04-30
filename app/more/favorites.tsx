@@ -11,6 +11,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Heart, Sparkles, ChevronRight } from 'lucide-react-native';
 
+import { useConvexAuth, useMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { Spacing, Radius, FontFamily } from '@/constants/theme';
@@ -49,14 +52,39 @@ export default function FavoritesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { favorites, heldVisas, toggleFavorite } = useVisa();
+  const { isAuthenticated } = useConvexAuth();
 
-  // Resolve each saved alpha-3 code into a full CountryVisa record. Any
-  // codes that are no longer in the table (data drift) silently drop.
+  // Trips have their own "starred" heart on the trip detail screen
+  // (sets trip.starred on the Convex doc). Users naturally expect any
+  // hearted thing — country or trip — to land in the wishlist, so we
+  // merge starred-trip countries into the saved-country list.
+  const trips = useOfflineQuery(
+    api.trips.listTrips,
+    isAuthenticated ? {} : 'skip',
+  );
+
+  const starredTripCountryCodes = useMemo(() => {
+    if (!trips) return new Set<string>();
+    const codes = new Set<string>();
+    for (const t of trips) {
+      if (t.starred && t.countryCode) {
+        codes.add(t.countryCode.toUpperCase());
+      }
+    }
+    return codes;
+  }, [trips]);
+
+  // Resolve each saved alpha-3 code into a full CountryVisa record.
+  // Sources: explicit country favorites + countries from starred trips,
+  // de-duplicated via a Set. Codes not in the visa table silently drop.
   const savedCountries = useMemo(() => {
-    return favorites
+    const merged = new Set<string>();
+    for (const code of favorites) merged.add(code.toUpperCase());
+    for (const code of starredTripCountryCodes) merged.add(code);
+    return Array.from(merged)
       .map((code) => visaData.find((c) => c.code === code))
       .filter((c): c is CountryVisa => Boolean(c));
-  }, [favorites]);
+  }, [favorites, starredTripCountryCodes]);
 
   // Planner sheet — mounted once at the bottom of this screen and
   // re-presented for whichever country the user taps "Plan a trip" on.
@@ -89,22 +117,48 @@ export default function FavoritesScreen() {
     });
   }, []);
 
+  const setTripStarred = useMutation(api.trips.setTripStarred);
+
+  // Remove the country from every source that puts it on the wishlist:
+  // toggle off the country-level favorite (if present), and unstar every
+  // trip whose countryCode matches. Otherwise the user can tap "Remove",
+  // see nothing happen, and rightfully assume the button is broken.
   const onRemove = useCallback(
     (code: string, name: string) => {
+      const upper = code.toUpperCase();
+      const isCountryFavorite = favorites.some(
+        (c) => c.toUpperCase() === upper,
+      );
+      const matchingTrips = (trips ?? []).filter(
+        (t) => t.countryCode?.toUpperCase() === upper && t.starred,
+      );
       Alert.alert(
         `Remove ${name}?`,
-        'This just removes it from your wishlist — it stays available across the rest of the app.',
+        matchingTrips.length > 0
+          ? `Removes ${name} from your favorites and unstars ${
+              matchingTrips.length === 1
+                ? 'the trip'
+                : `${matchingTrips.length} trips`
+            } you've hearted to it.`
+          : 'Removes it from your wishlist — it stays available everywhere else in the app.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Remove',
             style: 'destructive',
-            onPress: () => toggleFavorite(code),
+            onPress: async () => {
+              if (isCountryFavorite) toggleFavorite(code);
+              await Promise.all(
+                matchingTrips.map((t) =>
+                  setTripStarred({ id: t._id, starred: false }).catch(() => {}),
+                ),
+              );
+            },
           },
         ],
       );
     },
-    [toggleFavorite],
+    [favorites, trips, toggleFavorite, setTripStarred],
   );
 
   const isReady = !!selectedCountry && !!selectedResolved;
