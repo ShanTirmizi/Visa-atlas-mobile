@@ -67,11 +67,21 @@ export const getCollaborators = query({
 
 // ===== Mutations =====
 
+/**
+ * @deprecated Use the streaming `tripGeneration.generateTrip` action instead,
+ * which inserts a stub and streams content into it. This synchronous mutation
+ * remains for legacy compatibility and direct seeding from tests.
+ */
 export const createTrip = mutation({
   args: {
     countryCode: v.string(),
     countryName: v.string(),
-    status: v.union(v.literal("planned"), v.literal("completed")),
+    status: v.union(
+      v.literal("planned"),
+      v.literal("completed"),
+      v.literal("generating"),
+      v.literal("failed"),
+    ),
     duration: v.number(),
     region: v.string(),
     costLevel: v.number(),
@@ -145,7 +155,12 @@ export const setTripStarred = mutation({
 export const updateTripStatus = mutation({
   args: {
     id: v.id("trips"),
-    status: v.union(v.literal("planned"), v.literal("completed")),
+    status: v.union(
+      v.literal("planned"),
+      v.literal("completed"),
+      v.literal("generating"),
+      v.literal("failed"),
+    ),
   },
   handler: async (ctx, args) => {
     await checkTripPermission(ctx, args.id, "editor");

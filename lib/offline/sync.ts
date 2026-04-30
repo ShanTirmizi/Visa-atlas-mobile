@@ -35,7 +35,7 @@ async function executeMutationIntent(
       }
       await client.mutation(api.trips.updateTripStatus, {
         id: documentId as Id<'trips'>,
-        status: status as 'planned' | 'completed',
+        status: status as 'planned' | 'completed' | 'generating' | 'failed',
       });
       break;
     }
