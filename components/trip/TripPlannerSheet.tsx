@@ -462,9 +462,13 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
-        onChange={(index) => {
-          if (index === -1) resetState();
-        }}
+        // Use onDismiss (not onChange === -1). The default stackBehavior is
+        // "switch", which MINIMIZES this sheet to index -1 when the refinement
+        // sheet is presented above. onChange would fire on that minimize and
+        // wipe pickedCode/notes — so by the time the user submits the
+        // refinement, resolveEffective() returns null. onDismiss only fires
+        // on a true dismissal (gesture or programmatic), not on minimize.
+        onDismiss={resetState}
       >
         <BottomSheetScrollView
           contentContainerStyle={s.scrollContent}
