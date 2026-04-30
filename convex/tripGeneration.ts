@@ -11,11 +11,13 @@ import {
   buildVisaUserPrompt,
   buildBudgetUserPrompt,
   buildHighlightsUserPrompt,
-  buildTipsBundleUserPrompt,
+  buildCountryTipsPrompt,
   streamAnthropic,
   makeWholeSectionBuffer,
   makeItineraryStreamParser,
 } from "./lib/anthropicStream";
+import { localInfo } from "../data/localInfo";
+import { toAlpha3 } from "../utils/countryCode";
 
 /** Coerce a value into a string. Strings pass through; arrays/objects get
  * JSON.stringify'd; nullish becomes the supplied fallback (use "[]" for
@@ -392,22 +394,113 @@ export const runGenerationStream = internalAction({
       });
     };
 
-    // Tips bundle returns three sections in one JSON; split into patches
-    const tipsBundleTransform = (raw: string): Array<{ section: string; content: string }> => {
-      try {
-        const parsed = JSON.parse(raw);
-        return [
-          { section: "packingSuggestions", content: coerceToString(parsed.packingSuggestions, "[]") },
-          { section: "accommodationTips", content: coerceToString(parsed.accommodationTips, "") },
-          { section: "localEssentials", content: coerceToString(parsed.localEssentials, "[]") },
-        ];
-      } catch {
-        return [
-          { section: "packingSuggestions", content: "[]" },
-          { section: "accommodationTips", content: "" },
-          { section: "localEssentials", content: "[]" },
-        ];
-      }
+    // ── Country tips — static-first, cache-second, LLM-fallback ─────
+    //
+    // The Tips tab on the trip detail screen renders CountryTipsView,
+    // which reads from data/localInfo.ts (88 hand-written countries)
+    // OR from the countryTipsCache Convex table (filled in lazily by
+    // this very flow). Three branches:
+    //   1. Country in localInfo → no LLM call needed, do nothing here.
+    //   2. Country in countryTipsCache → no LLM call needed, do nothing.
+    //   3. Neither → run the LLM with buildCountryTipsPrompt, parse the
+    //      LocalInfo-shaped JSON, write to countryTipsCache for forever-
+    //      reuse by every future trip / visitor to that country.
+    const alpha3 = toAlpha3(input.countryCode);
+    const isStaticallyCovered = alpha3 ? alpha3 in localInfo : false;
+    let isCachedCovered = false;
+    if (alpha3 && !isStaticallyCovered) {
+      const cached = await ctx.runQuery(
+        internal.tripGeneration._getCachedCountryTips,
+        { countryCode: alpha3 },
+      );
+      isCachedCovered = cached !== null;
+    }
+    const needsCountryTipsLLM = !!alpha3 && !isStaticallyCovered && !isCachedCovered;
+
+    const runCountryTips = async (): Promise<void> => {
+      return new Promise((resolve) => {
+        let settled = false;
+        const settle = () => { if (settled) return; settled = true; resolve(); };
+        streamAnthropic(
+          {
+            apiKey,
+            systemPrompt,
+            userPrompt: buildCountryTipsPrompt(input.countryCode, input.countryName),
+            maxTokens: 2048,
+          },
+          makeWholeSectionBuffer(
+            async (full) => {
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const parsed: any = JSON.parse(full);
+                // Coerce the parsed shape into the validator's expectation.
+                // We're forgiving on optional fields (omit if missing) and
+                // strict on the required ones (skip the cache write if any
+                // required field is missing or wrong-typed — better to leave
+                // the row absent than poison the cache with a bad payload).
+                const tap = parsed.tapWater;
+                const tapOk = tap === "safe" || tap === "unsafe" || tap === "varies";
+                const requiredOk =
+                  typeof parsed.emergencyNumber === "string" &&
+                  typeof parsed.policeNumber === "string" &&
+                  typeof parsed.ambulanceNumber === "string" &&
+                  typeof parsed.fireNumber === "string" &&
+                  Array.isArray(parsed.essentialApps) &&
+                  typeof parsed.tippingCulture === "string" &&
+                  tapOk &&
+                  typeof parsed.plugType === "string" &&
+                  typeof parsed.simCard === "string";
+                if (!requiredOk) {
+                  console.error(`Country tips for ${alpha3} failed shape validation; skipping cache write`);
+                  settle();
+                  return;
+                }
+                await ctx.runMutation(internal.countryTips._writeCountryTips, {
+                  countryCode: alpha3,
+                  emergencyNumber: parsed.emergencyNumber,
+                  policeNumber: parsed.policeNumber,
+                  ambulanceNumber: parsed.ambulanceNumber,
+                  fireNumber: parsed.fireNumber,
+                  ukEmbassy: parsed.ukEmbassy && typeof parsed.ukEmbassy === "object"
+                    ? {
+                        city: String(parsed.ukEmbassy.city ?? ""),
+                        phone: String(parsed.ukEmbassy.phone ?? ""),
+                        address: String(parsed.ukEmbassy.address ?? ""),
+                        website: String(parsed.ukEmbassy.website ?? ""),
+                      }
+                    : undefined,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  essentialApps: (parsed.essentialApps as any[])
+                    .map((a) => ({
+                      name: String(a?.name ?? ""),
+                      purpose: String(a?.purpose ?? ""),
+                    }))
+                    .filter((a) => a.name && a.purpose),
+                  tippingCulture: parsed.tippingCulture,
+                  dressCode: typeof parsed.dressCode === "string" ? parsed.dressCode : undefined,
+                  scamWarnings: Array.isArray(parsed.scamWarnings)
+                    ? parsed.scamWarnings.map(String)
+                    : undefined,
+                  localCustoms: Array.isArray(parsed.localCustoms)
+                    ? parsed.localCustoms.map(String)
+                    : undefined,
+                  tapWater: tap,
+                  plugType: parsed.plugType,
+                  simCard: parsed.simCard,
+                  currencyTip: typeof parsed.currencyTip === "string" ? parsed.currencyTip : undefined,
+                });
+              } catch (err) {
+                console.error("Country tips parse/write failed:", err);
+              }
+              settle();
+            },
+            (err) => {
+              console.error("Country tips stream errored:", err);
+              settle();
+            },
+          ),
+        );
+      });
     };
 
     // Budget returns two fields in one JSON; split into patches so
@@ -449,13 +542,20 @@ export const runGenerationStream = internalAction({
     };
 
     try {
-      await Promise.all([
+      const promises: Array<Promise<void>> = [
         runItinerary(),
         runSection("__visa-bundle__", buildVisaUserPrompt(input), 1024, visaTransform),
         runSection("__budget-bundle__", buildBudgetUserPrompt(input), 1024, budgetTransform),
         runSection("highlights", buildHighlightsUserPrompt(input), 512),
-        runSection("__tips-bundle__", buildTipsBundleUserPrompt(input), 2048, tipsBundleTransform),
-      ]);
+      ];
+      // Only burn tokens on country tips when neither the static table
+      // nor the Convex cache has them. Once this fires for any uncovered
+      // country, the result is cached forever — every future trip to
+      // that country reads from the cache instead.
+      if (needsCountryTipsLLM) {
+        promises.push(runCountryTips());
+      }
+      await Promise.all(promises);
       await ctx.runMutation(internal.tripGeneration.completeGeneration, { tripId });
     } catch (err) {
       console.error("runGenerationStream top-level failure:", err);
@@ -532,13 +632,11 @@ export const retrySection = action({
       case "dailyBudget":
         userPrompt = buildBudgetUserPrompt(input);
         break;
-      case "packingSuggestions":
-      case "accommodationTips":
-      case "localEssentials":
-        userPrompt = buildTipsBundleUserPrompt(input);
-        maxTokens = 2048;
-        break;
       default:
+        // packingSuggestions / accommodationTips / localEssentials are no
+        // longer generated by the streaming flow — country-level tips
+        // come from data/localInfo.ts or the countryTipsCache table now.
+        // If a stale failedSections entry is referenced, surface it.
         throw new Error(`Cannot retry unknown section: ${section}`);
     }
 
@@ -563,7 +661,7 @@ export const retrySection = action({
               } catch {
                 // swallow
               }
-            } else if (["visaChecklist", "visaNotes"].includes(section)) {
+            } else if (section === "visaChecklist" || section === "visaNotes") {
               try {
                 const parsed = JSON.parse(full);
                 await ctx.runMutation(internal.tripGeneration.patchTripSection, {
@@ -574,21 +672,6 @@ export const retrySection = action({
                 });
               } catch {
                 // swallow — leave failedSections intact
-              }
-            } else {
-              try {
-                const parsed = JSON.parse(full);
-                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                  tripId, section: "packingSuggestions", content: coerceToString(parsed.packingSuggestions, "[]"),
-                });
-                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                  tripId, section: "accommodationTips", content: coerceToString(parsed.accommodationTips, ""),
-                });
-                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                  tripId, section: "localEssentials", content: coerceToString(parsed.localEssentials, "[]"),
-                });
-              } catch {
-                // swallow
               }
             }
             await ctx.runMutation(internal.tripGeneration._clearFailedSection, { tripId, section });
@@ -608,6 +691,20 @@ export const retrySection = action({
 export const _getTripForRetry = internalQuery({
   args: { tripId: v.id("trips") },
   handler: async (ctx, { tripId }) => ctx.db.get(tripId),
+});
+
+/** Internal lookup so runGenerationStream can decide whether to fire
+ *  the country-tips LLM call without round-tripping through the public
+ *  countryTips.getCountryTips query. Returns the cached row or null. */
+export const _getCachedCountryTips = internalQuery({
+  args: { countryCode: v.string() },
+  handler: async (ctx, { countryCode }) => {
+    const row = await ctx.db
+      .query("countryTipsCache")
+      .withIndex("by_country", (q) => q.eq("countryCode", countryCode))
+      .first();
+    return row ?? null;
+  },
 });
 
 /**
@@ -643,9 +740,6 @@ export const _clearFailedSection = internalMutation({
       visaNotes: ["visaChecklist", "visaNotes"],
       budgetBreakdown: ["budgetBreakdown", "dailyBudget"],
       dailyBudget: ["budgetBreakdown", "dailyBudget"],
-      packingSuggestions: ["packingSuggestions", "accommodationTips", "localEssentials"],
-      accommodationTips: ["packingSuggestions", "accommodationTips", "localEssentials"],
-      localEssentials: ["packingSuggestions", "accommodationTips", "localEssentials"],
     };
     const toRemove = bundleSiblings[section] ?? [section];
     const next = failed.filter((s) => !toRemove.includes(s));

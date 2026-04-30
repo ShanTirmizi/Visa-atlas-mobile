@@ -11,8 +11,6 @@ type TripLike = {
   readonly visaChecklist: string;
   readonly visaNotes?: string;
   readonly budgetBreakdown: string;
-  readonly packingSuggestions: string;
-  readonly accommodationTips: string;
   readonly failedSections?: readonly string[];
   readonly duration: number;
   readonly heroImage?: string;
@@ -22,17 +20,17 @@ export type SectionName =
   | 'highlights'
   | 'visaChecklist'
   | 'visaNotes'
-  | 'budgetBreakdown'
-  | 'packingSuggestions'
-  | 'accommodationTips';
+  | 'budgetBreakdown';
 
+// Sections that get streamed during trip generation. Country tips are NOT
+// in this list — they're served by `data/localInfo.ts` (handwritten) or
+// the `countryTipsCache` Convex table (LLM-generated, cached forever),
+// not by per-trip streaming.
 const STREAMED_SECTIONS: SectionName[] = [
   'highlights',
   'visaChecklist',
   'visaNotes',
   'budgetBreakdown',
-  'packingSuggestions',
-  'accommodationTips',
 ];
 
 const TOTAL_SECTIONS = STREAMED_SECTIONS.length + 2; // + itinerary + heroImage
@@ -87,18 +85,16 @@ export function getTabDotIndicators(trip: TripLike): Record<string, boolean> {
   if (!isGenerating(trip)) {
     return {
       Visa: hasFailed(trip, 'visaChecklist') || hasFailed(trip, 'visaNotes'),
-      Tips:
-        hasFailed(trip, 'packingSuggestions') ||
-        hasFailed(trip, 'accommodationTips') ||
-        hasFailed(trip, 'localEssentials'),
+      // Tips never gets a dot — country tips come from the static table
+      // or the cache, not from per-trip streaming, so there's no
+      // per-trip pending or failed state to surface here.
+      Tips: false,
       Itinerary: false,
     };
   }
   return {
     Visa: isSectionPending(trip, 'visaChecklist') || isSectionPending(trip, 'visaNotes'),
-    Tips:
-      isSectionPending(trip, 'packingSuggestions') ||
-      isSectionPending(trip, 'accommodationTips'),
+    Tips: false,
     Itinerary: (() => {
       const idx = getStreamingDayIndex(trip);
       return idx !== null && idx < (trip.duration ?? 0);

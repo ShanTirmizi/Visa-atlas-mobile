@@ -112,6 +112,54 @@ export function buildTipsBundleUserPrompt(input: GenerateInput): string {
 All content tailored to ${input.countryName}, ${input.budget} budget, ${input.travelParty} travel party. Output ONLY the JSON object.`;
 }
 
+/**
+ * Generate country-level tips matching the LocalInfo shape from
+ * data/localInfo.ts. Used to populate `countryTipsCache` for any
+ * country not already in the handwritten static table.
+ *
+ * Country-level (NOT trip-level) — the shape is identical across
+ * users so the result can be cached forever and reused. No
+ * per-trip context is fed into the prompt; only the country itself.
+ */
+export function buildCountryTipsPrompt(
+  countryCode: string,
+  countryName: string,
+): string {
+  return `You are populating a country-level tips card for travellers visiting ${countryName} (${countryCode}). The shape below is the exact field layout the app expects — every field is required unless explicitly marked optional.
+
+Output ONLY a JSON object with this shape (no preamble, no markdown fences):
+
+{
+  "emergencyNumber": "string — the all-purpose emergency number",
+  "policeNumber": "string",
+  "ambulanceNumber": "string",
+  "fireNumber": "string",
+  "ukEmbassy": {                                  // optional — omit the whole field if no UK embassy exists in-country
+    "city": "string",
+    "phone": "string",
+    "address": "string",
+    "website": "string — full URL"
+  },
+  "essentialApps": [                              // 3-5 entries — local ride-hailing, payments, transit, food delivery
+    { "name": "string", "purpose": "string — one short phrase" }
+  ],
+  "tippingCulture": "string — 1-2 sentences on whether/how much to tip",
+  "dressCode": "string — optional, only if there's a notable cultural / religious / climate consideration",
+  "scamWarnings": [                               // optional — 2-4 short concrete warnings, omit the field if no notable scams
+    "string"
+  ],
+  "localCustoms": [                               // optional — 2-4 short editorial customs worth knowing
+    "string"
+  ],
+  "tapWater": "safe" | "unsafe" | "varies",
+  "plugType": "string — letter(s), e.g. 'Type C/F (European)' or 'Type G (UK 3-pin)'",
+  "simCard": "string — 1-2 sentences on best provider / where to buy",
+  "currencyTip": "string — optional, only if there's a useful note (cash culture, exchange tips, ATM gotchas)"
+}
+
+Tone: factual, current, specific. Real numbers and real provider names. Editorial voice (NYT Travel). No clichés. Output ONLY the JSON object.`;
+}
+
 // ── SSE streaming over fetch ─────────────────────────────────────
 
 interface StreamOptions {

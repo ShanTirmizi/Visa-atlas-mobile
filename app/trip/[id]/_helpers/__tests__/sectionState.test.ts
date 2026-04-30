@@ -15,8 +15,6 @@ const baseTrip = {
   visaChecklist: '',
   visaNotes: '',
   budgetBreakdown: '',
-  packingSuggestions: '',
-  accommodationTips: '',
   failedSections: [],
   duration: 10,
   heroImage: undefined,
@@ -65,6 +63,8 @@ describe('sectionState helpers', () => {
   });
 
   it('getTotalSectionCount is the same constant', () => {
-    expect(getTotalSectionCount()).toBe(8);
+    // 4 streamed sections (highlights, visaChecklist, visaNotes,
+    // budgetBreakdown) + itinerary + heroImage = 6
+    expect(getTotalSectionCount()).toBe(6);
   });
 });

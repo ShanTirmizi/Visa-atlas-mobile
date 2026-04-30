@@ -62,7 +62,6 @@ import { TripGenerationStrip } from '@/components/trip/TripGenerationStrip';
 import { TripHeroSkeleton } from '@/components/trip/skeletons/TripHeroSkeleton';
 import { HighlightsSkeleton } from '@/components/trip/skeletons/HighlightsSkeleton';
 import { VisaTabSkeleton } from '@/components/trip/skeletons/VisaTabSkeleton';
-import { TipsTabSkeleton } from '@/components/trip/skeletons/TipsTabSkeleton';
 import { SectionRetryCard } from '@/components/trip/skeletons/SectionRetryCard';
 import { TripFailedScreen } from '@/components/trip/TripFailedScreen';
 import {
@@ -977,51 +976,20 @@ export default function TripDetailScreen() {
             detail Tips tab so trip + country views stay in lockstep). While
             packing / accommodation tips are streaming, show a shimmer
             skeleton; if they failed, surface a retry card. ── */}
-        {activeTab === 'Tips' && (() => {
-          const tipsPending =
-            isSectionPending(trip, 'packingSuggestions') ||
-            isSectionPending(trip, 'accommodationTips');
-          const tipsFailed =
-            hasFailed(trip, 'packingSuggestions') ||
-            hasFailed(trip, 'accommodationTips');
-
-          if (tipsPending) {
-            return (
-              <Animated.View
-                entering={tabSlideIn(tabDirection * 18)}
-                style={{ paddingHorizontal: 16, paddingTop: 8 }}
-              >
-                <TipsTabSkeleton />
-              </Animated.View>
-            );
-          }
-          if (tipsFailed) {
-            return (
-              <Animated.View
-                entering={tabSlideIn(tabDirection * 18)}
-                style={{ paddingHorizontal: 16, paddingTop: 8 }}
-              >
-                <SectionRetryCard
-                  tripId={trip._id}
-                  section="packingSuggestions"
-                  label="tips"
-                />
-              </Animated.View>
-            );
-          }
-
-          return (
-            <Animated.View
-              entering={tabSlideIn(tabDirection * 18)}
-              style={{ paddingHorizontal: 16, paddingTop: 8 }}
-            >
-              <CountryTipsView
-                countryCode={trip.countryCode}
-                countryName={trip.countryName}
-              />
-            </Animated.View>
-          );
-        })()}
+        {/* Tips tab — CountryTipsView handles all three data sources
+            internally (static localInfo / Convex cache / skeleton)
+            and renders its own loading state, so we just delegate. */}
+        {activeTab === 'Tips' && (
+          <Animated.View
+            entering={tabSlideIn(tabDirection * 18)}
+            style={{ paddingHorizontal: 16, paddingTop: 8 }}
+          >
+            <CountryTipsView
+              countryCode={trip.countryCode}
+              countryName={trip.countryName}
+            />
+          </Animated.View>
+        )}
       </ScrollView>
 
       {/* ─── Booking sheets ─── */}

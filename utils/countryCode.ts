@@ -34,3 +34,27 @@ export function toAlpha2(code: string): string {
   if (upper.length === 2) return upper;
   return A3_TO_A2[upper] ?? upper.slice(0, 2);
 }
+
+// Inverse map — built lazily on first call so we don't pay the cost
+// for screens that only ever go alpha-3 → alpha-2.
+let A2_TO_A3: Record<string, string> | null = null;
+function buildA2ToA3(): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [a3, a2] of Object.entries(A3_TO_A2)) {
+    map[a2] = a3;
+  }
+  return map;
+}
+
+/** Convert an ISO 3166-1 alpha-2 country code to alpha-3. The trip
+ *  doc stores alpha-2 (`JP`, `MU`, `FR`) but `data/localInfo.ts` and
+ *  the Convex `countryTipsCache` are keyed by alpha-3 (`JPN`, `MUS`,
+ *  `FRA`). Returns the original 3-letter code unchanged, or empty
+ *  string for unknown 2-letter codes. */
+export function toAlpha3(code: string): string {
+  if (!code) return '';
+  const upper = code.toUpperCase();
+  if (upper.length === 3) return upper;
+  if (A2_TO_A3 === null) A2_TO_A3 = buildA2ToA3();
+  return A2_TO_A3[upper] ?? '';
+}

@@ -70,6 +70,49 @@ export default defineSchema({
     .index("by_country", ["countryCode"])
     .index("by_user", ["userId"]),
 
+  // ── Country Tips Cache ──
+  // LLM-generated country-level tips for any country not covered by the
+  // handwritten data/localInfo.ts (88 countries today). First user to
+  // generate a trip for an uncovered country pays the LLM cost; the
+  // result is cached here forever so every subsequent trip / country
+  // detail page reads the cached row instantly. Mirrors the LocalInfo
+  // interface from data/localInfo.ts so CountryTipsView can render
+  // either source identically.
+  countryTipsCache: defineTable({
+    countryCode: v.string(), // alpha-3, e.g. "MUS"
+    emergencyNumber: v.string(),
+    policeNumber: v.string(),
+    ambulanceNumber: v.string(),
+    fireNumber: v.string(),
+    ukEmbassy: v.optional(
+      v.object({
+        city: v.string(),
+        phone: v.string(),
+        address: v.string(),
+        website: v.string(),
+      }),
+    ),
+    essentialApps: v.array(
+      v.object({
+        name: v.string(),
+        purpose: v.string(),
+      }),
+    ),
+    tippingCulture: v.string(),
+    dressCode: v.optional(v.string()),
+    scamWarnings: v.optional(v.array(v.string())),
+    localCustoms: v.optional(v.array(v.string())),
+    tapWater: v.union(
+      v.literal("safe"),
+      v.literal("unsafe"),
+      v.literal("varies"),
+    ),
+    plugType: v.string(),
+    simCard: v.string(),
+    currencyTip: v.optional(v.string()),
+    generatedAt: v.number(),
+  }).index("by_country", ["countryCode"]),
+
   // ── Trip Messages ──
   tripMessages: defineTable({
     tripId: v.id("trips"),

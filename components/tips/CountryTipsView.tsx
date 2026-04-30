@@ -8,12 +8,16 @@ import {
   AlertTriangle,
   Heart,
 } from 'lucide-react-native';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, Radius } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Guilloche } from '@/components/ui/Guilloche';
 import { localInfo, type LocalInfo } from '@/data/localInfo';
+import { TipsTabSkeleton } from '@/components/trip/skeletons/TipsTabSkeleton';
+import { toAlpha3 } from '@/utils/countryCode';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
@@ -724,10 +728,48 @@ function TopHeader({ countryName }: { countryName: string }) {
 
 /** Travel-tips deep-dive — emergency numbers grid, info cards (tipping,
  *  money, tap water, sim, plugs, dress code), and verdict cards (scam
- *  warnings, local customs). Pulls from the curated localInfo data layer.
- *  Used by the country detail page Tips tab and the trip detail Tips tab. */
+ *  warnings, local customs). Used by the country detail page Tips tab
+ *  and the trip detail Tips tab.
+ *
+ *  Three data sources, queried in priority order:
+ *    1. Static `data/localInfo.ts` — 88 hand-written countries, free,
+ *       instant. Hits the vast majority of real traffic.
+ *    2. Convex `countryTipsCache` — LLM-generated rows for any country
+ *       not in the static table. Filled in lazily by trip generation
+ *       and reused forever.
+ *    3. Empty state — only if the country isn't in either source AND
+ *       no in-flight generation is filling it in.
+ *
+ *  The component accepts either alpha-2 (from a trip's countryCode)
+ *  or alpha-3 (from the country detail route). Internally normalised
+ *  to alpha-3, the canonical key for both sources. */
 export function CountryTipsView({ countryCode, countryName }: Props) {
-  const local: LocalInfo | null = localInfo[countryCode] ?? null;
+  // Both sources are keyed by alpha-3. Trips pass alpha-2 ("MU"), the
+  // country detail page passes alpha-3 ("MUS") — normalise here so
+  // the lookup hits regardless of caller.
+  const alpha3 =
+    countryCode.length === 3
+      ? countryCode.toUpperCase()
+      : toAlpha3(countryCode);
+
+  const staticLocal: LocalInfo | null = alpha3 ? localInfo[alpha3] ?? null : null;
+
+  // Only query the cache when the static lookup missed — saves a
+  // subscription + re-render for the 88 covered countries.
+  const cached = useQuery(
+    api.countryTips.getCountryTips,
+    staticLocal === null && alpha3 ? { countryCode: alpha3 } : 'skip',
+  );
+
+  const local: LocalInfo | null = staticLocal ?? (cached as LocalInfo | null) ?? null;
+
+  // While the cache query is in-flight (cached === undefined) and we
+  // have no static fallback, render the skeleton — the trip generation
+  // is likely populating the cache right now and Convex's reactive
+  // query will auto-render the data the moment it lands.
+  if (local === null && cached === undefined) {
+    return <TipsTabSkeleton />;
+  }
 
   if (!local) {
     return <EmptyState countryName={countryName} />;
