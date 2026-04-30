@@ -136,6 +136,19 @@ describe('mergeUserNotes', () => {
     });
   });
 
+  describe('with empty original but non-empty answers', () => {
+    it('returns just the capitalized fragments with a trailing period', () => {
+      const answers: AnsweredQuestion[] = [
+        {
+          type: 'choice',
+          summarizePattern: 'drawn to {answer}',
+          values: ['mountains'],
+        },
+      ];
+      expect(mergeUserNotes('', answers)).toBe('Drawn to mountains.');
+    });
+  });
+
   describe('case handling', () => {
     it('lowercases the first letter of choice answers when interpolating', () => {
       const answers: AnsweredQuestion[] = [
