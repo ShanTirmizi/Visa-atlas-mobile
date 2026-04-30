@@ -13,7 +13,9 @@ export interface Stop {
   onPress?: () => void;
   /** Optional time prefix on the kicker (e.g. "09:30") */
   timeLabel?: string;
-  /** Optional one-line description shown under the title */
+  /** Optional description shown under the title — rendered in full, no
+   *  clamp. The day detail screen is the long-form read view, so
+   *  truncating here just hides content the user explicitly asked for. */
   detail?: string;
 }
 
@@ -21,9 +23,13 @@ interface StopListProps {
   stops: Stop[];
 }
 
-/** Coral timeline of stops — vertical coral-soft rail with coral dots. */
+/** Coral timeline of stops — vertical coral-soft rail with coral dots.
+ *  The detail copy renders in full; no read-more affordance. The day
+ *  detail screen is the deepest read view, the user has already drilled
+ *  into a specific day, and an unclipped paragraph is what they want. */
 export function StopList({ stops }: StopListProps) {
   const { colors } = useTheme();
+
   if (stops.length === 0) return null;
 
   return (
@@ -84,7 +90,6 @@ export function StopList({ stops }: StopListProps) {
                   color: colors.ink,
                   marginTop: 2,
                 }}
-                numberOfLines={2}
               >
                 {stop.title}
               </Text>
@@ -92,9 +97,8 @@ export function StopList({ stops }: StopListProps) {
                 <Text
                   style={[
                     Type.body12_5,
-                    { color: colors.inkMute, marginTop: 2 },
+                    { color: colors.inkMute, lineHeight: 18, marginTop: 4 },
                   ]}
-                  numberOfLines={2}
                 >
                   {stop.detail}
                 </Text>

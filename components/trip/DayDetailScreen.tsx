@@ -104,39 +104,43 @@ function deriveDayTitle(day: DayDetailDay): string {
 function buildStops(day: DayDetailDay, morningImg: ActivityImage, afternoonImg: ActivityImage, eveningImg: ActivityImage): Stop[] {
   const stops: Stop[] = [];
 
-  if (day.morning.trim().length > 0) {
-    stops.push({
-      title: day.morningPlace ?? day.morning.split('.')[0].trim().slice(0, 50),
-      meta: 'Morning',
-      timeLabel: '09:30',
-      detail: day.morning.split('.')[0].trim() === (day.morningPlace ?? '')
-        ? undefined
-        : day.morning.split('.')[0].trim(),
-      thumbUri: morningImg?.thumb || morningImg?.url,
-    });
-  }
-  if (day.afternoon.trim().length > 0) {
-    stops.push({
-      title: day.afternoonPlace ?? day.afternoon.split('.')[0].trim().slice(0, 50),
-      meta: 'Afternoon',
-      timeLabel: '13:00',
-      detail: day.afternoon.split('.')[0].trim() === (day.afternoonPlace ?? '')
-        ? undefined
-        : day.afternoon.split('.')[0].trim(),
-      thumbUri: afternoonImg?.thumb || afternoonImg?.url,
-    });
-  }
-  if (day.evening.trim().length > 0) {
-    stops.push({
-      title: day.eveningPlace ?? day.evening.split('.')[0].trim().slice(0, 50),
-      meta: 'Evening',
-      timeLabel: '18:30',
-      detail: day.evening.split('.')[0].trim() === (day.eveningPlace ?? '')
-        ? undefined
-        : day.evening.split('.')[0].trim(),
-      thumbUri: eveningImg?.thumb || eveningImg?.url,
-    });
-  }
+  // Pass the FULL activity text as `detail`. The previous version sliced
+  // off everything after the first sentence (`split('.')[0]`), so a 4-
+  // sentence morning was silently truncated to one — and StopList then
+  // clipped that one sentence to 2 lines for good measure. Now we pass
+  // everything; StopList renders it fully (no clamp on the day detail
+  // page — the user has already committed to reading this day).
+  const buildStop = (
+    text: string,
+    place: string | undefined,
+    meta: 'Morning' | 'Afternoon' | 'Evening',
+    timeLabel: string,
+    img: ActivityImage,
+  ): Stop | null => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return null;
+    // Title prefers the place name; otherwise fall back to a clipped first
+    // sentence (titles need to stay short).
+    const fallbackTitle = trimmed.split('.')[0].trim().slice(0, 50);
+    const title = place ?? fallbackTitle;
+    // Detail = the full activity text, unless it'd duplicate the title
+    // (when the place name *is* the only thing the LLM said for this slot).
+    const detail = trimmed === (place ?? '') ? undefined : trimmed;
+    return {
+      title,
+      meta,
+      timeLabel,
+      detail,
+      thumbUri: img?.thumb || img?.url,
+    };
+  };
+
+  const morning = buildStop(day.morning, day.morningPlace, 'Morning', '09:30', morningImg);
+  if (morning) stops.push(morning);
+  const afternoon = buildStop(day.afternoon, day.afternoonPlace, 'Afternoon', '13:00', afternoonImg);
+  if (afternoon) stops.push(afternoon);
+  const evening = buildStop(day.evening, day.eveningPlace, 'Evening', '18:30', eveningImg);
+  if (evening) stops.push(evening);
 
   return stops;
 }
