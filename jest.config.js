@@ -8,6 +8,7 @@ module.exports = {
       testMatch: [
         '<rootDir>/constants/**/*.test.ts',
         '<rootDir>/utils/**/*.test.ts',
+        '<rootDir>/convex/**/*.test.ts',
         '<rootDir>/components/**/*.physics.test.ts',
       ],
       moduleNameMapper: {
