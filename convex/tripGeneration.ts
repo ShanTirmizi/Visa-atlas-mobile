@@ -169,3 +169,65 @@ function safeParseArray(raw: string): any[] {
     return [];
   }
 }
+
+/**
+ * Flip status from "generating" to "planned". Called once all streamed
+ * sections have either completed or been marked failed.
+ */
+export const completeGeneration = internalMutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip || trip.status !== "generating") return;
+    await ctx.db.patch(tripId, { status: "planned" });
+  },
+});
+
+/**
+ * Flip status to "failed". Called by the 60s watchdog if no sections
+ * have streamed any content, or by a top-level catch in the streaming
+ * action.
+ */
+export const failGeneration = internalMutation({
+  args: {
+    tripId: v.id("trips"),
+    reason: v.string(),
+  },
+  handler: async (ctx, { tripId, reason }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip) return;
+    if (trip.status !== "generating") return; // already settled
+    await ctx.db.patch(tripId, { status: "failed" });
+    console.warn(`Trip ${tripId} failed: ${reason}`);
+  },
+});
+
+/**
+ * 60s watchdog. If no sections have streamed any content, the trip is
+ * considered totally failed (LLM outage / rate limit / network).
+ *
+ * "Has streamed content" = any of: itinerary array length > 0, OR any
+ * non-empty content field, OR any failedSections entry.
+ */
+export const checkGenerationTimeout = internalMutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip || trip.status !== "generating") return;
+    const itineraryLen = trip.itinerary
+      ? safeParseArray(trip.itinerary).length
+      : 0;
+    const hasAnyContent =
+      itineraryLen > 0 ||
+      !!trip.highlights ||
+      !!trip.visaChecklist ||
+      !!trip.budgetBreakdown ||
+      !!trip.packingSuggestions ||
+      !!trip.accommodationTips ||
+      (trip.failedSections ?? []).length > 0;
+    if (!hasAnyContent) {
+      await ctx.db.patch(tripId, { status: "failed" });
+      console.warn(`Trip ${tripId} timed out at 60s with no content`);
+    }
+  },
+});
