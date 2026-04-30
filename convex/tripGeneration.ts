@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { requireAuth } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import { lookupStaticFacts } from "../constants/staticTripFacts";
-import { SECTION_FIELD_MAP } from "./lib/sectionFieldMap";
+import { SECTION_FIELD_MAP, STREAMING_SECTIONS } from "./lib/sectionFieldMap";
 
 // Args validator shared by `generateTrip` and `insertGenerationStub`.
 // Mirrors the planner sheet form; deliberately permissive on optional fields.
@@ -198,7 +198,7 @@ export const failGeneration = internalMutation({
     if (!trip) return;
     if (trip.status !== "generating") return; // already settled
     await ctx.db.patch(tripId, { status: "failed" });
-    console.warn(`Trip ${tripId} failed: ${reason}`);
+    console.error(`Trip ${tripId} failed: ${reason}`);
   },
 });
 
@@ -207,7 +207,7 @@ export const failGeneration = internalMutation({
  * considered totally failed (LLM outage / rate limit / network).
  *
  * "Has streamed content" = any of: itinerary array length > 0, OR any
- * non-empty content field, OR any failedSections entry.
+ * STREAMING_SECTIONS field non-empty, OR any failedSections entry.
  */
 export const checkGenerationTimeout = internalMutation({
   args: { tripId: v.id("trips") },
@@ -217,17 +217,16 @@ export const checkGenerationTimeout = internalMutation({
     const itineraryLen = trip.itinerary
       ? safeParseArray(trip.itinerary).length
       : 0;
+    const hasAnyStreamedField = STREAMING_SECTIONS.some(
+      (s) => !!trip[s],
+    );
     const hasAnyContent =
       itineraryLen > 0 ||
-      !!trip.highlights ||
-      !!trip.visaChecklist ||
-      !!trip.budgetBreakdown ||
-      !!trip.packingSuggestions ||
-      !!trip.accommodationTips ||
+      hasAnyStreamedField ||
       (trip.failedSections ?? []).length > 0;
     if (!hasAnyContent) {
       await ctx.db.patch(tripId, { status: "failed" });
-      console.warn(`Trip ${tripId} timed out at 60s with no content`);
+      console.error(`Trip ${tripId} timed out at 60s with no content`);
     }
   },
 });
