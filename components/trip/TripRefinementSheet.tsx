@@ -415,6 +415,7 @@ function QuestionsList({
   answers: Record<string, string[]>;
   onAnswerChange: (id: string, values: string[]) => void;
 }) {
+  const total = questions.length;
   return (
     <View style={styles.questionsList}>
       {questions.map((q, index) => (
@@ -426,6 +427,8 @@ function QuestionsList({
               multiSelect={q.multiSelect ?? false}
               selected={answers[q.id] ?? []}
               onChange={(values) => onAnswerChange(q.id, values)}
+              stepIndex={index + 1}
+              stepTotal={total}
             />
           ) : (
             <RefinementTextCard
@@ -433,6 +436,8 @@ function QuestionsList({
               placeholder={q.placeholder}
               value={(answers[q.id] ?? [''])[0] ?? ''}
               onChangeText={(text) => onAnswerChange(q.id, [text])}
+              stepIndex={index + 1}
+              stepTotal={total}
             />
           )}
         </StaggeredFadeIn>
@@ -538,7 +543,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   questionsList: {
-    gap: 16,
+    gap: 14,
   },
   statePad: {
     paddingVertical: 36,
