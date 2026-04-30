@@ -492,7 +492,7 @@ git commit -m "feat(convex): add section→field map for trip generation"
 import { v } from "convex/values";
 import { internalMutation, internalAction, action } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { requireAuth } from "./auth";
+import { requireAuth } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import { lookupStaticFacts } from "../constants/staticTripFacts";
 
@@ -644,7 +644,7 @@ export const patchTripSection = internalMutation({
     // Itinerary day-by-day stream
     if (args.section.startsWith("itinerary-day:")) {
       const idx = Number(args.section.split(":")[1]);
-      if (!Number.isFinite(idx) || idx < 0) return;
+      if (!Number.isInteger(idx) || idx < 0) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const days: any[] = trip.itinerary ? safeParseArray(trip.itinerary) : [];
       try {
@@ -652,9 +652,11 @@ export const patchTripSection = internalMutation({
       } catch {
         // Malformed day payload — record as failed without touching itinerary.
         const existing = trip.failedSections ?? [];
-        await ctx.db.patch(args.tripId, {
-          failedSections: [...existing, args.section],
-        });
+        if (!existing.includes(args.section)) {
+          await ctx.db.patch(args.tripId, {
+            failedSections: [...existing, args.section],
+          });
+        }
         return;
       }
       await ctx.db.patch(args.tripId, { itinerary: JSON.stringify(days) });
@@ -1507,7 +1509,7 @@ git commit -m "feat(convex): generateTrip public action — stub + schedule stre
 - [ ] **Step 1: Append the retry action**
 
 ```ts
-import { checkTripPermission } from "./auth";
+import { checkTripPermission } from "./lib/auth";
 
 /**
  * Retry a single section after a failure. Re-runs that one section's
