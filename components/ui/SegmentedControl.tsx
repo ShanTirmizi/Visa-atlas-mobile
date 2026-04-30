@@ -1,5 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Pressable } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { FontFamily } from '@/constants/theme';
@@ -12,9 +19,50 @@ interface Props {
   value: string;
   onChange: (v: any) => void;
   variant?: Variant;
+  /**
+   * Optional map: tab option → whether to show a coral dot indicator
+   * next to that tab's label. Used during trip generation to flag
+   * tabs with pending content.
+   */
+  dotIndicators?: Record<string, boolean>;
 }
 
-export function SegmentedControl({ options, value, onChange, variant = 'pill' }: Props) {
+function PulsingDot() {
+  const { colors } = useTheme();
+  const o = useSharedValue(0.3);
+  useEffect(() => {
+    o.value = withRepeat(
+      withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, [o]);
+  const s = useAnimatedStyle(() => ({ opacity: o.value }));
+  return (
+    <Animated.View
+      style={[
+        {
+          position: 'absolute',
+          top: -2,
+          right: -7,
+          width: 4,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: colors.coral,
+        },
+        s,
+      ]}
+    />
+  );
+}
+
+export function SegmentedControl({
+  options,
+  value,
+  onChange,
+  variant = 'pill',
+  dotIndicators,
+}: Props) {
   const { colors } = useTheme();
 
   if (variant === 'squiggle') {
@@ -38,16 +86,19 @@ export function SegmentedControl({ options, value, onChange, variant = 'pill' }:
               onPress={() => onChange(o)}
               style={{ position: 'relative', paddingBottom: 6 }}
             >
-              <Text
-                style={{
-                  fontFamily: FontFamily.medium,
-                  fontSize: 14,
-                  fontWeight: active ? '700' : '500',
-                  color: active ? colors.teal : colors.inkMute,
-                }}
-              >
-                {o}
-              </Text>
+              <View style={{ position: 'relative' }}>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.medium,
+                    fontSize: 14,
+                    fontWeight: active ? '700' : '500',
+                    color: active ? colors.teal : colors.inkMute,
+                  }}
+                >
+                  {o}
+                </Text>
+                {dotIndicators?.[o] && <PulsingDot />}
+              </View>
               {active ? (
                 <Squiggle
                   width={48}
