@@ -12,8 +12,6 @@ import Animated, {
   withSequence,
   withTiming,
   Easing,
-  FadeIn,
-  FadeOut,
 } from 'react-native-reanimated';
 import {
   BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
@@ -21,26 +19,23 @@ import {
 } from '@gorhom/bottom-sheet';
 import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useMutation } from 'convex/react';
+import { useAction } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
 import { Type } from '@/constants/typography';
-import { endpoints } from '@/constants/api';
 import { visaData, resolveCountry, type CountryVisa, type HeldVisaType, type VisaCategory } from '@/data/visaData';
 import { countryMeta, type CountryMeta } from '@/data/countryMeta';
 import { travelData, type TravelInfo } from '@/data/travelData';
 import { Flag } from '@/components/ui/Flag';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { AnimalAvatar, ANIMAL_KINDS } from '@/components/ui/AnimalAvatar';
-import { TypingDots } from '@/components/ui/TypingDots';
 import { toAlpha2 } from '@/utils/countryCode';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Platform } from 'react-native';
 import { DarkOrb } from '@/components/ui/DarkOrb';
-import { VAStamp } from '@/components/auth/VAStamp';
 import { SectionKicker } from '@/components/ui/SectionKicker';
 
 // ── Constants ───────────────────────────────────────────────────────────
@@ -52,23 +47,6 @@ const VIBES = [
 const PACE_OPTIONS = ['relaxed', 'balanced', 'packed'];
 const BUDGET_OPTIONS = ['budget', 'mid', 'luxury'];
 const COMPANION_OPTIONS = ['solo', 'partner', 'friends', 'family'];
-
-// Travel-flavoured loading copy — drop trailing punctuation; the loader
-// adds an italic coral ellipsis itself so all messages get a consistent
-// editorial tail.
-const LOAD_MSGS = [
-  'Researching your destination',
-  'Drafting day-by-day itinerary',
-  'Finding the best local spots',
-  'Scouting hidden gems & restaurants',
-  'Calculating budget breakdown',
-  'Checking visa requirements',
-  'Packing your suitcase',
-  'Scouting car rental options',
-  'Finding the best time to visit',
-  'Stamping your passport',
-  'Adding final touches',
-];
 
 // Avatar tones for traveler stack — warm, forest, sunset palette
 const AVATAR_TONES = ['#C4A882', '#6B8F71', '#C97B4B'] as const;
@@ -217,7 +195,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // ── Core state ──────────────────────────────────────────────
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [tick, setTick] = useState(0);
 
     // ── Country picker state (used when sheet is launched without a
     // country — e.g. from Trips home's AI button). When a country is
@@ -273,7 +250,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const [budget] = useState('mid');
     const [party] = useState('couple');
 
-    const createTrip = useMutation(api.trips.createTrip);
+    const generateTripAction = useAction(api.tripGeneration.generateTrip);
     const sparkleStyle = usePlaneAnimation(isLoading);
 
     // ── Days derived from dates (or the dreaming nights stepper) ───
@@ -282,13 +259,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       const diff = endDate.getTime() - startDate.getTime();
       return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
     }, [dreaming, dreamNights, startDate, endDate]);
-
-    // ── Loading ticker ──────────────────────────────────────────
-    useEffect(() => {
-      if (!isLoading) { setTick(0); return; }
-      const id = setInterval(() => setTick((t) => t + 1), 3000);
-      return () => clearInterval(id);
-    }, [isLoading]);
 
     // ── Toggle vibe chip ────────────────────────────────────────
     const toggleVibe = useCallback((v: string) => {
@@ -308,7 +278,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setActiveVibes(new Set());
       setIsLoading(false);
       setError('');
-      setTick(0);
       setPickedCode('');
       setPickerSearch('');
       setShowPicker(false);
@@ -356,11 +325,15 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     }, [startDate]);
 
     // ── Generate trip ───────────────────────────────────────────
+    // Inserts a generation stub via Convex action; the action schedules
+    // server-side streaming so we can dismiss the sheet immediately and
+    // navigate the user onto the trip detail screen, where sections
+    // arrive live as they finish.
     const generate = useCallback(async () => {
       // When the sheet has a country prop (opened from country detail) we use
       // the prop chain. When opened standalone (Trips home) we fall back to
       // the country picked in the in-sheet picker. Either path must yield a
-      // full effective country before we hit the API.
+      // full effective country before we hit the action.
       const eff = effective ?? (
         country && meta && travel && resolved
           ? { country, meta, travel, resolved }
@@ -373,108 +346,31 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setIsLoading(true);
       setError('');
       try {
-        const res = await fetch(endpoints.generateTrip, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            countryCode: eff.country.code,
-            duration: days,
-            heldVisas: [...heldVisas],
-            vibe,
-            budget,
-            interests: [...activeVibes].join(', ') || 'culture, food, sightseeing',
-            activityStyles: [...activeVibes],
-            travelParty: travelers > 1 ? party : 'solo',
-          }),
-        });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
-
-        // ── Fetch images (hero + per-day + per-activity) ─────────────────
-        let heroImageJson: string | undefined;
-        let dayImagesJson: string | undefined;
-        let activityImagesJson: string | undefined;
-        try {
-          type ItineraryDay = {
-            morningPlace?: string;
-            afternoonPlace?: string;
-            eveningPlace?: string;
-            title?: string;
-            heroSubject?: string;
-          };
-          const itineraryDays: ItineraryDay[] = data.itinerary
-            ? (JSON.parse(data.itinerary) as ItineraryDay[])
-            : [];
-          const activities = itineraryDays.flatMap((d) => [
-            d.morningPlace ? { name: 'morning', place: d.morningPlace } : null,
-            d.afternoonPlace ? { name: 'afternoon', place: d.afternoonPlace } : null,
-            d.eveningPlace ? { name: 'evening', place: d.eveningPlace } : null,
-          ]).filter(Boolean);
-
-          const dayHeroSubjects = itineraryDays.map(
-            (d) =>
-              d.heroSubject ??
-              d.morningPlace ??
-              d.afternoonPlace ??
-              d.eveningPlace ??
-              d.title ??
-              '',
-          );
-
-          const imgRes = await fetch(endpoints.tripImages, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              countryName: data.countryName,
-              capital: data.capital,
-              activities,
-              dayHeroSubjects,
-            }),
-          });
-          if (imgRes.ok) {
-            const imgData = await imgRes.json() as {
-              hero: unknown;
-              activities: unknown[];
-              dayImages?: unknown[];
-            };
-            if (imgData.hero) heroImageJson = JSON.stringify(imgData.hero);
-            if (imgData.activities?.length) activityImagesJson = JSON.stringify(imgData.activities);
-            if (imgData.dayImages?.length) dayImagesJson = JSON.stringify(imgData.dayImages);
-          }
-        } catch {
-          // Images are non-critical — proceed without them
-        }
-
-        // When the user is in "Dreaming" mode (no committed dates) we omit
-        // startDate/endDate so the trip lands in the Dreaming filter. When
-        // dates ARE picked we serialise as ISO date strings so they sort
-        // correctly under Upcoming/Past.
-        const tripId = await createTrip({
-          ...data,
-          status: 'planned' as const,
+        const tripId = await generateTripAction({
+          countryCode: eff.country.code,
+          countryName: eff.country.name,
+          capital: eff.meta?.capital ?? eff.country.name,
+          duration: days,
+          heldVisas: [...heldVisas],
+          vibe,
+          budget,
+          interests: [...activeVibes].join(', ') || 'culture, food, sightseeing',
+          activityStyles: [...activeVibes],
+          travelParty: travelers > 1 ? party : 'solo',
           companions: travelers > 1 ? JSON.stringify({ party, count: travelers }) : undefined,
-          heroImage: heroImageJson,
-          dayImages: dayImagesJson,
-          activityImages: activityImagesJson,
           startDate: dreaming ? undefined : startDate.toISOString().slice(0, 10),
           endDate: dreaming ? undefined : endDate.toISOString().slice(0, 10),
         });
-        setTimeout(() => {
-          bottomSheetRef.current?.dismiss();
-          onTripCreated(String(tripId));
-        }, 300);
-      } catch (e) {
-        if (e instanceof Error && e.message.startsWith('No destination')) {
-          setError(e.message);
-        } else {
-          setError('Failed to generate trip. Please try again.');
-        }
+        bottomSheetRef.current?.dismiss();
+        onTripCreated(String(tripId));
+      } catch {
+        setError("Couldn't start your trip. Please try again.");
         setIsLoading(false);
       }
     }, [
       effective, country, meta, travel, resolved, heldVisas,
       days, vibe, budget, activeVibes, travelers, party,
-      createTrip, onTripCreated,
+      generateTripAction, onTripCreated, dreaming, startDate, endDate,
     ]);
 
     // ── Backdrop ────────────────────────────────────────────────
@@ -1072,54 +968,18 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             </View>
           </Modal>
 
-          {/* ── LOADING STATE — editorial framing + VA stamp ────── */}
+          {/* ── LOADING STATE — minimal wait between tap and dismiss ──
+              The streaming generateTrip action returns the new tripId in
+              under a second; the sheet dismisses on resolve and the user
+              lands on the trip detail screen where content streams in. */}
           {isLoading && (
             <View style={s.loadingContainer}>
-              {/* Mono kicker + coral squiggle */}
-              <View style={s.loadingKickerRow}>
-                <Text
-                  style={{
-                    fontFamily: FontFamily.monoMedium,
-                    fontSize: 11,
-                    fontWeight: '700',
-                    letterSpacing: 11 * 0.22,
-                    textTransform: 'uppercase',
-                    color: colors.coralDeep,
-                  }}
-                >
-                  BUILDING YOUR ATLAS
-                </Text>
-                <Squiggle width={28} color={colors.coral} />
-              </View>
-
-              {/* Italic Fraunces country name with coral period */}
-              <Text
-                style={{
-                  fontFamily: FontFamily.displayItalic,
-                  fontStyle: 'italic',
-                  fontSize: 32,
-                  lineHeight: 36,
-                  letterSpacing: -32 * 0.022,
-                  fontWeight: '500',
-                  color: colors.ink,
-                  marginTop: 6,
-                  textAlign: 'center',
-                }}
-              >
-                {effective?.country.name ?? country.name}
-                <Text style={{ color: colors.coral }}>.</Text>
-              </Text>
-
-              {/* Floating VA passport stamp — same logo as auth + onboarding */}
-              <Animated.View style={[sparkleStyle, { marginTop: 28 }]}>
-                <VAStamp size={140} />
+              <Animated.View style={sparkleStyle}>
+                <DarkOrb size={64}>
+                  <Sparkles size={26} color="#FFFFFF" fill="#FFFFFF" />
+                </DarkOrb>
               </Animated.View>
-
-              {/* Rotating status message — italic Fraunces with coral ellipsis */}
-              <Animated.Text
-                key={tick}
-                entering={FadeIn.duration(400)}
-                exiting={FadeOut.duration(200)}
+              <Text
                 style={{
                   fontFamily: FontFamily.displayItalic,
                   fontStyle: 'italic',
@@ -1129,18 +989,12 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                   fontWeight: '500',
                   color: colors.inkSoft,
                   textAlign: 'center',
-                  marginTop: 28,
-                  paddingHorizontal: 32,
+                  marginTop: 16,
                 }}
               >
-                {LOAD_MSGS[tick % LOAD_MSGS.length]}
+                Starting your trip
                 <Text style={{ color: colors.coral }}>…</Text>
-              </Animated.Text>
-
-              {/* Typing dots — coral to match the editorial accents */}
-              <View style={{ marginTop: Spacing.lg }}>
-                <TypingDots color={colors.coral} gap={8} />
-              </View>
+              </Text>
             </View>
           )}
         </BottomSheetScrollView>
@@ -1330,11 +1184,6 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
       paddingVertical: Spacing['5xl'],
       paddingHorizontal: Spacing.lg,
-    },
-    loadingKickerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
     },
 
     // ── Country picker modal ──────────────────────────────────

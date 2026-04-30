@@ -287,7 +287,7 @@ export default function TripsScreen() {
             travel={null}
             resolved={{ category: 'visa-required' }}
             heldVisas={new Set()}
-            onTripCreated={() => {}}
+            onTripCreated={(tripId) => router.push(`/trip/${tripId}` as never)}
           />
         </ScrollView>
         <TopSafeAreaBlur />
@@ -409,7 +409,7 @@ export default function TripsScreen() {
         travel={null}
         resolved={{ category: 'visa-required' }}
         heldVisas={new Set()}
-        onTripCreated={() => {}}
+        onTripCreated={(tripId) => router.push(`/trip/${tripId}` as never)}
       />
     </ScrollView>
     <TopSafeAreaBlur />
