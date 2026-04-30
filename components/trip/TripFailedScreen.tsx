@@ -9,6 +9,8 @@ import { api } from '@/convex/_generated/api';
 import type { Doc } from '@/convex/_generated/dataModel';
 import { useRouter } from 'expo-router';
 import { AlertTriangle } from 'lucide-react-native';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
+import { BackButton } from '@/components/ui/BackButton';
 
 interface TripFailedScreenProps {
   trip: Doc<'trips'>;
@@ -65,6 +67,9 @@ export function TripFailedScreen({ trip }: TripFailedScreenProps) {
         backgroundColor: colors.background,
       }}
     >
+      <View style={{ position: 'absolute', top: Spacing.md, left: Spacing.md, zIndex: 5 }}>
+        <BackButton />
+      </View>
       <AlertTriangle size={42} color={colors.coral} strokeWidth={1.6} />
       <Text
         style={[
@@ -108,6 +113,7 @@ export function TripFailedScreen({ trip }: TripFailedScreenProps) {
       >
         <Text style={{ color: colors.inkMute, fontSize: 13 }}>Delete</Text>
       </Pressable>
+      <TopSafeAreaBlur />
     </View>
   );
 }
