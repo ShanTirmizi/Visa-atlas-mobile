@@ -427,7 +427,14 @@ function DayDeck({
             key={idx}
             dayIdx={idx}
             day={day}
-            image={dayImages[idx] ?? tripHeroImage ?? null}
+            // Per-day image only — never fall back to the trip-level hero,
+            // because during streaming the per-day images haven't arrived
+            // yet and ALL cards would render the same hero photo (Day 2,
+            // 3, 4 of New Zealand all showing the Queenstown hero, etc.).
+            // DayDeckCard handles `null` gracefully with its dark photo
+            // region, so an unloaded card reads as "image arriving" rather
+            // than "wrong image."
+            image={dayImages[idx] ?? null}
             place={pickPlace(day) ?? destination}
             date={formatDayDate(tripStartDate, idx)}
             activeIdxJS={activeIdx}
