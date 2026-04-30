@@ -40,6 +40,18 @@ import BackButton from '@/components/ui/BackButton';
 import { Squiggle } from '@/components/ui/Squiggle';
 import VerifyEmailSheet, { type VerifyEmailSheetRef } from '@/components/settings/VerifyEmailSheet';
 
+function buildWishlistRowValue(tripCount: number, countryCount: number): string {
+  if (tripCount === 0 && countryCount === 0) return 'None';
+  const parts: string[] = [];
+  if (tripCount > 0) {
+    parts.push(`${tripCount} ${tripCount === 1 ? 'trip' : 'trips'}`);
+  }
+  if (countryCount > 0) {
+    parts.push(`${countryCount} ${countryCount === 1 ? 'country' : 'countries'}`);
+  }
+  return parts.join(' · ');
+}
+
 function getPassportName(code: string): string {
   return passportCountries.find((c) => c.code === code)?.name ?? code;
 }
@@ -158,6 +170,16 @@ export default function SettingsScreen() {
     api.trips.getCurrentUser,
     isAuthenticated ? {} : 'skip',
   );
+  // Wishlist count combines two sources: country-level favorites
+  // (AsyncStorage, set on country pages) AND starred trips
+  // (trip.starred on the Convex doc, set on trip pages). The settings
+  // row was previously only counting favorites and showing "None"
+  // even when the user had starred trips.
+  const allTrips = useQuery(
+    api.trips.listTrips,
+    isAuthenticated ? {} : 'skip',
+  );
+  const starredTripCount = (allTrips ?? []).filter((t) => t.starred).length;
 
   const passportInitial = passports[0] ? passports[0].slice(0, 1) : '?';
 
@@ -412,13 +434,7 @@ export default function SettingsScreen() {
               <SettingsRow
                 icon={<Heart size={16} color={colors.coral} />}
                 label="Wishlist"
-                value={
-                  favorites.length > 0
-                    ? `${favorites.length} ${
-                        favorites.length === 1 ? 'country' : 'countries'
-                      }`
-                    : 'None'
-                }
+                value={buildWishlistRowValue(starredTripCount, favorites.length)}
                 onPress={() =>
                   router.push('/more/favorites' as import('expo-router').Href)
                 }

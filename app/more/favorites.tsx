@@ -9,11 +9,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Heart, Sparkles, ChevronRight } from 'lucide-react-native';
+import { Heart, Sparkles, ChevronRight, Plane } from 'lucide-react-native';
 
 import { useConvexAuth, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
+import type { Doc, Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { Spacing, Radius, FontFamily } from '@/constants/theme';
@@ -40,12 +41,20 @@ import TripPlannerSheet, {
 } from '@/components/trip/TripPlannerSheet';
 
 /**
- * Wishlist — the destination of every "saved country" the user has hearted
- * across the app. Each card lets the user either dive into the country
- * detail (read more, see visa rules, weather, costs) or jump straight to
- * the planner sheet pre-filled with that country.
+ * Wishlist — two distinct sections, each routing to where its source
+ * actually lives:
  *
- * Replaces the previous stub that just rendered a count.
+ *   • Saved trips    — anything the user hearted on a trip detail
+ *                      screen (sets trip.starred). Card tap → trip page.
+ *   • Saved countries — anything the user hearted on a country detail
+ *                      screen (toggles useVisa().favorites). Card tap →
+ *                      country page, with a "Plan a trip" CTA that opens
+ *                      the planner pre-filled.
+ *
+ * Trips and countries are *not* merged into a single list — that was
+ * confusing because tapping a trip-sourced card sent the user to the
+ * country page (wrong) instead of the trip page (right). Two sections,
+ * two routes.
  */
 export default function FavoritesScreen() {
   const { colors } = useTheme();
@@ -54,40 +63,30 @@ export default function FavoritesScreen() {
   const { favorites, heldVisas, toggleFavorite } = useVisa();
   const { isAuthenticated } = useConvexAuth();
 
-  // Trips have their own "starred" heart on the trip detail screen
-  // (sets trip.starred on the Convex doc). Users naturally expect any
-  // hearted thing — country or trip — to land in the wishlist, so we
-  // merge starred-trip countries into the saved-country list.
   const trips = useOfflineQuery(
     api.trips.listTrips,
     isAuthenticated ? {} : 'skip',
   );
 
-  const starredTripCountryCodes = useMemo(() => {
-    if (!trips) return new Set<string>();
-    const codes = new Set<string>();
-    for (const t of trips) {
-      if (t.starred && t.countryCode) {
-        codes.add(t.countryCode.toUpperCase());
-      }
-    }
-    return codes;
+  // Saved trips — every trip with starred === true, newest first.
+  const starredTrips = useMemo(() => {
+    if (!trips) return [];
+    return trips
+      .filter((t) => t.starred)
+      .slice()
+      .sort((a, b) => (b._creationTime ?? 0) - (a._creationTime ?? 0));
   }, [trips]);
 
-  // Resolve each saved alpha-3 code into a full CountryVisa record.
-  // Sources: explicit country favorites + countries from starred trips,
-  // de-duplicated via a Set. Codes not in the visa table silently drop.
+  // Saved countries — country-level favorites only. NOT merged with
+  // starred-trip countries; those have their own section.
   const savedCountries = useMemo(() => {
-    const merged = new Set<string>();
-    for (const code of favorites) merged.add(code.toUpperCase());
-    for (const code of starredTripCountryCodes) merged.add(code);
-    return Array.from(merged)
+    return favorites
       .map((code) => visaData.find((c) => c.code === code))
       .filter((c): c is CountryVisa => Boolean(c));
-  }, [favorites, starredTripCountryCodes]);
+  }, [favorites]);
 
-  // Planner sheet — mounted once at the bottom of this screen and
-  // re-presented for whichever country the user taps "Plan a trip" on.
+  // Planner sheet — re-presented for whichever country card the user
+  // taps "Plan a trip" on.
   const tripSheetRef = useRef<TripPlannerSheetRef>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
@@ -109,9 +108,6 @@ export default function FavoritesScreen() {
 
   const onPlanTrip = useCallback((code: string) => {
     setSelectedCode(code);
-    // Defer present() one frame so the sheet receives the new country
-    // props before opening (otherwise it'd render the in-sheet country
-    // picker for an instant before snapping to the pre-filled state).
     requestAnimationFrame(() => {
       tripSheetRef.current?.present();
     });
@@ -119,49 +115,50 @@ export default function FavoritesScreen() {
 
   const setTripStarred = useMutation(api.trips.setTripStarred);
 
-  // Remove the country from every source that puts it on the wishlist:
-  // toggle off the country-level favorite (if present), and unstar every
-  // trip whose countryCode matches. Otherwise the user can tap "Remove",
-  // see nothing happen, and rightfully assume the button is broken.
-  const onRemove = useCallback(
+  // Country REMOVE — only touches country-favorites. Doesn't unstar
+  // trips, because trips have their own section + remove flow.
+  const onRemoveCountry = useCallback(
     (code: string, name: string) => {
-      const upper = code.toUpperCase();
-      const isCountryFavorite = favorites.some(
-        (c) => c.toUpperCase() === upper,
-      );
-      const matchingTrips = (trips ?? []).filter(
-        (t) => t.countryCode?.toUpperCase() === upper && t.starred,
-      );
       Alert.alert(
         `Remove ${name}?`,
-        matchingTrips.length > 0
-          ? `Removes ${name} from your favorites and unstars ${
-              matchingTrips.length === 1
-                ? 'the trip'
-                : `${matchingTrips.length} trips`
-            } you've hearted to it.`
-          : 'Removes it from your wishlist — it stays available everywhere else in the app.',
+        'Removes it from your saved countries. Your trips and their hearts are unaffected.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Remove',
             style: 'destructive',
-            onPress: async () => {
-              if (isCountryFavorite) toggleFavorite(code);
-              await Promise.all(
-                matchingTrips.map((t) =>
-                  setTripStarred({ id: t._id, starred: false }).catch(() => {}),
-                ),
-              );
+            onPress: () => toggleFavorite(code),
+          },
+        ],
+      );
+    },
+    [toggleFavorite],
+  );
+
+  // Trip REMOVE — unstars the trip. Doesn't touch the country
+  // favorite even if the same country is on both lists.
+  const onUnstarTrip = useCallback(
+    (id: Id<'trips'>, label: string) => {
+      Alert.alert(
+        `Remove this trip?`,
+        `Unstars your ${label} trip. The trip itself stays in your trips list.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: () => {
+              setTripStarred({ id, starred: false }).catch(() => {});
             },
           },
         ],
       );
     },
-    [favorites, trips, toggleFavorite, setTripStarred],
+    [setTripStarred],
   );
 
-  const isReady = !!selectedCountry && !!selectedResolved;
+  const isPlannerReady = !!selectedCountry && !!selectedResolved;
+  const totalCount = starredTrips.length + savedCountries.length;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -173,50 +170,80 @@ export default function FavoritesScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Top chrome: circular back button per the CLAUDE.md mandate. */}
         <View style={{ marginBottom: Spacing.xl }}>
           <BackButton />
         </View>
 
-        {/* Editorial title — italic Fraunces with a coral period, matches
-            the rest of the app's section headers. */}
         <Section
-          kicker={`${savedCountries.length} ${
-            savedCountries.length === 1 ? 'COUNTRY' : 'COUNTRIES'
-          } · SAVED TO PLAN LATER`}
+          kicker={buildHeaderKicker(starredTrips.length, savedCountries.length)}
           title="Wishlist"
           squiggleWidth={130}
           size="lg"
         />
 
-        {savedCountries.length === 0 ? (
+        {totalCount === 0 ? (
           <EmptyState colors={colors} />
         ) : (
-          <View style={{ gap: 12, marginTop: Spacing.lg }}>
-            {savedCountries.map((country) => (
-              <WishlistCard
-                key={country.code}
-                country={country}
-                heldSet={heldSet}
-                onOpenCountry={() =>
-                  router.push(`/country/${country.code}` as never)
-                }
-                onPlanTrip={() => onPlanTrip(country.code)}
-                onRemove={() => onRemove(country.code, country.name)}
-              />
-            ))}
-          </View>
+          <>
+            {starredTrips.length > 0 ? (
+              <View style={{ marginTop: Spacing.lg }}>
+                <SectionHeader
+                  label={`SAVED TRIPS · ${starredTrips.length}`}
+                  colors={colors}
+                />
+                <View style={{ gap: 12 }}>
+                  {starredTrips.map((trip) => (
+                    <TripWishlistCard
+                      key={trip._id}
+                      trip={trip}
+                      onOpen={() =>
+                        router.push(`/trip/${trip._id}` as never)
+                      }
+                      onRemove={() =>
+                        onUnstarTrip(trip._id, trip.countryName ?? 'this')
+                      }
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {savedCountries.length > 0 ? (
+              <View
+                style={{
+                  marginTop:
+                    starredTrips.length > 0 ? Spacing.xl : Spacing.lg,
+                }}
+              >
+                <SectionHeader
+                  label={`SAVED COUNTRIES · ${savedCountries.length}`}
+                  colors={colors}
+                />
+                <View style={{ gap: 12 }}>
+                  {savedCountries.map((country) => (
+                    <CountryWishlistCard
+                      key={country.code}
+                      country={country}
+                      heldSet={heldSet}
+                      onOpen={() =>
+                        router.push(`/country/${country.code}` as never)
+                      }
+                      onPlanTrip={() => onPlanTrip(country.code)}
+                      onRemove={() =>
+                        onRemoveCountry(country.code, country.name)
+                      }
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </>
         )}
       </ScrollView>
 
-      {/* Mandated TopSafeAreaBlur — keeps scrolled content from drifting
-          behind the Dynamic Island unmasked. */}
       <TopSafeAreaBlur />
 
-      {/* Planner sheet — single instance reused across cards. Only
-          mount once we have a selected country with resolved visa data,
-          otherwise the sheet's required country prop is null. */}
-      {isReady && selectedCountry && selectedResolved && (
+      {isPlannerReady && selectedCountry && selectedResolved && (
         <TripPlannerSheet
           ref={tripSheetRef}
           country={selectedCountry}
@@ -233,35 +260,64 @@ export default function FavoritesScreen() {
   );
 }
 
-// ─── WishlistCard ─────────────────────────────────────────────────────
+// ─── Header kicker copy ──────────────────────────────────────────────
 
-interface WishlistCardProps {
-  country: CountryVisa;
-  heldSet: Set<HeldVisaType>;
-  onOpenCountry: () => void;
-  onPlanTrip: () => void;
+function buildHeaderKicker(tripCount: number, countryCount: number): string {
+  const parts: string[] = [];
+  if (tripCount > 0) {
+    parts.push(`${tripCount} ${tripCount === 1 ? 'TRIP' : 'TRIPS'}`);
+  }
+  if (countryCount > 0) {
+    parts.push(
+      `${countryCount} ${countryCount === 1 ? 'COUNTRY' : 'COUNTRIES'}`,
+    );
+  }
+  if (parts.length === 0) return 'NOTHING SAVED YET';
+  return `${parts.join(' · ')} · SAVED TO PLAN LATER`;
+}
+
+// ─── Section header (intra-screen) ───────────────────────────────────
+
+function SectionHeader({
+  label,
+  colors,
+}: {
+  label: string;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  return (
+    <Text
+      style={[
+        Type.kickerSm,
+        {
+          color: colors.inkMute,
+          fontSize: 10,
+          letterSpacing: 1.4,
+          marginBottom: Spacing.sm,
+        },
+      ]}
+    >
+      {label}
+    </Text>
+  );
+}
+
+// ─── Trip card ───────────────────────────────────────────────────────
+
+interface TripWishlistCardProps {
+  trip: Doc<'trips'> & { _role?: string };
+  onOpen: () => void;
   onRemove: () => void;
 }
 
-function WishlistCard({
-  country,
-  heldSet,
-  onOpenCountry,
-  onPlanTrip,
-  onRemove,
-}: WishlistCardProps) {
+function TripWishlistCard({ trip, onOpen, onRemove }: TripWishlistCardProps) {
   const { colors } = useTheme();
-  const resolved = useMemo(
-    () => resolveCountry(country, heldSet),
-    [country, heldSet],
-  );
-  const meta = countryMeta[country.code];
-  const region = meta?.region ?? '—';
-  const alpha2 = toAlpha2(country.code);
+  const alpha2 = trip.countryCode ? toAlpha2(trip.countryCode) : '';
+  const dateRange = formatTripDates(trip.startDate, trip.endDate);
 
   return (
     <Pressable
-      onPress={onOpenCountry}
+      onPress={onOpen}
       onLongPress={onRemove}
       delayLongPress={500}
       style={({ pressed }) => [
@@ -273,7 +329,129 @@ function WishlistCard({
         },
       ]}
     >
-      {/* Top row — flag + name + region + visa pill + chevron. */}
+      <View style={styles.topRow}>
+        <View style={styles.flagWrap}>
+          {alpha2 ? <Flag code={alpha2} size={36} /> : null}
+        </View>
+
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text
+            style={[
+              Type.title18,
+              {
+                color: colors.ink,
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+                letterSpacing: -0.18,
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {trip.countryName ?? 'Trip'}
+          </Text>
+          <Text
+            style={[
+              Type.kickerSm,
+              { color: colors.inkMute, fontSize: 10, letterSpacing: 1 },
+            ]}
+            numberOfLines={1}
+          >
+            {dateRange}
+          </Text>
+        </View>
+
+        <View style={styles.rightCol}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: colors.coralBg,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 999,
+            }}
+          >
+            <Plane size={10} color={colors.coral} strokeWidth={2.2} />
+            <Text
+              style={{
+                color: colors.coral,
+                fontSize: 9,
+                fontWeight: '600',
+                letterSpacing: 0.5,
+              }}
+            >
+              TRIP
+            </Text>
+          </View>
+          <ChevronRight size={16} color={colors.inkMute} strokeWidth={2} />
+        </View>
+      </View>
+
+      <View style={styles.bottomRow}>
+        <View style={{ flex: 1 }} />
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          hitSlop={10}
+          style={({ pressed }) => ({
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            opacity: pressed ? 0.55 : 1,
+          })}
+          accessibilityLabel="Remove this trip from wishlist"
+        >
+          <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 11 }]}>
+            REMOVE
+          </Text>
+        </Pressable>
+      </View>
+    </Pressable>
+  );
+}
+
+// ─── Country card ────────────────────────────────────────────────────
+
+interface CountryWishlistCardProps {
+  country: CountryVisa;
+  heldSet: Set<HeldVisaType>;
+  onOpen: () => void;
+  onPlanTrip: () => void;
+  onRemove: () => void;
+}
+
+function CountryWishlistCard({
+  country,
+  heldSet,
+  onOpen,
+  onPlanTrip,
+  onRemove,
+}: CountryWishlistCardProps) {
+  const { colors } = useTheme();
+  const resolved = useMemo(
+    () => resolveCountry(country, heldSet),
+    [country, heldSet],
+  );
+  const meta = countryMeta[country.code];
+  const region = meta?.region ?? '—';
+  const alpha2 = toAlpha2(country.code);
+
+  return (
+    <Pressable
+      onPress={onOpen}
+      onLongPress={onRemove}
+      delayLongPress={500}
+      style={({ pressed }) => [
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.line,
+          opacity: pressed ? 0.92 : 1,
+        },
+      ]}
+    >
       <View style={styles.topRow}>
         <View style={styles.flagWrap}>
           <Flag code={alpha2} size={36} />
@@ -311,7 +489,6 @@ function WishlistCard({
         </View>
       </View>
 
-      {/* Bottom row — primary CTA + secondary "Remove" affordance. */}
       <View style={styles.bottomRow}>
         <Pressable
           onPress={(e) => {
@@ -353,7 +530,7 @@ function WishlistCard({
   );
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────
+// ─── Empty state ─────────────────────────────────────────────────────
 
 function EmptyState({ colors }: { colors: ReturnType<typeof useTheme>['colors'] }) {
   return (
@@ -385,11 +562,29 @@ function EmptyState({ colors }: { colors: ReturnType<typeof useTheme>['colors'] 
           { color: colors.inkMute, textAlign: 'center', maxWidth: 280 },
         ]}
       >
-        Tap the heart on any country page to save it here. We'll keep it
-        ready for when you're ready to plan.
+        Tap the heart on any country page or trip to save it here. We'll
+        keep them ready for when you're ready to plan.
       </Text>
     </View>
   );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+function formatTripDates(start?: string, end?: string): string {
+  if (!start && !end) return 'NO DATES';
+  const fmt = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d
+      .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      .toUpperCase();
+  };
+  const s = fmt(start);
+  const e = fmt(end);
+  if (s && e) return `${s} → ${e}`;
+  return s || e || 'NO DATES';
 }
 
 const styles = StyleSheet.create({
@@ -420,7 +615,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: 56, // align with the text column above
+    paddingLeft: 56,
   },
   planBtn: {
     flexDirection: 'row',
