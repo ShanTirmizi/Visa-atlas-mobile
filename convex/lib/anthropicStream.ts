@@ -14,6 +14,12 @@ interface GenerateInput {
   startDate?: string;
   endDate?: string;
   companions?: string;
+  /**
+   * Free-text brief from the user — original text plus any refinement
+   * answers merged in. Optional; absent or whitespace-only means no extra
+   * context for the LLM.
+   */
+  userNotes?: string;
 }
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -27,6 +33,12 @@ const MODEL = "claude-sonnet-4-6";
  * window.
  */
 export function buildSystemPrompt(input: GenerateInput): string {
+  const trimmedNotes = input.userNotes?.trim();
+  const userNotesBlock =
+    trimmedNotes && trimmedNotes.length > 0
+      ? `\n\nThe user has shared specific requests in their own words:\n"${trimmedNotes}"\n\nHonor these requests where they don't conflict with the structured fields above. The structured fields are the source of truth — country, duration, travel party, and dates are non-negotiable. The user's requests can refine scope (focus on specific cities), pace, interests, must-sees, and must-avoids. Where their requests are silent or ambiguous, use your judgment.`
+      : "";
+
   return `You are a meticulous travel planner writing for a premium iOS app called Visa Atlas.
 
 The user's trip:
@@ -41,7 +53,7 @@ The user's trip:
 - Visas already held: ${input.heldVisas.join(", ") || "none"}
 ${input.startDate && input.endDate ? `- Dates: ${input.startDate} → ${input.endDate}` : "- Dates: flexible (\"dreaming\" mode)"}
 
-Tone: editorial, specific, never generic. Recommend real places by name. Avoid clichés ("hidden gem", "must-see", "off the beaten path"). Write the way the New York Times Travel section does — confident, particular, warm.
+Tone: editorial, specific, never generic. Recommend real places by name. Avoid clichés ("hidden gem", "must-see", "off the beaten path"). Write the way the New York Times Travel section does — confident, particular, warm.${userNotesBlock}
 
 Output: emit ONLY valid JSON for the requested section, no preamble, no markdown fences, no explanation. Match the schema exactly.`;
 }
@@ -49,6 +61,12 @@ Output: emit ONLY valid JSON for the requested section, no preamble, no markdown
 // ── Per-section instruction prompts ──────────────────────────────
 
 export function buildItineraryUserPrompt(input: GenerateInput): string {
+  const trimmedNotes = input.userNotes?.trim();
+  const userNotesReminder =
+    trimmedNotes && trimmedNotes.length > 0
+      ? `\n\nRemember the user's specific requests as you plan each day:\n"${trimmedNotes}"`
+      : "";
+
   return `Generate the day-by-day itinerary as a JSON array with exactly ${input.duration} elements. Each element matches:
 
 {
@@ -64,7 +82,7 @@ export function buildItineraryUserPrompt(input: GenerateInput): string {
   "tip": "Optional one-sentence local tip. May be omitted."
 }
 
-Emit ONLY the JSON array. No surrounding object, no preamble.`;
+Emit ONLY the JSON array. No surrounding object, no preamble.${userNotesReminder}`;
 }
 
 export function buildVisaUserPrompt(input: GenerateInput): string {
