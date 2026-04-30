@@ -70,6 +70,7 @@ interface SettingsRowProps {
   onPress?: () => void;
   isFirst?: boolean;
   destructive?: boolean;
+  disabled?: boolean;
 }
 
 function SettingsRow({
@@ -79,17 +80,19 @@ function SettingsRow({
   onPress,
   isFirst,
   destructive,
+  disabled,
 }: SettingsRowProps) {
   const { colors } = useTheme();
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.row,
         {
           borderTopWidth: isFirst ? 0 : 1,
           borderTopColor: colors.line,
-          opacity: pressed ? 0.85 : 1,
+          opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
         },
       ]}
     >
@@ -126,7 +129,9 @@ function SettingsRow({
           </Text>
         ) : null}
       </View>
-      <ChevronRight color={destructive ? colors.rose : colors.inkMute} size={16} />
+      {disabled ? null : (
+        <ChevronRight color={destructive ? colors.rose : colors.inkMute} size={16} />
+      )}
     </Pressable>
   );
 }
@@ -355,8 +360,8 @@ export default function SettingsScreen() {
                   isFirst
                   icon={<Mail size={16} color={colors.coralDeep} />}
                   label="Verify your email"
-                  value="Unverified"
-                  onPress={() => verifyEmailRef.current?.open()}
+                  value="Coming soon"
+                  disabled
                 />
               </View>
             </View>
@@ -406,10 +411,12 @@ export default function SettingsScreen() {
               />
               <SettingsRow
                 icon={<Heart size={16} color={colors.coral} />}
-                label="Saved countries"
+                label="Wishlist"
                 value={
                   favorites.length > 0
-                    ? `${favorites.length} saved`
+                    ? `${favorites.length} ${
+                        favorites.length === 1 ? 'country' : 'countries'
+                      }`
                     : 'None'
                 }
                 onPress={() =>
