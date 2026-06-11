@@ -3,7 +3,7 @@ import { internalMutation, internalAction, internalQuery, mutation } from "./_ge
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { checkTripPermission, requireAuth } from "./lib/auth";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { lookupStaticFacts } from "../constants/staticTripFacts";
 import { deriveVisaDeadline } from "../utils/visaDeadline";
 import { visaData } from "../data/visaData";
@@ -1090,7 +1090,12 @@ export const retrySection = mutation({
 
     const trip = await ctx.db.get(tripId);
     if (!trip) throw new Error("Trip not found");
-    if (!trip.originalInputs) throw new Error("No original inputs stored — cannot retry");
+    // Dining rebuilds prompt context from the trip doc itself
+    // (inputsForTrip), so legacy trips without an originalInputs snapshot
+    // can still retry it — every other section needs the real inputs.
+    if (!trip.originalInputs && section !== "diningGuide") {
+      throw new Error("No original inputs stored — cannot retry");
+    }
     if (!RETRYABLE_SECTIONS.has(section)) {
       // Stale failedSections entry from an older generation pipeline.
       throw new Error(`Cannot retry unknown section: ${section}`);
@@ -1130,7 +1135,8 @@ export const generateDiningGuide = mutation({
     const trip = await ctx.db.get(tripId);
     if (!trip || trip.deletedAt !== undefined) throw new Error("Trip not found");
     if (trip.status === "generating") return; // the main run will produce it
-    if (!trip.originalInputs) throw new Error("No original inputs stored");
+    // No originalInputs requirement — dining rebuilds prompt context from
+    // the trip doc (inputsForTrip), so pre-snapshot legacy trips work too.
     const days = trip.itinerary ? safeParseArray(trip.itinerary) : [];
     if (days.filter(Boolean).length === 0) {
       throw new Error("Itinerary not ready yet");
@@ -1346,6 +1352,41 @@ export const runRetrySection = internalAction({
   },
 });
 
+/**
+ * Prompt-building inputs, tolerant of legacy trips. Trips created before
+ * `originalInputs` existed (early 2026) can still backfill stops and
+ * curate dining — the system prompt is rebuilt from the trip doc itself
+ * with neutral defaults for the planner-only fields. Only used by the
+ * dining/backfill paths; sections that regenerate core content (visa,
+ * budget, itinerary) still require the genuine stored inputs.
+ */
+function inputsForTrip(
+  trip: Doc<"trips">,
+): Parameters<typeof buildSystemPrompt>[0] {
+  if (trip.originalInputs) {
+    try {
+      return JSON.parse(trip.originalInputs);
+    } catch {
+      // Corrupted — fall through to the synthesized shape.
+    }
+  }
+  return {
+    countryCode: trip.countryCode,
+    countryName: trip.countryName,
+    capital: trip.capital,
+    duration: trip.duration,
+    vibe: trip.vibeTag ?? "balanced — a bit of everything",
+    budget: "mid-range",
+    interests: "",
+    activityStyles: [],
+    travelParty: trip.companions ?? "solo",
+    heldVisas: [],
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    userNotes: trip.userNotes,
+  };
+}
+
 async function runRetrySectionInner(
   ctx: ActionCtx,
   tripId: Id<"trips">,
@@ -1354,15 +1395,22 @@ async function runRetrySectionInner(
   {
     const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
     if (!trip) throw new Error("Trip not found");
-    if (!trip.originalInputs) throw new Error("No original inputs stored — cannot retry");
 
     // originalInputs is written from validated args, but a corrupted/legacy
-    // doc would otherwise surface a raw SyntaxError to the client.
+    // doc would otherwise surface a raw SyntaxError to the client. Dining
+    // alone tolerates a missing/corrupt snapshot via inputsForTrip — the
+    // guide only needs destination context, which lives on the doc.
     let input: Parameters<typeof buildSystemPrompt>[0];
-    try {
-      input = JSON.parse(trip.originalInputs);
-    } catch {
-      throw new Error("Stored trip inputs are corrupted — cannot retry");
+    if (section === "diningGuide") {
+      input = inputsForTrip(trip);
+    } else if (!trip.originalInputs) {
+      throw new Error("No original inputs stored — cannot retry");
+    } else {
+      try {
+        input = JSON.parse(trip.originalInputs);
+      } catch {
+        throw new Error("Stored trip inputs are corrupted — cannot retry");
+      }
     }
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
@@ -1491,7 +1539,7 @@ export const backfillDayStops = internalAction({
   handler: async (ctx, { tripId }) => {
     try {
       const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
-      if (!trip?.originalInputs || !trip.itinerary) return;
+      if (!trip?.itinerary) return;
       const days = safeParseArray(trip.itinerary);
       const missing = days
         .map((day, idx) => ({ day, idx }))
@@ -1503,13 +1551,10 @@ export const backfillDayStops = internalAction({
         console.error("backfillDayStops: ANTHROPIC_API_KEY not set");
         return;
       }
-      let input: Parameters<typeof buildSystemPrompt>[0];
-      try {
-        input = JSON.parse(trip.originalInputs);
-      } catch {
-        console.error(`backfillDayStops: corrupted originalInputs on ${tripId}`);
-        return;
-      }
+      // inputsForTrip: legacy trips without originalInputs still backfill —
+      // the stops are extracted from existing prose, so destination context
+      // off the doc is all the prompt needs.
+      const input = inputsForTrip(trip);
       const systemPrompt = buildSystemPrompt(input);
 
       const dayNumberFor = ({ day, idx }: { day: (typeof days)[number]; idx: number }): number =>
