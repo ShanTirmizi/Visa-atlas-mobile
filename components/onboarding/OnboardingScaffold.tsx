@@ -11,9 +11,12 @@ import {
   View,
   Text,
   Pressable,
-  ScrollView,
   StyleSheet,
 } from 'react-native';
+import Animated, {
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, ArrowRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -64,12 +67,22 @@ export function OnboardingScaffold({
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  // Drive the top safe-area blur from this scroll. At rest the blur is
+  // invisible; as content scrolls under the safe area the blur ramps up
+  // smoothly on the UI thread (Apple Mail pattern).
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y;
+    },
+  });
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Wavy guilloche paper texture — same as sign-in / forgot-password */}
       <Guilloche variant="wavy" color={colors.ink} opacity={0.04} />
 
-      <ScrollView
+      <Animated.ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingTop: insets.top + 22,
@@ -78,6 +91,8 @@ export function OnboardingScaffold({
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
         {/* ── Top row: back button + skip link ───────────────────────── */}
         <View style={styles.topRow}>
@@ -195,7 +210,7 @@ export function OnboardingScaffold({
         </View>
 
         {children ? <View style={{ marginTop: 24 }}>{children}</View> : null}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* ── Pinned CTA — ink fill with italic Fraunces label + arrow ─── */}
       <View
@@ -241,8 +256,9 @@ export function OnboardingScaffold({
         </Pressable>
       </View>
 
-      {/* Glass top blur — always last so it paints over scrolled content */}
-      <TopSafeAreaBlur />
+      {/* Glass top blur — invisible at rest (intensity 0), ramps up smoothly
+          as content scrolls under the safe area. Apple Mail pattern. */}
+      <TopSafeAreaBlur scrollY={scrollY} />
     </View>
   );
 }

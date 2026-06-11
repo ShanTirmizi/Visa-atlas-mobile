@@ -12,15 +12,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
+import type { TextInput as GestureTextInput } from 'react-native-gesture-handler';
 import {
   BottomSheetModal,
   BottomSheetFlatList,
   BottomSheetBackdrop,
+  BottomSheetTextInput,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+
+const CHAT_SNAP_POINTS = ['90%'];
 import { Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useConvexAuth } from 'convex/react';
@@ -61,7 +63,7 @@ const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
-    const inputRef = useRef<TextInput>(null);
+    const inputRef = useRef<GestureTextInput | null>(null);
     const flatListRef = useRef<any>(null);
 
     const { isAuthenticated } = useConvexAuth();
@@ -235,10 +237,15 @@ const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
         ref={sheetRef}
         enableDynamicSizing
         maxDynamicContentSize={maxDynamicContentSize}
+        // 90% snap is the keyboard-extend target so the chat list has room
+        // to scroll the latest message above the keyboard. `extend` is more
+        // deterministic than `interactive` for dynamic-sized sheets.
+        snapPoints={CHAT_SNAP_POINTS}
+        topInset={insets.top + 10}
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: colors.background, borderRadius: 24 }}
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
-        keyboardBehavior="interactive"
+        keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
       >
@@ -356,62 +363,69 @@ const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
           </View>
         ) : null}
 
-        {/* Input row */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        {/* Input row — gorhom's keyboardBehavior="extend" + topInset handle
+            keyboard avoidance for the sheet itself; no KeyboardAvoidingView
+            needed. The focus handler scrolls the message list to keep the
+            latest reply visible above the now-shorter chat area. */}
+        <View
+          style={[
+            styles.inputBar,
+            {
+              paddingBottom: insets.bottom + Spacing.sm,
+              borderTopColor: colors.border,
+              backgroundColor: colors.background,
+            },
+          ]}
         >
-          <View
+          <BottomSheetTextInput
+            ref={inputRef}
             style={[
-              styles.inputBar,
+              styles.input,
               {
-                paddingBottom: insets.bottom + Spacing.sm,
-                borderTopColor: colors.border,
-                backgroundColor: colors.background,
+                backgroundColor: colors.surface,
+                color: colors.foreground,
+                borderColor: colors.border,
               },
             ]}
+            value={inputText}
+            onChangeText={setInputText}
+            onFocus={() => {
+              requestAnimationFrame(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              });
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 280);
+            }}
+            placeholder="Ask about your visa..."
+            placeholderTextColor={colors.inkFaint}
+            multiline
+            maxLength={500}
+            onSubmitEditing={sendMessage}
+            blurOnSubmit={false}
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: inputText.trim() ? colors.primary : colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+            onPress={sendMessage}
+            disabled={!inputText.trim() || isSending}
+            activeOpacity={0.7}
           >
-            <TextInput
-              ref={inputRef}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.surface,
-                  color: colors.foreground,
-                  borderColor: colors.border,
-                },
-              ]}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder="Ask about your visa..."
-              placeholderTextColor={colors.inkFaint}
-              multiline
-              maxLength={500}
-              onSubmitEditing={sendMessage}
-              blurOnSubmit={false}
-            />
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                {
-                  backgroundColor: inputText.trim() ? colors.primary : colors.surface,
-                  borderColor: colors.border,
-                },
-              ]}
-              onPress={sendMessage}
-              disabled={!inputText.trim() || isSending}
-              activeOpacity={0.7}
-            >
-              {isSending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Send
-                  size={18}
-                  color={inputText.trim() ? '#FFFFFF' : colors.inkFaint}
-                />
-              )}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+            {isSending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Send
+                size={18}
+                color={inputText.trim() ? '#FFFFFF' : colors.inkFaint}
+              />
+            )}
+          </TouchableOpacity>
+        </View>
       </BottomSheetModal>
     );
   },

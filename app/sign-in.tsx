@@ -7,8 +7,8 @@ import {
   ActivityIndicator,
   Pressable,
   TextInput,
-  KeyboardAvoidingView,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import { useAuthActions } from '@convex-dev/auth/react';
 import { Ionicons } from '@expo/vector-icons';
 import { makeRedirectUri } from 'expo-auth-session';
 import { openAuthSessionAsync } from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, ThemeColors } from '@/constants/theme';
 import { tabSlideIn } from '@/utils/tabAnimation';
@@ -404,18 +405,42 @@ export default function SignInScreen() {
   const handleAppleSignIn = async () => {
     setAppleLoading(true);
     try {
-      const { redirect } = await signIn('apple', { redirectTo });
-      if (Platform.OS === 'web') return;
-      if (redirect) {
-        const result = await openAuthSessionAsync(redirect.toString(), redirectTo);
-        if (result.type === 'success') {
-          const code = new URL(result.url).searchParams.get('code');
-          if (code) {
-            await signIn('apple', { code });
-          }
-        }
+      // Native iOS Apple Sign In sheet — no browser hop, no Services ID.
+      // The returned `identityToken` is a JWT signed by Apple; the
+      // `apple-native` Convex provider verifies it against Apple's JWKS
+      // and creates / signs in the matching user.
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        throw new Error('Apple did not return an identity token');
       }
+
+      // Apple only sends the user's name on the very first sign-in. Pass it
+      // through so we can store it on the user doc; subsequent sign-ins
+      // omit it without affecting the existing record.
+      const fullName = credential.fullName
+        ? [credential.fullName.givenName, credential.fullName.familyName]
+            .filter(Boolean)
+            .join(' ')
+            .trim()
+        : '';
+
+      await signIn('apple-native', {
+        idToken: credential.identityToken,
+        ...(fullName ? { name: fullName } : {}),
+      });
     } catch (error: unknown) {
+      // The native sheet throws ERR_REQUEST_CANCELED when the user dismisses
+      // it. That's not a failure — silently bail without surfacing an error.
+      const code = (error as { code?: string } | null)?.code;
+      if (code === 'ERR_REQUEST_CANCELED') {
+        return;
+      }
       const msg = error instanceof Error ? error.message : 'Apple sign in failed';
       setSignInError(msg);
     } finally {

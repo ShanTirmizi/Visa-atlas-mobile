@@ -5,22 +5,17 @@
  * Context     : useVisa() — setVisaMap, setOnboarded
  * Navigation  : router.replace('/(tabs)')
  *
- * Business logic + animations preserved verbatim (globe float, typing dots,
- * rotating messages, retry). Visual shell replaced with OnboardingScaffold.
- *
- * Note: Since the CTA fires only after loading completes, the scaffold's onCta
- * maps to handleStartExploring. During loading, the CTA is labelled
- * "Building…" and is visually inert (the press does nothing until done).
+ * Three states drive the entire screen — title, body, CTA, and content all
+ * shift together. The pinned CTA carries the action: 'Building…' (inert),
+ * 'Try again' (retry), or 'Start exploring' (continue).
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { AlertTriangle } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -40,34 +35,12 @@ import { OnboardingScaffold } from '@/components/onboarding/OnboardingScaffold';
 import { VAStamp } from '@/components/auth/VAStamp';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { TypingDots } from '@/components/ui/TypingDots';
-import { Type } from '@/constants/typography';
+import { toAlpha2 } from '@/utils/countryCode';
 
 // ── Alpha-3 → flag emoji ─────────────────────────────────────────────────
-const A3_TO_A2: Record<string, string> = {
-  AFG:'AF',ALB:'AL',DZA:'DZ',AND:'AD',AGO:'AO',ATG:'AG',ARG:'AR',ARM:'AM',AUS:'AU',AUT:'AT',
-  AZE:'AZ',BHS:'BS',BHR:'BH',BGD:'BD',BRB:'BB',BLR:'BY',BEL:'BE',BLZ:'BZ',BEN:'BJ',BTN:'BT',
-  BOL:'BO',BIH:'BA',BWA:'BW',BRA:'BR',BRN:'BN',BGR:'BG',BFA:'BF',BDI:'BI',KHM:'KH',CMR:'CM',
-  CAN:'CA',CPV:'CV',CAF:'CF',TCD:'TD',CHL:'CL',CHN:'CN',COL:'CO',COM:'KM',COG:'CG',COD:'CD',
-  CRI:'CR',CIV:'CI',HRV:'HR',CUB:'CU',CYP:'CY',CZE:'CZ',DNK:'DK',DJI:'DJ',DMA:'DM',DOM:'DO',
-  ECU:'EC',EGY:'EG',SLV:'SV',GNQ:'GQ',ERI:'ER',EST:'EE',ETH:'ET',SWZ:'SZ',FJI:'FJ',FIN:'FI',
-  FRA:'FR',GAB:'GA',GMB:'GM',GEO:'GE',DEU:'DE',GHA:'GH',GRC:'GR',GRD:'GD',GTM:'GT',GIN:'GN',
-  GNB:'GW',GUY:'GY',HTI:'HT',HND:'HN',HUN:'HU',ISL:'IS',IND:'IN',IDN:'ID',IRN:'IR',IRQ:'IQ',
-  IRL:'IE',ISR:'IL',ITA:'IT',JAM:'JM',JPN:'JP',JOR:'JO',KAZ:'KZ',KEN:'KE',KIR:'KI',PRK:'KP',
-  KOR:'KR',KWT:'KW',KGZ:'KG',LAO:'LA',LVA:'LV',LBN:'LB',LSO:'LS',LBR:'LR',LBY:'LY',LIE:'LI',
-  LTU:'LT',LUX:'LU',MDG:'MG',MWI:'MW',MYS:'MY',MDV:'MV',MLI:'ML',MLT:'MT',MHL:'MH',MRT:'MR',
-  MUS:'MU',MEX:'MX',FSM:'FM',MDA:'MD',MCO:'MC',MNG:'MN',MNE:'ME',MAR:'MA',MOZ:'MZ',MMR:'MM',
-  NAM:'NA',NRU:'NR',NPL:'NP',NLD:'NL',NZL:'NZ',NIC:'NI',NER:'NE',NGA:'NG',MKD:'MK',NOR:'NO',
-  OMN:'OM',PAK:'PK',PLW:'PW',PAN:'PA',PNG:'PG',PRY:'PY',PER:'PE',PHL:'PH',POL:'PL',PRT:'PT',
-  QAT:'QA',ROU:'RO',RUS:'RU',RWA:'RW',KNA:'KN',LCA:'LC',VCT:'VC',WSM:'WS',SMR:'SM',STP:'ST',
-  SAU:'SA',SEN:'SN',SRB:'RS',SYC:'SC',SLE:'SL',SGP:'SG',SVK:'SK',SVN:'SI',SLB:'SB',SOM:'SO',
-  ZAF:'ZA',SSD:'SS',ESP:'ES',LKA:'LK',SDN:'SD',SUR:'SR',SWE:'SE',CHE:'CH',SYR:'SY',TWN:'TW',
-  TJK:'TJ',TZA:'TZ',THA:'TH',TLS:'TL',TGO:'TG',TON:'TO',TTO:'TT',TUN:'TN',TUR:'TR',TKM:'TM',
-  TUV:'TV',UGA:'UG',UKR:'UA',ARE:'AE',GBR:'GB',USA:'US',URY:'UY',UZB:'UZ',VUT:'VU',VEN:'VE',
-  VNM:'VN',YEM:'YE',ZMB:'ZM',ZWE:'ZW',
-};
 function getFlag(a3: string): string {
-  const a2 = A3_TO_A2[a3];
-  if (!a2) return '';
+  const a2 = toAlpha2(a3);
+  if (!a2 || a2.length !== 2) return '';
   return String.fromCodePoint(...a2.split('').map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
@@ -120,10 +93,32 @@ function useGlobeAnimation(isActive: boolean) {
   }));
 }
 
+// ── Stamp pulse for the error state ──────────────────────────────────────
+// Slow opacity heartbeat — signals the registry is still reachable, not dead.
+function useStampPulse(isActive: boolean) {
+  const opacity = useSharedValue(0.35);
+
+  useEffect(() => {
+    if (isActive) {
+      opacity.value = withRepeat(
+        withSequence(
+          withTiming(0.50, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0.30, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        ),
+        -1, true,
+      );
+    } else {
+      opacity.value = withTiming(0.35, { duration: 200 });
+    }
+  }, [isActive, opacity]);
+
+  return useAnimatedStyle(() => ({ opacity: opacity.value }));
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Screen
 // ══════════════════════════════════════════════════════════════════════════════
-type ScreenState = 'loading' | 'summary';
+type ScreenState = 'loading' | 'error' | 'summary';
 
 export default function BuildingScreen() {
   const { colors } = useTheme();
@@ -132,10 +127,10 @@ export default function BuildingScreen() {
 
   const [state, setState] = useState<ScreenState>('loading');
   const [tick, setTick] = useState(0);
-  const [error, setError] = useState('');
   const [stats, setStats] = useState<SummaryStats>({ visaFree: 0, onArrival: 0, evisa: 0 });
 
   const globeStyle = useGlobeAnimation(state === 'loading');
+  const stampPulseStyle = useStampPulse(state === 'error');
 
   // Rotate loading messages every 3 s
   useEffect(() => {
@@ -149,7 +144,6 @@ export default function BuildingScreen() {
     let cancelled = false;
     const generate = async () => {
       setState('loading');
-      setError('');
       setTick(0);
       try {
         const res = await fetch(endpoints.visaMap, {
@@ -174,7 +168,7 @@ export default function BuildingScreen() {
         });
         setState('summary');
       } catch {
-        if (!cancelled) setError('Failed to build your visa map. Please try again.');
+        if (!cancelled) setState('error');
       }
     };
     generate();
@@ -183,7 +177,6 @@ export default function BuildingScreen() {
   }, []);
 
   const handleRetry = useCallback(() => {
-    setError('');
     setState('loading');
     setTick(0);
     (async () => {
@@ -209,7 +202,7 @@ export default function BuildingScreen() {
         });
         setState('summary');
       } catch {
-        setError('Failed to build your visa map. Please try again.');
+        setState('error');
       }
     })();
   }, [visa]);
@@ -220,26 +213,42 @@ export default function BuildingScreen() {
 
   const passportFlags = visa.passports.map((code) => getFlag(code)).join('  ');
 
-  const ctaLabel = state === 'loading' ? 'Building your map…' : 'Start exploring';
+  const ctaLabel =
+    state === 'loading' ? 'Building your map…'
+    : state === 'error' ? 'Try again'
+    : 'Start exploring';
+
+  const onCta =
+    state === 'summary' ? handleStartExploring
+    : state === 'error' ? handleRetry
+    : () => undefined;
+
+  const title =
+    state === 'loading' ? 'Building your atlas'
+    : state === 'error' ? "Couldn't build your atlas"
+    : "You're all set";
+
+  const body =
+    state === 'summary'
+      ? `${visa.passports.map((c) => passportCountries.find((p) => p.code === c)?.name ?? c).join(' + ')} passport${visa.passports.length > 1 ? 's' : ''} — and a world to explore.`
+      : state === 'error'
+      ? 'Our visa registry took longer than expected to respond. Give it another moment below.'
+      : undefined;
 
   return (
     <OnboardingScaffold
       step={3}
       totalSteps={3}
-      title={state === 'loading' ? 'Building your atlas' : "You're all set"}
-      body={
-        state === 'loading'
-          ? undefined
-          : `${visa.passports.map((c) => passportCountries.find((p) => p.code === c)?.name ?? c).join(' + ')} passport${visa.passports.length > 1 ? 's' : ''} — and a world to explore.`
-      }
+      title={title}
+      body={body}
       ctaLabel={ctaLabel}
-      onCta={state === 'summary' ? handleStartExploring : () => undefined}
+      onCta={onCta}
       ctaDisabled={state === 'loading'}
-      showBack={state === 'loading' ? false : true}
+      showBack={state !== 'loading'}
     >
       {/* ── Loading state — VA stamp + rotating message + dots ─── */}
       {state === 'loading' && (
-        <View style={styles.centerContent}>
+        <Animated.View entering={FadeIn.duration(400)} style={styles.centerContent}>
           {/* Floating VA passport stamp — same logo as auth */}
           <Animated.View style={globeStyle}>
             <VAStamp size={140} />
@@ -267,44 +276,60 @@ export default function BuildingScreen() {
           <View style={{ marginTop: 24 }}>
             <TypingDots color={colors.coral} gap={8} />
           </View>
+        </Animated.View>
+      )}
 
-          {/* Error card */}
-          {error !== '' && (
-            <View
-              style={[
-                styles.errorCard,
-                Shadows.subtle,
-                { backgroundColor: colors.dangerBg, borderColor: colors.danger },
-              ]}
+      {/* ── Error state — same editorial vocabulary as the rest of the app ─── */}
+      {state === 'error' && (
+        <Animated.View entering={FadeIn.duration(400)} style={styles.centerContent}>
+          {/* Dimmed VA stamp — brand stays present, slow heartbeat signals
+              we're still reachable, not dead. */}
+          <Animated.View style={stampPulseStyle}>
+            <VAStamp size={140} />
+          </Animated.View>
+
+          {/* Mono kicker · coral squiggle — flight-board / customs-stamp
+              vocabulary. Mirrors the scaffold's "STEP 03 · OF 03" pattern. */}
+          <View style={styles.errorKickerRow}>
+            <Text
+              style={{
+                fontFamily: FontFamily.monoMedium,
+                fontSize: 10,
+                fontWeight: '700',
+                letterSpacing: 10 * 0.22,
+                textTransform: 'uppercase',
+                color: colors.coralDeep,
+              }}
             >
-              <AlertTriangle size={18} color={colors.danger} />
-              <Text style={[Type.body13, { color: colors.danger, textAlign: 'center' }]}>
-                {error}
-              </Text>
-              <TouchableOpacity
-                onPress={handleRetry}
-                activeOpacity={0.7}
-                style={[styles.retryBtn, { backgroundColor: colors.danger }]}
-              >
-                <Text
-                  style={{
-                    fontFamily: FontFamily.displayItalic,
-                    fontStyle: 'italic',
-                    fontSize: 14,
-                    color: '#FFFFFF',
-                  }}
-                >
-                  Try again
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+              ATLAS · DELAYED
+            </Text>
+            <Squiggle width={28} color={colors.coral} />
+          </View>
+
+          {/* Italic Fraunces line with coral period — premium accent. */}
+          <Text
+            style={{
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+              fontSize: 19,
+              lineHeight: 24,
+              letterSpacing: -19 * 0.014,
+              fontWeight: '500',
+              color: colors.ink,
+              textAlign: 'center',
+              marginTop: 12,
+              maxWidth: 280,
+            }}
+          >
+            The registry didn&apos;t answer in time
+            <Text style={{ color: colors.coral }}>.</Text>
+          </Text>
+        </Animated.View>
       )}
 
       {/* ── Summary state — passport flags + editorial stats card ─── */}
       {state === 'summary' && (
-        <View style={styles.summaryContent}>
+        <Animated.View entering={FadeIn.duration(400)} style={styles.summaryContent}>
           {/* Passport flag emojis (kept — emoji works well at this scale) */}
           <Text style={styles.passportFlags}>{passportFlags}</Text>
 
@@ -423,7 +448,7 @@ export default function BuildingScreen() {
               </Text>
             </View>
           </View>
-        </View>
+        </Animated.View>
       )}
     </OnboardingScaffold>
   );
@@ -435,20 +460,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 28,
   },
-  errorCard: {
-    marginTop: 24,
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
+  errorKickerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    width: '100%',
-  },
-  retryBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 28,
-    borderRadius: 999,
-    marginTop: 4,
+    marginTop: 26,
   },
   summaryContent: {
     alignItems: 'center',

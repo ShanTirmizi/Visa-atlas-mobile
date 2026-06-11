@@ -5,12 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   FlatList,
   ActivityIndicator,
   Pressable,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -40,6 +40,7 @@ import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/contexts/theme-context';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
+import { toAlpha2 } from '@/utils/countryCode';
 import { endpoints } from '@/constants/api';
 import {
   FontFamily,
@@ -59,20 +60,6 @@ interface ChatMessage {
 // of a successful itinerary update so we can decorate the bubble with an
 // "Itinerary updated" stamp. Lives in component state (not Convex) so it's
 // scoped to the current viewer's session.
-
-/* prettier-ignore */
-const A3_TO_A2: Record<string,string> = {
-  AFG:'AF',ALB:'AL',DZA:'DZ',ARG:'AR',AUS:'AU',AUT:'AT',BEL:'BE',BGR:'BG',BRA:'BR',CAN:'CA',
-  CHE:'CH',CHL:'CL',CHN:'CN',COL:'CO',CZE:'CZ',DEU:'DE',DNK:'DK',EGY:'EG',ESP:'ES',FIN:'FI',
-  FRA:'FR',GBR:'GB',GRC:'GR',HRV:'HR',HUN:'HU',IDN:'ID',IND:'IN',IRL:'IE',ISL:'IS',ITA:'IT',
-  JPN:'JP',KOR:'KR',LUX:'LU',MAR:'MA',MEX:'MX',MYS:'MY',NLD:'NL',NOR:'NO',NZL:'NZ',PER:'PE',
-  PHL:'PH',POL:'PL',PRT:'PT',ROU:'RO',RUS:'RU',SAU:'SA',SGP:'SG',SVK:'SK',SVN:'SI',SWE:'SE',
-  THA:'TH',TUR:'TR',ARE:'AE',USA:'US',VNM:'VN',ZAF:'ZA',
-};
-function alpha3ToAlpha2(code: string | undefined): string {
-  if (!code) return '';
-  return A3_TO_A2[code.toUpperCase()] || code.slice(0, 2).toUpperCase();
-}
 
 // Travel-themed cycle that runs in place of a static "Thinking…". Cycles
 // every ~2.2s while the AI is composing — matches the rhythm Claude Code
@@ -244,7 +231,7 @@ export default function ChatScreen() {
   }, [isSending]);
 
   const countryName = trip?.countryName ?? 'your trip';
-  const alpha2 = alpha3ToAlpha2(trip?.countryCode);
+  const alpha2 = toAlpha2(trip?.countryCode ?? '');
 
   type ItineraryDay = { day: number; title: string; morning: string; afternoon: string; evening: string };
   const currentDay = useMemo<ItineraryDay | null>(() => {
@@ -900,7 +887,19 @@ export default function ChatScreen() {
               placeholderTextColor={colors.inkFaint}
               multiline
               maxLength={500}
-              onFocus={() => setIsFocused(true)}
+              onFocus={() => {
+                setIsFocused(true);
+                // Scroll the message list to the bottom so the latest reply
+                // stays visible once the keyboard rises and shrinks the
+                // visible area. RN's onContentSizeChange doesn't fire on
+                // keyboard open, so this has to be explicit.
+                requestAnimationFrame(() => {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                });
+                setTimeout(() => {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }, 280);
+              }}
               onBlur={() => setIsFocused(false)}
               onSubmitEditing={sendMessage}
               blurOnSubmit={false}

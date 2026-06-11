@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.tirmazilabs.visaatlas",
       "buildNumber": "2",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Visa Atlas uses your location to show nearby embassies and consulates on the map."
@@ -85,14 +86,16 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "imageWidth": 120,
+          "imageWidth": 290,
           "resizeMode": "contain",
           "backgroundColor": "#F5EFE6"
         }
       ],
       "expo-web-browser",
       "expo-secure-store",
-      "@maplibre/maplibre-react-native"
+      "expo-apple-authentication",
+      "@maplibre/maplibre-react-native",
+      "expo-asset"
     ],
     "extra": {
       "router": {

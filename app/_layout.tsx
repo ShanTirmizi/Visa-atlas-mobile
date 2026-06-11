@@ -1,14 +1,17 @@
-import React, { useEffect, useMemo } from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Image, View, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { useConvexAuth } from 'convex/react';
 import { useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { useFonts } from 'expo-font';
+import { Asset } from 'expo-asset';
 import * as SplashScreen from 'expo-splash-screen';
+import * as SystemUI from 'expo-system-ui';
 
 // Fonts
 import {
@@ -39,11 +42,30 @@ import { ToastProvider } from '@/contexts/toast-context';
 import { OfflineProvider } from '@/contexts/offline-context';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { MapPrewarm } from '@/components/map/MapPrewarm';
-import { FontFamily, FontSize } from '@/constants/theme';
+import { AnimatedSplash } from '@/components/AnimatedSplash';
 import type { ThemeColors } from '@/constants/theme';
 import ErrorBoundary from '@/components/ErrorBoundary';
 
+// ── Splash hand-off plumbing ─────────────────────────────────────────────
+// Runs at module load — before the first React render — so the underlying
+// iOS UIWindow / Android decor view is already painted cream by the time
+// the native splash dismisses. Without this, the moment the splash leaves
+// the system briefly exposes the window's *default* (white in light mode).
 SplashScreen.preventAutoHideAsync();
+SystemUI.setBackgroundColorAsync('#F5EFE6').catch(() => {});
+
+// Preload the splash hero image at module load. By the time AnimatedSplash
+// mounts and renders <Image source={atlasHero} />, the asset is already in
+// memory — no async decode pause that could delay the splash's first paint.
+Asset.fromModule(require('@/assets/atlas-hero.png')).downloadAsync().catch(() => {});
+
+// Note: we deliberately do NOT call SplashScreen.setOptions({ fade: true }).
+// The cross-fade exposes the underlying surface during the dismiss window,
+// which on a heavy provider tree (Convex + 8 contexts) is visible as a
+// flicker because <AnimatedSplash> hasn't reached its first paint yet by
+// the time the fade starts. The default cut transition swaps in a single
+// frame and is perceptually smoother. Confirmed in zoontek/react-native-
+// bootsplash#427 and matches the Bluesky pattern.
 
 function ThemedApp() {
   const { colors, isDark } = useTheme();
@@ -53,6 +75,10 @@ function ThemedApp() {
   const { onboarded, loaded: visaLoaded } = useVisa();
   const segments = useSegments();
   const router = useRouter();
+
+  // Animated splash: plays once on first mount. We render it as long as it
+  // hasn't finished yet OR auth hasn't resolved — whichever takes longer.
+  const [splashFinished, setSplashFinished] = useState(false);
 
   // Auth gate: redirect based on auth state
   useEffect(() => {
@@ -78,15 +104,16 @@ function ThemedApp() {
     }
   }, [isAuthenticated, isLoading, segments, onboarded, visaLoaded]);
 
-  // Show loading screen while checking auth
-  if (isLoading) {
+  // Animated splash plays on first launch. The splash sticks around until
+  // both the entry animation has played AND auth has resolved — so a slow
+  // auth round-trip won't dump the user onto a half-loaded screen.
+  if (!splashFinished) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#FBFAF7' }]}>
+      <View style={[styles.container, { backgroundColor: '#F5EFE6' }]}>
         <StatusBar style="dark" />
-        <Image
-          source={require('@/assets/icon.png')}
-          style={{ width: 140, height: 140, borderRadius: 32 }}
-          resizeMode="contain"
+        <AnimatedSplash
+          canFadeOut={!isLoading && visaLoaded}
+          onAnimationDone={() => setSplashFinished(true)}
         />
       </View>
     );
@@ -171,18 +198,36 @@ export default function RootLayout() {
     Fraunces_700Bold,
   });
 
-  useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [fontsLoaded]);
-
+  // While fonts load, render a placeholder that's PIXEL-IDENTICAL to the
+  // native splash and to <AnimatedSplash>'s at-rest state — same cream bg,
+  // same Atlas image at the same 290px size, centered. If for any reason
+  // the native splash dismisses early (race, dev-client weirdness, etc.),
+  // what's underneath is visually identical to what was just on screen.
+  // No flicker is possible because there's nothing for the eye to see
+  // change. The image is preloaded at module load (Asset.downloadAsync) so
+  // it renders synchronously without an async decode pause.
   if (!fontsLoaded) {
-    return null;
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: '#F5EFE6',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Image
+          source={require('@/assets/atlas-hero.png')}
+          style={{ width: 290, height: 290 }}
+          resizeMode="contain"
+        />
+      </View>
+    );
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
       <ErrorBoundary>
       <ConvexProvider>
         <OfflineProvider>
@@ -204,6 +249,7 @@ export default function RootLayout() {
         </OfflineProvider>
       </ConvexProvider>
       </ErrorBoundary>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

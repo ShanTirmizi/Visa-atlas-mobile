@@ -6,14 +6,15 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { View, Text, TextInput, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetBackdrop,
-  BottomSheetScrollView,
+  BottomSheetTextInput,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
@@ -22,6 +23,12 @@ import { FontFamily, type ThemeColors } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { PillButton } from '@/components/ui/PillButton';
+
+// Sheet rests at its dynamic content height — no snap points needed.
+// BottomSheetKeyboardAwareScrollView (RNKC) measures the focused TextInput
+// itself and scrolls it above the keyboard with the right delta. We don't
+// set `keyboardBehavior` for the same reason: doubling sheet movement on
+// top of KAW's scroll over-scrolls the form.
 
 export interface EditableDay {
   day: number;
@@ -142,11 +149,23 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
         ref={bottomSheetRef}
         enableDynamicSizing
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
+        topInset={insets.top + 10}
+        // Keyboard handling lives in BottomSheetKeyboardAwareScrollView
+        // (RNKC). We deliberately don't set keyboardBehavior here — see the
+        // comment block near the top of this file.
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
       >
-        <BottomSheetScrollView contentContainerStyle={s.scroll}>
+        <BottomSheetKeyboardAwareScrollView
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          // Distance between the focused input's bottom and the keyboard
+          // top after scrolling. Matches Apple Mail / Notes breathing room.
+          bottomOffset={24}
+        >
           {/* Editorial header */}
           <View style={s.header}>
             <Text style={[Type.kicker, { color: colors.inkMute }]}>EDIT DAY {initial?.day ?? dayIndex + 1}</Text>
@@ -254,7 +273,7 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
             disabled={saving}
             style={{ marginTop: 8, marginBottom: 8 }}
           />
-        </BottomSheetScrollView>
+        </BottomSheetKeyboardAwareScrollView>
       </BottomSheetModal>
     );
   },
@@ -281,6 +300,9 @@ function Field({
   placeholder?: string;
   multiline?: boolean;
 }) {
+  // KAW (BottomSheetKeyboardAwareScrollView) measures the focused
+  // TextInput itself via native focus events, so no wrapper ref or
+  // onFocus dance is needed here.
   return (
     <View
       style={{
@@ -295,7 +317,7 @@ function Field({
       <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9, letterSpacing: 9 * 0.18 }]}>
         {label}
       </Text>
-      <TextInput
+      <BottomSheetTextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}

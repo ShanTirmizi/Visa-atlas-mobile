@@ -1,8 +1,8 @@
 import Google from "@auth/core/providers/google";
-import Apple from "@auth/core/providers/apple";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { ResendOTPPasswordReset } from "./ResendOTPPasswordReset";
+import { AppleNative } from "./AppleNative";
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
@@ -17,18 +17,11 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         image: googleInfo.picture ?? undefined,
       }),
     }),
-    Apple({
-      profile: (appleInfo: any) => {
-        const name = appleInfo.user
-          ? `${appleInfo.user.name?.firstName ?? ""} ${appleInfo.user.name?.lastName ?? ""}`.trim()
-          : undefined;
-        return {
-          id: appleInfo.sub,
-          name: name || undefined,
-          email: appleInfo.email,
-        };
-      },
-    }),
+    // Apple Sign In via the iOS-native sheet (expo-apple-authentication).
+    // The mobile client gets an ID token from Apple, sends it here, and we
+    // verify it against Apple's public JWKS — no Services ID, no .p8 key,
+    // no callback URL needed. See `convex/AppleNative.ts`.
+    AppleNative,
     Password({
       // Email verification is decoupled from sign-up so users can land in
       // the app immediately. The "Verify your email" affordance lives in

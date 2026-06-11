@@ -8,11 +8,13 @@
  * @module
  */
 
+import type * as AppleNative from "../AppleNative.js";
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as account from "../account.js";
 import type * as auth from "../auth.js";
 import type * as bookings from "../bookings.js";
+import type * as countryTips from "../countryTips.js";
 import type * as emailAccounts from "../emailAccounts.js";
 import type * as emailSync from "../emailSync.js";
 import type * as emailVerification from "../emailVerification.js";
@@ -38,11 +40,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  AppleNative: typeof AppleNative;
   ResendOTP: typeof ResendOTP;
   ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
   account: typeof account;
   auth: typeof auth;
   bookings: typeof bookings;
+  countryTips: typeof countryTips;
   emailAccounts: typeof emailAccounts;
   emailSync: typeof emailSync;
   emailVerification: typeof emailVerification;

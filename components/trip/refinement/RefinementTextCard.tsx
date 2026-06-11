@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { FontFamily, Radius } from '@/constants/theme';
@@ -58,7 +59,7 @@ export function RefinementTextCard({
       >
         {prompt}
       </Text>
-      <TextInput
+      <BottomSheetTextInput
         value={value}
         onChangeText={onChangeText}
         onFocus={() => setFocused(true)}

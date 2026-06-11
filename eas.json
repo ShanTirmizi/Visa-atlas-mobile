@@ -12,6 +12,16 @@
         "EXPO_PUBLIC_CONVEX_URL": "https://ardent-pig-434.eu-west-1.convex.cloud"
       }
     },
+    "development-simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_CONVEX_URL": "https://ardent-pig-434.eu-west-1.convex.cloud"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "autoIncrement": true,

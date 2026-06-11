@@ -1,5 +1,16 @@
 # CLAUDE.md
 
+## Research before writing — non-negotiable
+
+**Before fixing a bug or building a new feature, look at what the best in the industry are doing first.** Don't invent an algorithm or invent a UX pattern. The premium apps (Apple Mail / Notes / Maps / Settings, Linear, Arc, Notion, Robinhood, Revolut, Airbnb, Stripe, iMessage) have already solved nearly every common interaction. Find the established pattern, copy it, *then* code.
+
+- **Recency matters.** 2025–2026 references take precedence. iOS 18+ patterns over iOS 14 patterns. React Native 0.74+ over older. `react-native-keyboard-controller` (2024+) over the legacy `react-native-keyboard-aware-scroll-view`. gorhom v5 over v4. Don't pull patterns from 5-year-old Stack Overflow answers.
+- **Name the reference in the code comment** when the choice isn't obvious. Future-me reading `// matches Apple Mail compose: scroll BY delta, not TO position` knows where to look if it ever needs to change.
+- **Explicitly: do not invent custom scroll/keyboard math** when a library or platform API already handles it. Use `react-native-keyboard-controller`'s `useReanimatedKeyboardAnimation` / `KeyboardAwareScrollView`, or RN's `automaticallyAdjustKeyboardInsets`, before writing your own.
+- **If it feels hacky, it's wrong.** Magic numbers like `setTimeout(280)` or `fieldY - 60` are red flags that the canonical pattern wasn't researched. Stop, find how Linear / Apple Mail does it, redo it properly.
+
+This rule is failure-mode-driven: shipping a "fix" that contradicts how every other premium app does the same thing is worse than no fix.
+
 ## Quality Philosophy
 
 - **Always choose the premium approach.** Never recommend a simpler option just because the better one is "high effort" — Claude is doing the implementation, not a human team, so complexity is not a cost. If the best solution requires a new library, a full rewrite, or a complex architecture, do it.

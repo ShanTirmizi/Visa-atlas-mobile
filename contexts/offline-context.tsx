@@ -102,7 +102,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }): Re
   const performCacheRefresh = useCallback(async (): Promise<void> => {
     if (isSyncingRef.current) return;
     if (!isAuthenticatedRef.current) return; // skip refresh when signed out
-    setIsSyncing(true);
+    // Deliberately do NOT call setIsSyncing(true) — this refresh runs
+    // silently on app foreground (and on initial post-auth load), and
+    // flashing the OfflineIndicator on every resume caused a visible
+    // layout jump (the banner mounted/unmounted in the regular flow,
+    // pushing content ~30px down then back up). Apple Mail / Linear
+    // do these routine refreshes silently; the indicator should only
+    // appear for user-initiated syncs and offline→online transitions.
     isSyncingRef.current = true;
     try {
       await refreshCache(client);
@@ -110,7 +116,6 @@ export function OfflineProvider({ children }: { children: React.ReactNode }): Re
     } catch (err) {
       console.warn('[OfflineProvider] performCacheRefresh failed:', err);
     } finally {
-      setIsSyncing(false);
       isSyncingRef.current = false;
     }
   }, [client]);

@@ -5,9 +5,10 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import type { TextInput as GestureTextInput } from 'react-native-gesture-handler';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { Radius } from '@/constants/theme';
@@ -24,16 +25,19 @@ const MAX_LINES = 5;
 interface Props {
   value: string;
   onChangeText: (text: string) => void;
+  /** Called when the input receives focus. Used by the parent sheet to
+   *  scroll this (last) field above the keyboard. */
+  onFocus?: () => void;
 }
 
-export function TripPlannerNotesField({ value, onChangeText }: Props) {
+export function TripPlannerNotesField({ value, onChangeText, onFocus }: Props) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
   const [promptIndex, setPromptIndex] = useState(() =>
     Math.floor(Math.random() * PLANNER_PROMPTS.length),
   );
   const opacity = useRef(new Animated.Value(1)).current;
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<GestureTextInput | null>(null);
 
   const isEmpty = value.length === 0;
   const isRotating = isEmpty && !focused;
@@ -111,11 +115,14 @@ export function TripPlannerNotesField({ value, onChangeText }: Props) {
               {currentPrompt}
             </Animated.Text>
           )}
-          <TextInput
+          <BottomSheetTextInput
             ref={inputRef}
             value={value}
             onChangeText={onChangeText}
-            onFocus={() => setFocused(true)}
+            onFocus={() => {
+              setFocused(true);
+              onFocus?.();
+            }}
             onBlur={() => setFocused(false)}
             multiline
             scrollEnabled
@@ -125,7 +132,9 @@ export function TripPlannerNotesField({ value, onChangeText }: Props) {
               styles.input,
               { color: colors.ink, minHeight: LINE_HEIGHT },
             ]}
-            // No `placeholder` prop — we render our own animated layer above
+            // No `placeholder` prop — we render our own animated layer above.
+            // BottomSheetTextInput is required (vs plain RN TextInput) so the
+            // bottom sheet tracks focus and lifts content above the keyboard.
           />
         </View>
         {counterVisible && (

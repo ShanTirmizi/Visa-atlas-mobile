@@ -29,21 +29,7 @@ import {
   type CountryVisa,
   type HeldVisaType,
 } from '@/data/visaData';
-
-const A3_TO_A2: Record<string, string> = {
-  AFG: 'AF', ALB: 'AL', AUS: 'AU', AUT: 'AT', BEL: 'BE', BGR: 'BG', BRA: 'BR',
-  CAN: 'CA', CHE: 'CH', CHL: 'CL', CHN: 'CN', COL: 'CO', CZE: 'CZ', DEU: 'DE',
-  DNK: 'DK', EGY: 'EG', ESP: 'ES', FIN: 'FI', FRA: 'FR', GBR: 'GB', GRC: 'GR',
-  HRV: 'HR', HUN: 'HU', IDN: 'ID', IND: 'IN', IRL: 'IE', ISL: 'IS', ITA: 'IT',
-  JPN: 'JP', KOR: 'KR', LUX: 'LU', MAR: 'MA', MEX: 'MX', MYS: 'MY', NLD: 'NL',
-  NOR: 'NO', NPL: 'NP', NZL: 'NZ', PER: 'PE', PHL: 'PH', POL: 'PL', PRT: 'PT',
-  ROU: 'RO', SAU: 'SA', SGP: 'SG', SVK: 'SK', SVN: 'SI', SWE: 'SE', THA: 'TH',
-  TUR: 'TR', UAE: 'AE', ARE: 'AE', USA: 'US', VNM: 'VN', ZAF: 'ZA',
-};
-
-function alpha3ToAlpha2(code: string): string {
-  return A3_TO_A2[code.toUpperCase()] ?? code.slice(0, 2).toUpperCase();
-}
+import { toAlpha2 } from '@/utils/countryCode';
 
 export interface CountryPickerSheetRef {
   open: () => void;
@@ -121,7 +107,7 @@ export const CountryPickerSheet = forwardRef<CountryPickerSheetRef, Props>(
       ({ item }: { item: CountryVisa }) => {
         const resolved = resolveCountry(item, heldSet);
         const catColor = getVisaCategoryColor(resolved.category, colors);
-        const alpha2 = alpha3ToAlpha2(item.code);
+        const alpha2 = toAlpha2(item.code);
         const label =
           resolved.category === 'visa-free'
             ? 'Visa-free'

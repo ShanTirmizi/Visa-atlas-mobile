@@ -5,12 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   FlatList,
   ActivityIndicator,
   Pressable,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -32,6 +32,7 @@ import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/contexts/theme-context';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
+import { toAlpha2 } from '@/utils/countryCode';
 import { endpoints } from '@/constants/api';
 import { FontFamily, Spacing } from '@/constants/theme';
 
@@ -42,20 +43,6 @@ type GuideMessage = {
   content: string;
   timestamp: number;
 };
-
-/* prettier-ignore */
-const A3_TO_A2: Record<string,string> = {
-  AFG:'AF',ARG:'AR',AUS:'AU',AUT:'AT',BEL:'BE',BGR:'BG',BRA:'BR',BRB:'BB',CAN:'CA',CHE:'CH',
-  CHL:'CL',CHN:'CN',COL:'CO',CZE:'CZ',DEU:'DE',DNK:'DK',EGY:'EG',ESP:'ES',FIN:'FI',FRA:'FR',
-  GBR:'GB',GRC:'GR',HRV:'HR',HUN:'HU',IDN:'ID',IND:'IN',IRL:'IE',ISL:'IS',ITA:'IT',JPN:'JP',
-  KOR:'KR',LUX:'LU',MAR:'MA',MEX:'MX',MYS:'MY',NLD:'NL',NOR:'NO',NZL:'NZ',PER:'PE',PHL:'PH',
-  POL:'PL',PRT:'PT',ROU:'RO',RUS:'RU',SAU:'SA',SGP:'SG',SVK:'SK',SVN:'SI',SWE:'SE',THA:'TH',
-  TUR:'TR',ARE:'AE',USA:'US',VNM:'VN',ZAF:'ZA',
-};
-function alpha3ToAlpha2(code: string | undefined): string {
-  if (!code) return '';
-  return A3_TO_A2[code.toUpperCase()] || code.slice(0, 2).toUpperCase();
-}
 
 // Cycling thinking copy — visa-flavoured to match the screen's role.
 const THINKING_PHRASES = [
@@ -108,7 +95,7 @@ export default function VisaChatScreen() {
   const countryName = guide?.countryName ?? 'your visa';
   const visaType = guide?.visaType ?? '';
   const guideJson = guide?.guide ?? '';
-  const alpha2 = alpha3ToAlpha2(guide?.countryCode);
+  const alpha2 = toAlpha2(guide?.countryCode ?? '');
 
   const sendChat = useCallback(
     async (text: string) => {
@@ -543,7 +530,15 @@ export default function VisaChatScreen() {
             placeholderTextColor={colors.inkFaint}
             multiline
             maxLength={500}
-            onFocus={() => setIsFocused(true)}
+            onFocus={() => {
+              setIsFocused(true);
+              requestAnimationFrame(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              });
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 280);
+            }}
             onBlur={() => setIsFocused(false)}
             onSubmitEditing={sendMessage}
             blurOnSubmit={false}

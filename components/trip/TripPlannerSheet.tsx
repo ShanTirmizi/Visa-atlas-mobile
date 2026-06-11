@@ -12,11 +12,14 @@ import Animated, {
   withSequence,
   withTiming,
   Easing,
+  interpolate,
+  Extrapolation,
 } from 'react-native-reanimated';
 import {
-  BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
+  BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAction } from 'convex/react';
@@ -53,6 +56,42 @@ const COMPANION_OPTIONS = ['solo', 'partner', 'friends', 'family'];
 
 // Avatar tones for traveler stack — warm, forest, sunset palette
 const AVATAR_TONES = ['#C4A882', '#6B8F71', '#C97B4B'] as const;
+
+// Keyboard handling on this sheet — the design after many tries:
+//
+// We deliberately DO NOT use BottomSheetKeyboardAwareScrollView here.
+// KAW renders a sentinel View after children with
+// `paddingBottom: keyboardHeight + 1`. That inflates the contentContainer,
+// which trips enableDynamicSizing into resizing the sheet. With our
+// short form (~700pt), the math doesn't work out: the scroll range
+// inside the sheet ends up being too small to bring the focused input
+// above the keyboard, and the sentinel itself shows as a visible empty
+// gap above the keyboard. KAW's design assumes a tall form; ours isn't.
+//
+// What we do instead — the pattern used by the production expo-template
+// gorhom + react-native-keyboard-controller example
+// (kacgrzes/expo-template/.../keyboard-sheet.tsx):
+//
+//   1. Use plain BottomSheetScrollView — no sentinel, no inflation.
+//   2. Use enableDynamicSizing — sheet rests at content height.
+//   3. Default keyboardBehavior ("interactive") — sheet shifts up by
+//      the keyboard height when the keyboard appears.
+//   4. keyboardBlurBehavior="restore" — sheet returns to its detent
+//      when the keyboard dismisses.
+//   5. Animate the CTA's height to 0 when the keyboard is shown,
+//      driven by useReanimatedKeyboardAnimation. This makes the form
+//      ~70pt shorter while typing, which is exactly what's needed for
+//      the input (now the bottom-most visual element) to sit just
+//      above the keyboard after gorhom's interactive shift.
+//
+// Net behavior: tap input → CTA collapses, sheet shifts up so its
+// bottom is at the keyboard top, input is the bottom-most element and
+// sits just above the keyboard. Dismiss the keyboard → CTA expands
+// back, sheet returns to its rest position. No empty gap, no jumping
+// to the top of the screen.
+//
+// Modals (date picker, country picker) are rendered OUTSIDE this sheet
+// so they don't pollute the contentContainer measurement.
 
 // Default dates: start = today + 30 days, end = today + 37 days (7-day trip)
 function defaultDates() {
@@ -285,6 +324,27 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const generateTripAction = useAction(api.tripGeneration.generateTrip);
     const sparkleStyle = usePlaneAnimation(isLoading);
 
+    // Keyboard progress (0 = closed, 1 = open). Used to collapse the CTA
+    // when the keyboard appears so the input ends up just above the
+    // keyboard after gorhom's interactive sheet shift. See top-of-file.
+    const { progress: keyboardProgress } = useReanimatedKeyboardAnimation();
+    const CTA_FULL_HEIGHT = 70; // 52pt button + 18pt marginTop
+    const ctaAnimatedStyle = useAnimatedStyle(() => ({
+      height: interpolate(
+        keyboardProgress.value,
+        [0, 1],
+        [CTA_FULL_HEIGHT, 0],
+        Extrapolation.CLAMP,
+      ),
+      opacity: interpolate(
+        keyboardProgress.value,
+        [0, 1],
+        [1, 0],
+        Extrapolation.CLAMP,
+      ),
+      overflow: 'hidden',
+    }));
+
     // ── Days derived from dates (or the dreaming nights stepper) ───
     const days = useMemo(() => {
       if (dreaming) return Math.max(1, dreamNights);
@@ -484,7 +544,16 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         enableDynamicSizing={true}
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         enablePanDownToClose={!isLoading}
+        // Cut the default 2.5 over-drag bounce padding (~80pt). The
+        // sheet doesn't get over-dragged here, so this just removes a
+        // visible empty band below the CTA at rest.
+        overDragResistanceFactor={0}
         backdropComponent={renderBackdrop}
+        // Default keyboardBehavior ("interactive") shifts the sheet up
+        // by keyboard height. keyboardBlurBehavior="restore" puts it
+        // back when the keyboard dismisses. The CTA collapse below
+        // shrinks the form so the input ends up just above the keyboard.
+        keyboardBlurBehavior="restore"
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
         // Use onDismiss (not onChange === -1). The default stackBehavior is
@@ -498,6 +567,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         <BottomSheetScrollView
           contentContainerStyle={s.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {/* ── MAIN FORM ──────────────────────────────────────── */}
           {!isLoading && (
@@ -780,9 +850,14 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               </View>
 
               {/* "Anything else?" — free-form notes that flow into the
-                  generation prompt as userNotes (Task 8). */}
-              <View style={{ marginTop: 18, marginBottom: 24 }}>
-                <TripPlannerNotesField value={userNotes} onChangeText={setUserNotes} />
+                  generation prompt as userNotes (Task 8). KAW measures
+                  the focused TextInput itself and scrolls it above the
+                  keyboard; no ref-and-onFocus dance needed here. */}
+              <View style={{ marginTop: 18 }}>
+                <TripPlannerNotesField
+                  value={userNotes}
+                  onChangeText={setUserNotes}
+                />
               </View>
 
               {/* Error */}
@@ -802,271 +877,64 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               )}
 
               {/* Primary CTA — italic Fraunces with coral period when ready,
-                  paper hint when waiting for a destination. */}
+                  paper hint when waiting for a destination. Wrapped in an
+                  Animated.View whose height collapses to 0 when the
+                  keyboard is up — this makes the input the bottom-most
+                  visual element so it lands just above the keyboard. */}
               {(() => {
                 const ready = !!effective || !!(country && meta && travel && resolved);
                 return (
-                  <TouchableOpacity
-                    onPress={ready ? generate : undefined}
-                    activeOpacity={ready ? 0.85 : 1}
-                    disabled={!ready}
-                    style={[
-                      s.ctaButton,
-                      {
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 10,
-                        paddingVertical: 18,
-                        borderRadius: 999,
-                        backgroundColor: ready ? colors.coral : colors.surface,
-                        borderWidth: 1,
-                        borderColor: ready ? colors.coral : colors.line,
-                        shadowColor: ready ? colors.coral : 'transparent',
-                        shadowOffset: { width: 0, height: 8 },
-                        shadowOpacity: ready ? 0.35 : 0,
-                        shadowRadius: 16,
-                        elevation: ready ? 6 : 0,
-                      },
-                    ]}
-                  >
-                    <Sparkles
-                      size={16}
-                      color={ready ? '#FFFFFF' : colors.inkMute}
-                      fill={ready ? '#FFFFFF' : 'transparent'}
-                    />
-                    <Text
-                      style={{
-                        fontFamily: FontFamily.displayItalic,
-                        fontStyle: 'italic',
-                        fontSize: 17,
-                        fontWeight: '500',
-                        letterSpacing: -17 * 0.014,
-                        color: ready ? '#FFFFFF' : colors.inkMute,
-                      }}
+                  <Animated.View style={ctaAnimatedStyle}>
+                    <TouchableOpacity
+                      onPress={ready ? generate : undefined}
+                      activeOpacity={ready ? 0.85 : 1}
+                      disabled={!ready}
+                      style={[
+                        s.ctaButton,
+                        {
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 10,
+                          paddingVertical: 18,
+                          borderRadius: 999,
+                          backgroundColor: ready ? colors.coral : colors.surface,
+                          borderWidth: 1,
+                          borderColor: ready ? colors.coral : colors.line,
+                          shadowColor: ready ? colors.coral : 'transparent',
+                          shadowOffset: { width: 0, height: 8 },
+                          shadowOpacity: ready ? 0.35 : 0,
+                          shadowRadius: 16,
+                          elevation: ready ? 6 : 0,
+                        },
+                      ]}
                     >
-                      {ready ? 'Generate itinerary' : 'Pick a destination first'}
-                      {ready ? (
-                        <Text style={{ color: 'rgba(255,255,255,0.7)' }}>{'  →'}</Text>
-                      ) : null}
-                    </Text>
-                  </TouchableOpacity>
+                      <Sparkles
+                        size={16}
+                        color={ready ? '#FFFFFF' : colors.inkMute}
+                        fill={ready ? '#FFFFFF' : 'transparent'}
+                      />
+                      <Text
+                        style={{
+                          fontFamily: FontFamily.displayItalic,
+                          fontStyle: 'italic',
+                          fontSize: 17,
+                          fontWeight: '500',
+                          letterSpacing: -17 * 0.014,
+                          color: ready ? '#FFFFFF' : colors.inkMute,
+                        }}
+                      >
+                        {ready ? 'Generate itinerary' : 'Pick a destination first'}
+                        {ready ? (
+                          <Text style={{ color: 'rgba(255,255,255,0.7)' }}>{'  →'}</Text>
+                        ) : null}
+                      </Text>
+                    </TouchableOpacity>
+                  </Animated.View>
                 );
               })()}
             </View>
           )}
-
-          {/* ── Date picker — calendar grid (iOS) / native dialog (Android) ── */}
-          {datePicker !== null && (
-            <Modal
-              visible
-              transparent
-              animationType="fade"
-              onRequestClose={() => setDatePicker(null)}
-            >
-              <TouchableOpacity
-                activeOpacity={1}
-                onPress={() => setDatePicker(null)}
-                style={s.dateBackdrop}
-              >
-                <TouchableOpacity
-                  activeOpacity={1}
-                  onPress={() => {}}
-                  style={[
-                    s.datePickerCard,
-                    { backgroundColor: colors.surface, borderColor: colors.line },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      Type.kicker,
-                      {
-                        color: colors.inkMute,
-                        marginBottom: 4,
-                      },
-                    ]}
-                  >
-                    {datePicker === 'start' ? 'START DATE' : 'END DATE'}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: FontFamily.displayItalic,
-                      fontStyle: 'italic',
-                      fontSize: 22,
-                      fontWeight: '500',
-                      color: colors.ink,
-                      letterSpacing: -22 * 0.018,
-                      marginBottom: 6,
-                    }}
-                  >
-                    Pick a date
-                  </Text>
-                  <DateTimePicker
-                    value={datePicker === 'start' ? startDate : endDate}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                    minimumDate={
-                      datePicker === 'end'
-                        ? new Date(startDate.getTime() + 24 * 60 * 60 * 1000)
-                        : new Date()
-                    }
-                    accentColor={colors.coral}
-                    themeVariant="light"
-                    onChange={(_event, picked) => {
-                      if (picked) {
-                        if (datePicker === 'start') {
-                          setStartDate(picked);
-                          // keep end at least 1 day after start
-                          if (picked >= endDate) {
-                            const newEnd = new Date(picked);
-                            newEnd.setDate(newEnd.getDate() + 1);
-                            setEndDate(newEnd);
-                          }
-                        } else {
-                          if (picked > startDate) setEndDate(picked);
-                        }
-                      }
-                      // Android closes after selection; iOS stays open until backdrop tap
-                      if (Platform.OS === 'android') setDatePicker(null);
-                    }}
-                  />
-                  {Platform.OS === 'ios' && (
-                    <TouchableOpacity
-                      onPress={() => setDatePicker(null)}
-                      style={[
-                        s.datePickerDone,
-                        { backgroundColor: colors.teal },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          fontFamily: FontFamily.bold,
-                          fontSize: 13,
-                          fontWeight: '700',
-                          color: '#FFFFFF',
-                        }}
-                      >
-                        Done
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-              </TouchableOpacity>
-            </Modal>
-          )}
-
-          {/* ── Country picker modal (search) ─────────────────── */}
-          <Modal
-            visible={showPicker}
-            animationType="slide"
-            presentationStyle="pageSheet"
-            onRequestClose={() => setShowPicker(false)}
-          >
-            <View
-              style={[
-                s.pickerContainer,
-                { backgroundColor: colors.background, paddingTop: insets.top + 8 },
-              ]}
-            >
-              <View style={s.pickerHeader}>
-                <View style={{ flex: 1 }}>
-                  <SectionKicker>DESTINATION</SectionKicker>
-                  <Text
-                    style={{
-                      fontFamily: FontFamily.display,
-                      fontSize: 22,
-                      fontWeight: '500',
-                      letterSpacing: -22 * 0.018,
-                      color: colors.ink,
-                      marginTop: 2,
-                    }}
-                  >
-                    Where{' '}
-                    <Text
-                      style={{
-                        fontFamily: FontFamily.displayItalic,
-                        fontStyle: 'italic',
-                      }}
-                    >
-                      to
-                    </Text>
-                    <Text style={{ color: colors.coral }}>?</Text>
-                  </Text>
-                  <Squiggle width={70} color={colors.coral} style={{ marginTop: 4 }} />
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowPicker(false)}
-                  hitSlop={12}
-                  style={[s.pickerClose, { backgroundColor: colors.surface, borderColor: colors.line }]}
-                >
-                  <X size={18} color={colors.ink} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={[s.searchRow, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-                <Search size={16} color={colors.inkMute} />
-                <TextInput
-                  style={[s.searchInput, { color: colors.ink }]}
-                  placeholder="Search countries"
-                  placeholderTextColor={colors.inkFaint}
-                  value={pickerSearch}
-                  onChangeText={setPickerSearch}
-                  autoFocus
-                  autoCorrect={false}
-                />
-                {pickerSearch.length > 0 && (
-                  <TouchableOpacity onPress={() => setPickerSearch('')} hitSlop={8}>
-                    <X size={14} color={colors.inkMute} />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <FlatList
-                data={filteredPickerCountries}
-                keyExtractor={(item) => item.code}
-                contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-                keyboardShouldPersistTaps="handled"
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setPickedCode(item.code);
-                      setShowPicker(false);
-                      setPickerSearch('');
-                    }}
-                    style={[s.pickerRow, { borderBottomColor: colors.line }]}
-                    activeOpacity={0.6}
-                  >
-                    <Flag code={toAlpha2(item.code)} size={24} />
-                    <Text
-                      style={{
-                        flex: 1,
-                        fontFamily: FontFamily.displayItalic,
-                        fontStyle: 'italic',
-                        fontSize: 16,
-                        fontWeight: '500',
-                        color: colors.ink,
-                        letterSpacing: -16 * 0.012,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {item.name}
-                    </Text>
-                    <ChevronRight size={16} color={colors.inkMute} />
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <Text
-                    style={[
-                      Type.body13,
-                      { color: colors.inkMute, textAlign: 'center', marginTop: 24 },
-                    ]}
-                  >
-                    No countries found
-                  </Text>
-                }
-              />
-            </View>
-          </Modal>
 
           {/* ── LOADING STATE — minimal wait between tap and dismiss ──
               The streaming generateTrip action returns the new tripId in
@@ -1100,6 +968,220 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         </BottomSheetScrollView>
       </BottomSheetModal>
 
+      {/* ── Date picker — calendar grid (iOS) / native dialog (Android) ──
+          Rendered OUTSIDE the sheet so it can't affect the sheet's
+          measured contentContainer height. */}
+      {datePicker !== null && (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDatePicker(null)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setDatePicker(null)}
+            style={s.dateBackdrop}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => {}}
+              style={[
+                s.datePickerCard,
+                { backgroundColor: colors.surface, borderColor: colors.line },
+              ]}
+            >
+              <Text
+                style={[
+                  Type.kicker,
+                  {
+                    color: colors.inkMute,
+                    marginBottom: 4,
+                  },
+                ]}
+              >
+                {datePicker === 'start' ? 'START DATE' : 'END DATE'}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 22,
+                  fontWeight: '500',
+                  color: colors.ink,
+                  letterSpacing: -22 * 0.018,
+                  marginBottom: 6,
+                }}
+              >
+                Pick a date
+              </Text>
+              <DateTimePicker
+                value={datePicker === 'start' ? startDate : endDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                minimumDate={
+                  datePicker === 'end'
+                    ? new Date(startDate.getTime() + 24 * 60 * 60 * 1000)
+                    : new Date()
+                }
+                accentColor={colors.coral}
+                themeVariant="light"
+                onChange={(_event, picked) => {
+                  if (picked) {
+                    if (datePicker === 'start') {
+                      setStartDate(picked);
+                      // keep end at least 1 day after start
+                      if (picked >= endDate) {
+                        const newEnd = new Date(picked);
+                        newEnd.setDate(newEnd.getDate() + 1);
+                        setEndDate(newEnd);
+                      }
+                    } else {
+                      if (picked > startDate) setEndDate(picked);
+                    }
+                  }
+                  // Android closes after selection; iOS stays open until backdrop tap
+                  if (Platform.OS === 'android') setDatePicker(null);
+                }}
+              />
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  onPress={() => setDatePicker(null)}
+                  style={[
+                    s.datePickerDone,
+                    { backgroundColor: colors.teal },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.bold,
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: '#FFFFFF',
+                    }}
+                  >
+                    Done
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* ── Country picker modal (search) — also outside the sheet ──── */}
+      <Modal
+        visible={showPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPicker(false)}
+      >
+        <View
+          style={[
+            s.pickerContainer,
+            { backgroundColor: colors.background, paddingTop: insets.top + 8 },
+          ]}
+        >
+          <View style={s.pickerHeader}>
+            <View style={{ flex: 1 }}>
+              <SectionKicker>DESTINATION</SectionKicker>
+              <Text
+                style={{
+                  fontFamily: FontFamily.display,
+                  fontSize: 22,
+                  fontWeight: '500',
+                  letterSpacing: -22 * 0.018,
+                  color: colors.ink,
+                  marginTop: 2,
+                }}
+              >
+                Where{' '}
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                  }}
+                >
+                  to
+                </Text>
+                <Text style={{ color: colors.coral }}>?</Text>
+              </Text>
+              <Squiggle width={70} color={colors.coral} style={{ marginTop: 4 }} />
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowPicker(false)}
+              hitSlop={12}
+              style={[s.pickerClose, { backgroundColor: colors.surface, borderColor: colors.line }]}
+            >
+              <X size={18} color={colors.ink} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={[s.searchRow, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <Search size={16} color={colors.inkMute} />
+            <TextInput
+              style={[s.searchInput, { color: colors.ink }]}
+              placeholder="Search countries"
+              placeholderTextColor={colors.inkFaint}
+              value={pickerSearch}
+              onChangeText={setPickerSearch}
+              autoFocus
+              autoCorrect={false}
+            />
+            {pickerSearch.length > 0 && (
+              <TouchableOpacity onPress={() => setPickerSearch('')} hitSlop={8}>
+                <X size={14} color={colors.inkMute} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <FlatList
+            data={filteredPickerCountries}
+            keyExtractor={(item) => item.code}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => {
+                  setPickedCode(item.code);
+                  setShowPicker(false);
+                  setPickerSearch('');
+                }}
+                style={[s.pickerRow, { borderBottomColor: colors.line }]}
+                activeOpacity={0.6}
+              >
+                <Flag code={toAlpha2(item.code)} size={24} />
+                <Text
+                  style={{
+                    flex: 1,
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 16,
+                    fontWeight: '500',
+                    color: colors.ink,
+                    letterSpacing: -16 * 0.012,
+                  }}
+                  numberOfLines={1}
+                >
+                  {item.name}
+                </Text>
+                <ChevronRight size={16} color={colors.inkMute} />
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <Text
+                style={[
+                  Type.body13,
+                  { color: colors.inkMute, textAlign: 'center', marginTop: 24 },
+                ]}
+              >
+                No countries found
+              </Text>
+            }
+          />
+        </View>
+      </Modal>
+
       {/* Refinement sheet — presented when the user has typed free-form
           notes and taps "Generate itinerary". Calls back into the planner
           via handleRefinementSubmit with the merged brief, which then
@@ -1125,7 +1207,7 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     scrollContent: {
       padding: Spacing.lg,
-      paddingBottom: 48,
+      paddingBottom: 16,
     },
 
     // ── Header ────────────────────────────────────────────────

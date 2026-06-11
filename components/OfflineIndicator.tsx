@@ -1,5 +1,6 @@
 import React from 'react';
 import { Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/theme-context';
 import { useOffline } from '@/contexts/offline-context';
 import { WifiOff } from 'lucide-react-native';
@@ -17,6 +18,7 @@ function formatTimeSince(date: Date): string {
 
 export function OfflineIndicator() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { isOffline, lastSyncTime, pendingMutationCount, isSyncing, forceSyncNow } = useOffline();
 
   if (!isOffline && !isSyncing) return null;
@@ -39,7 +41,10 @@ export function OfflineIndicator() {
     <TouchableOpacity
       onPress={!isOffline ? forceSyncNow : undefined}
       activeOpacity={isOffline ? 1 : 0.7}
-      style={[styles.container, { backgroundColor }]}
+      // paddingTop pushes the banner BELOW the Dynamic Island / status bar so
+      // the text isn't clipped by the camera cutout. Matches the pattern Slack,
+      // Telegram, and Linear use for their connection-status banners.
+      style={[styles.container, { backgroundColor, paddingTop: insets.top + 6 }]}
     >
       {isSyncing ? (
         <ActivityIndicator size="small" color={textColor} style={styles.icon} />

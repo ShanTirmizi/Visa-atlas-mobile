@@ -2,28 +2,34 @@ import React, {
   useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo,
 } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Dimensions,
+  View, Text, Pressable, StyleSheet, Dimensions,
 } from 'react-native';
 import {
   BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { Shield, BookOpen, ChevronLeft } from 'lucide-react-native';
+import {
+  Shield, ChevronLeft, Sparkles,
+  Briefcase, Plane, FileX, Calendar as CalendarIcon,
+} from 'lucide-react-native';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue, useAnimatedStyle,
-  withRepeat, withSequence, withTiming, Easing,
+  withRepeat, withSequence, withTiming, withSpring, Easing,
   FadeIn, FadeOut,
 } from 'react-native-reanimated';
 import { useTheme } from '@/contexts/theme-context';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
+import { Type } from '@/constants/typography';
 import { endpoints } from '@/constants/api';
 import type { HeldVisaType } from '@/data/visaData';
 import { TypingDots } from '@/components/ui/TypingDots';
+import { DarkOrb } from '@/components/ui/DarkOrb';
+import { Squiggle } from '@/components/ui/Squiggle';
 
 // ── Constants ─────────────────────────────────────────────────────────
 const EMPLOYMENTS = [
@@ -58,12 +64,43 @@ const LOAD_MSGS = [
 ];
 
 // ── Step config (static — hoisted to avoid re-creation on every render) ──
-const STEP_CONFIG: Record<'employment' | 'purpose' | 'rejections' | 'month', { title: string; subtitle: string }> = {
-  employment: { title: 'What do you do?', subtitle: "This affects which documents you'll need" },
-  purpose: { title: 'Why are you visiting?', subtitle: 'Different visa types for different purposes' },
-  rejections: { title: 'Any previous rejections?', subtitle: 'This helps us flag potential issues' },
-  month: { title: 'When do you plan to travel?', subtitle: 'Processing times vary by season' },
+// Each step has an editorial split: a regular-weight prefix and an italic
+// emphasis word, so the title reads like the rest of the app's headlines
+// (e.g., "What do you *do*?" with italic "do" + coral "?"). The icon is
+// rendered inside the dark orb at the top of the sheet.
+type StepKey = 'employment' | 'purpose' | 'rejections' | 'month';
+
+const STEP_CONFIG: Record<StepKey, {
+  prefix: string;
+  emphasis: string;
+  suffix: string;
+  subtitle: string;
+  kicker: string;
+  icon: typeof Briefcase;
+  index: number;
+}> = {
+  employment: {
+    prefix: 'What do you ', emphasis: 'do', suffix: '?',
+    subtitle: "This affects which documents you'll need",
+    kicker: 'WORK', icon: Briefcase, index: 1,
+  },
+  purpose: {
+    prefix: 'Why are you ', emphasis: 'visiting', suffix: '?',
+    subtitle: 'Different visa types for different purposes',
+    kicker: 'PURPOSE', icon: Plane, index: 2,
+  },
+  rejections: {
+    prefix: 'Any previous ', emphasis: 'rejections', suffix: '?',
+    subtitle: 'This helps us flag potential issues',
+    kicker: 'HISTORY', icon: FileX, index: 3,
+  },
+  month: {
+    prefix: 'When do you plan to ', emphasis: 'travel', suffix: '?',
+    subtitle: 'Processing times vary by season',
+    kicker: 'TIMING', icon: CalendarIcon, index: 4,
+  },
 };
+const TOTAL_STEPS = 4;
 
 // ── Types ──────────────────────────────────────────────────────────────
 type Step = 'employment' | 'purpose' | 'rejections' | 'month' | 'loading';
@@ -248,21 +285,23 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
       activeColor?: string,
     ) => (
       <View style={s.pillGrid}>
-        {options.map(({ v, l }) => {
+        {options.map(({ v, l }, i) => {
           const active = value === v;
-          const bg = active ? (activeColor || colors.accent) : colors.card;
-          const border = active ? (activeColor || colors.accent) : colors.border;
+          // Stagger entry so cards arrive one-after-another on step change.
+          // 200ms duration, 50ms gap — same rhythm as TripRefinementSheet.
           return (
-            <TouchableOpacity
+            <Animated.View
               key={v}
-              onPress={() => onSelect(v)}
-              activeOpacity={0.7}
-              style={[s.pill, { backgroundColor: bg, borderColor: border }]}
+              entering={FadeIn.duration(220).delay(i * 50)}
             >
-              <Text style={[s.pillText, { color: active ? '#FFFFFF' : colors.foreground }]}>
-                {l}
-              </Text>
-            </TouchableOpacity>
+              <PressablePill
+                label={l}
+                active={active}
+                onPress={() => onSelect(v)}
+                colors={colors}
+                activeColor={activeColor}
+              />
+            </Animated.View>
           );
         })}
       </View>
@@ -283,91 +322,170 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
           contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}
         >
-          {step !== 'loading' && (
-            <View>
-              {prevStep() && (
-                <TouchableOpacity
-                  onPress={() => setStep(prevStep()!)}
-                  style={s.backBtn}
-                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                >
-                  <ChevronLeft size={18} color={colors.textSecondary} />
-                  <Text style={[s.backBtnText, { color: colors.textSecondary }]}>Back</Text>
-                </TouchableOpacity>
-              )}
-              <Text style={[s.title, { color: colors.foreground }]}>
-                {STEP_CONFIG[step].title}
-              </Text>
-              <Text style={[s.subtitle, { color: colors.textSecondary }]}>
-                {STEP_CONFIG[step].subtitle}
-              </Text>
+          {step !== 'loading' && (() => {
+            const meta = STEP_CONFIG[step];
+            const StepIcon = meta.icon;
+            const back = prevStep();
+            const isLastStep = step === 'month';
+            return (
+              <Animated.View
+                key={step}
+                entering={FadeIn.duration(260)}
+              >
+                {/* Back link — text-only, in-sheet step nav (not a screen back) */}
+                {back && (
+                  <Pressable
+                    onPress={() => setStep(back)}
+                    style={s.backBtn}
+                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                  >
+                    <ChevronLeft size={16} color={colors.inkMute} strokeWidth={2.2} />
+                    <Text style={[s.backBtnText, { color: colors.inkMute }]}>Back</Text>
+                  </Pressable>
+                )}
 
-              {step === 'employment' && renderPills(EMPLOYMENTS, employment, setEmployment)}
-              {step === 'purpose' && renderPills(PURPOSES, purpose, setPurpose)}
-              {step === 'rejections' && renderPills(
-                [{ v: 'false', l: 'No, never' }, { v: 'true', l: 'Yes, previously' }],
-                String(rejections),
-                (v) => setRejections(v === 'true'),
-                rejections ? colors.warning : colors.accent,
-              )}
+                {/* Editorial header — orb + kicker + squiggle + italic title */}
+                <View style={s.headerRow}>
+                  <DarkOrb size={38}>
+                    <StepIcon size={17} color="#FFFFFF" strokeWidth={1.8} />
+                  </DarkOrb>
+                  <View style={s.headerText}>
+                    <View style={s.kickerRow}>
+                      <Text style={[Type.kicker, { color: colors.coralDeep }]}>
+                        STEP {meta.index} OF {TOTAL_STEPS} · {meta.kicker}
+                      </Text>
+                      <Squiggle width={22} color={colors.coral} />
+                    </View>
+                    <Text style={s.title}>
+                      <Text style={{
+                        fontFamily: FontFamily.display,
+                        fontSize: 24,
+                        lineHeight: 28,
+                        letterSpacing: -24 * 0.018,
+                        color: colors.ink,
+                      }}>
+                        {meta.prefix}
+                      </Text>
+                      <Text style={{
+                        fontFamily: FontFamily.displayItalic,
+                        fontStyle: 'italic',
+                        fontSize: 24,
+                        lineHeight: 28,
+                        letterSpacing: -24 * 0.018,
+                        color: colors.ink,
+                      }}>
+                        {meta.emphasis}
+                      </Text>
+                      <Text style={{
+                        fontFamily: FontFamily.display,
+                        fontSize: 24,
+                        lineHeight: 28,
+                        letterSpacing: -24 * 0.018,
+                        color: colors.coral,
+                      }}>
+                        {meta.suffix}
+                      </Text>
+                    </Text>
+                    <Text style={[s.subtitle, { color: colors.inkMute }]}>
+                      {meta.subtitle}
+                    </Text>
+                  </View>
+                </View>
 
-              {step === 'month' && (
-                <View style={s.monthGrid}>
-                  {MONTHS.map((m) => {
-                    const active = travelMonth === m;
+                {/* Step progress dots */}
+                <View style={s.stepDots}>
+                  {Array.from({ length: TOTAL_STEPS }, (_, i) => {
+                    const n = i + 1;
+                    const reached = n <= meta.index;
                     return (
-                      <TouchableOpacity
-                        key={m}
-                        onPress={() => setTravelMonth(m)}
-                        activeOpacity={0.7}
+                      <View
+                        key={n}
                         style={[
-                          s.monthPill,
+                          s.stepDot,
                           {
-                            backgroundColor: active ? colors.accent : colors.card,
-                            borderColor: active ? colors.accent : colors.border,
+                            backgroundColor: reached ? colors.coral : colors.line,
+                            width: n === meta.index ? 22 : 6,
                           },
                         ]}
-                      >
-                        <Text style={[
-                          s.monthText,
-                          { color: active ? '#FFFFFF' : colors.foreground },
-                        ]}>
-                          {m.slice(0, 3)}
-                        </Text>
-                      </TouchableOpacity>
+                      />
                     );
                   })}
                 </View>
-              )}
 
-              {error ? (
-                <View style={[s.errorCard, { backgroundColor: colors.dangerBg, borderColor: colors.danger + '30' }]}>
-                  <Text style={[s.errorText, { color: colors.danger }]}>{error}</Text>
-                  <TouchableOpacity
-                    onPress={() => setError('')}
-                    style={[s.errorDismiss, { borderColor: colors.danger + '40' }]}
+                {step === 'employment' && renderPills(EMPLOYMENTS, employment, setEmployment)}
+                {step === 'purpose' && renderPills(PURPOSES, purpose, setPurpose)}
+                {step === 'rejections' && renderPills(
+                  [{ v: 'false', l: 'No, never' }, { v: 'true', l: 'Yes, previously' }],
+                  String(rejections),
+                  (v) => setRejections(v === 'true'),
+                  rejections ? colors.warning : colors.coral,
+                )}
+
+                {step === 'month' && (
+                  <View style={s.monthGrid}>
+                    {MONTHS.map((m, i) => (
+                      <Animated.View
+                        key={m}
+                        entering={FadeIn.duration(200).delay(i * 28)}
+                        style={s.monthPillSlot}
+                      >
+                        <PressablePill
+                          label={m.slice(0, 3)}
+                          active={travelMonth === m}
+                          onPress={() => setTravelMonth(m)}
+                          colors={colors}
+                          variant="month"
+                        />
+                      </Animated.View>
+                    ))}
+                  </View>
+                )}
+
+                {error ? (
+                  <View style={[s.errorCard, { backgroundColor: colors.dangerBg, borderColor: colors.danger + '30' }]}>
+                    <Text style={[s.errorText, { color: colors.danger }]}>{error}</Text>
+                    <Pressable
+                      onPress={() => setError('')}
+                      style={[s.errorDismiss, { borderColor: colors.danger + '40' }]}
+                    >
+                      <Text style={[s.errorDismissText, { color: colors.danger }]}>Dismiss</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {/* Premium CTA — italic Fraunces with coral terminal punctuation */}
+                <Pressable
+                  onPress={handleNext}
+                  style={({ pressed }) => [
+                    s.ctaButton,
+                    {
+                      backgroundColor: colors.coral,
+                      borderColor: colors.coral,
+                      shadowColor: colors.coral,
+                      opacity: pressed ? 0.92 : 1,
+                    },
+                  ]}
+                >
+                  {isLastStep && <Sparkles size={16} color="#FFFFFF" fill="#FFFFFF" />}
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                      fontSize: 17,
+                      fontWeight: '500',
+                      letterSpacing: -17 * 0.014,
+                      color: '#FFFFFF',
+                    }}
                   >
-                    <Text style={[s.errorDismissText, { color: colors.danger }]}>Dismiss</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-
-              <TouchableOpacity
-                onPress={handleNext}
-                activeOpacity={0.7}
-                style={[
-                  s.actionBtn,
-                  { backgroundColor: colors.primary },
-                  Shadows.glow(colors.primary, 0.25),
-                ]}
-              >
-                {step === 'month' && <BookOpen size={18} color="#FFFFFF" />}
-                <Text style={s.actionBtnText}>
-                  {step === 'month' ? 'Generate Visa Guide' : 'Next'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+                    {isLastStep ? 'Generate guide' : 'Next'}
+                    <Text style={{ color: '#FFFFFF', opacity: 0.75 }}>
+                      {isLastStep ? '.' : '  →'}
+                    </Text>
+                  </Text>
+                </Pressable>
+              </Animated.View>
+            );
+          })()}
 
           {step === 'loading' && (
             <View style={s.loadingContainer}>
@@ -401,61 +519,143 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
 VisaGuideSheet.displayName = 'VisaGuideSheet';
 export default VisaGuideSheet;
 
+// ──────────────────────────────────────────────
+// PressablePill — option card with subtle scale-spring on press
+// ──────────────────────────────────────────────
+function PressablePill({
+  label,
+  active,
+  onPress,
+  colors,
+  activeColor,
+  variant = 'option',
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  colors: ThemeColors;
+  activeColor?: string;
+  variant?: 'option' | 'month';
+}) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+  const onPressIn = () => {
+    scale.value = withSpring(0.96, { damping: 14, mass: 0.4, stiffness: 220 });
+  };
+  const onPressOut = () => {
+    scale.value = withSpring(1, { damping: 14, mass: 0.4, stiffness: 220 });
+  };
+
+  const accent = activeColor || colors.coral;
+  const bg = active ? accent : colors.surface;
+  const border = active ? accent : colors.line;
+  const textColor = active ? '#FFFFFF' : colors.ink;
+
+  const padding =
+    variant === 'month'
+      ? { paddingVertical: 12, paddingHorizontal: 0 }
+      : { paddingVertical: 12, paddingHorizontal: Spacing.lg };
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
+        <View
+          style={[
+            {
+              borderRadius: variant === 'month' ? 12 : 999,
+              borderWidth: 1.25,
+              backgroundColor: bg,
+              borderColor: border,
+              alignItems: 'center',
+            },
+            padding,
+          ]}
+        >
+          <Text
+            style={{
+              fontFamily: active ? FontFamily.displayItalic : FontFamily.display,
+              fontStyle: active ? 'italic' : 'normal',
+              fontSize: variant === 'month' ? 15 : 16,
+              fontWeight: '500',
+              letterSpacing: -(variant === 'month' ? 15 : 16) * 0.012,
+              color: textColor,
+            }}
+          >
+            {label}
+          </Text>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     backBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 2,
-      marginBottom: Spacing.xs,
+      marginBottom: Spacing.md,
+      alignSelf: 'flex-start',
     },
     backBtnText: {
       fontFamily: FontFamily.medium,
       fontSize: FontSize.sm,
     },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      marginBottom: 14,
+    },
+    headerText: {
+      flex: 1,
+      paddingTop: 2,
+    },
+    kickerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 4,
+    },
     title: {
-      fontFamily: FontFamily.display,
-      fontSize: FontSize['3xl'],
-      letterSpacing: 0.5,
+      // The actual font styling is inline so prefix/emphasis/suffix can each
+      // pick their own family + colour without a wrapper. This style just
+      // owns vertical rhythm.
+      marginTop: 2,
     },
     subtitle: {
       fontFamily: FontFamily.regular,
-      fontSize: FontSize.sm,
-      marginTop: 2,
-      marginBottom: Spacing.lg,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 6,
+    },
+    stepDots: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 22,
+      marginTop: 4,
+    },
+    stepDot: {
+      height: 6,
+      borderRadius: 3,
     },
     pillGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: Spacing.sm,
+      gap: 10,
       marginBottom: Spacing.lg,
-    },
-    pill: {
-      paddingVertical: 12,
-      paddingHorizontal: Spacing.lg,
-      borderRadius: Radius.sm,
-      borderWidth: 1.5,
-    },
-    pillText: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.sm,
     },
     monthGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: Spacing.sm,
+      gap: 8,
       marginBottom: Spacing.lg,
     },
-    monthPill: {
-      width: '22%' as unknown as number,
-      alignItems: 'center',
-      paddingVertical: 12,
-      borderRadius: Radius.sm,
-      borderWidth: 1.5,
-    },
-    monthText: {
-      fontFamily: FontFamily.semibold,
-      fontSize: FontSize.sm,
+    monthPillSlot: {
+      width: '23.5%' as unknown as number,
     },
     errorCard: {
       flexDirection: 'row',
@@ -481,19 +681,19 @@ const makeStyles = (colors: ThemeColors) =>
       fontFamily: FontFamily.semibold,
       fontSize: FontSize.xs,
     },
-    actionBtn: {
+    ctaButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: Spacing.sm,
-      paddingVertical: 16,
-      borderRadius: 20,
-    },
-    actionBtnText: {
-      fontFamily: FontFamily.bold,
-      fontSize: FontSize.base,
-      color: '#FFFFFF',
-      letterSpacing: 0.5,
+      gap: 10,
+      paddingVertical: 18,
+      borderRadius: 999,
+      borderWidth: 1,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.32,
+      shadowRadius: 16,
+      elevation: 6,
+      marginTop: 4,
     },
     loadingContainer: {
       flex: 1,

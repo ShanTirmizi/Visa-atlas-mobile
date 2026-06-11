@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useAction, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
@@ -169,7 +169,7 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
                 >
                   CODE
                 </Text>
-                <TextInput
+                <BottomSheetTextInput
                   value={code}
                   onChangeText={(t) => {
                     setError(null);
