@@ -7,10 +7,16 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { Pencil } from 'lucide-react-native';
+import { BorderlessButton } from 'react-native-gesture-handler';
+import { BlurView } from 'expo-blur';
+import { useQuery, useMutation } from 'convex/react';
+import { Pencil, Heart } from 'lucide-react-native';
+import { api } from '@/convex/_generated/api';
+import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, Shadows } from '@/constants/theme';
 import { Squiggle } from '@/components/ui/Squiggle';
+import { hapticSelect } from '@/utils/haptics';
 
 export type DayImage = { url: string; thumb?: string; credit?: string; creditUrl?: string } | null;
 
@@ -28,6 +34,77 @@ export interface DayDeckCardProps {
    *  text — used on the day card currently being written during streaming
    *  generation. */
   showCursor?: boolean;
+  /** Convex trip id — when present, the card shows the day-vote heart pill
+   *  (bottom-right of the photo). Vote rows use activityId `day-<index>`,
+   *  where index = dayNumber - 1 (the server stamps day = idx + 1). */
+  tripId?: string;
+}
+
+// ── Day-vote heart pill ──────────────────────────────────────────────
+// Frosted-glass chip on photography (Apple Maps / Photos chip pattern):
+// Heart icon + up-vote count for this day, shared live across all
+// collaborators on the trip. Tapping toggles YOUR vote. Solo planners can
+// vote too — the pill stays visually quiet (just the heart) at zero votes.
+function DayVotePill({ tripId, dayNumber }: { tripId: string; dayNumber: number }) {
+  const { colors } = useTheme();
+  const activityId = `day-${dayNumber - 1}`;
+
+  const votes = useQuery(api.tripVotes.getVotesForTrip, {
+    tripId: tripId as Id<'trips'>,
+  });
+  // getVotesForTrip returns raw rows (incl. userId); the viewer's own id
+  // comes from the profile query so we can mark "my vote" with a fill.
+  const profile = useQuery(api.userProfiles.getCurrentProfile);
+  const toggleVote = useMutation(api.tripVotes.toggleVote);
+
+  const upVotes = (votes ?? []).filter(
+    (v) => v.activityId === activityId && v.vote === 'up',
+  );
+  const voted =
+    profile != null && upVotes.some((v) => v.userId === profile.userId);
+
+  const handleToggle = () => {
+    hapticSelect();
+    // Server toggles: same vote exists → delete; none → insert 'up'.
+    toggleVote({
+      tripId: tripId as Id<'trips'>,
+      activityId,
+      vote: 'up',
+    }).catch(() => {});
+  };
+
+  return (
+    // BorderlessButton (RNGH native button) claims the touch on press-in,
+    // which cancels the deck's outer Tap gesture (open day) — the documented
+    // RNGH pattern for touchables inside a GestureDetector, same as buttons
+    // inside Swipeable rows. A plain RN Pressable here would race the deck
+    // tap and fire both.
+    <BorderlessButton
+      onPress={handleToggle}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      accessibilityRole="button"
+      accessibilityLabel={
+        voted
+          ? `Remove your vote for Day ${dayNumber}`
+          : `Vote for Day ${dayNumber}`
+      }
+      style={styles.votePillWrap}
+    >
+      <BlurView tint="systemMaterial" intensity={80} style={styles.votePill}>
+        <Heart
+          size={13}
+          color={colors.coral}
+          fill={voted ? colors.coral : 'none'}
+          strokeWidth={2.2}
+        />
+        {upVotes.length > 0 ? (
+          <Text style={[styles.votePillCount, { color: colors.ink }]}>
+            {upVotes.length}
+          </Text>
+        ) : null}
+      </BlurView>
+    </BorderlessButton>
+  );
 }
 
 // Thin coral bar that blinks at ~2.2 Hz; placed inline at the end of the
@@ -59,7 +136,7 @@ function StreamingCursor() {
   );
 }
 
-function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit, showCursor }: DayDeckCardProps) {
+function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit, showCursor, tripId }: DayDeckCardProps) {
   const { colors } = useTheme();
   const dayLabel = String(dayNumber).padStart(2, '0');
 
@@ -122,6 +199,9 @@ function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit, show
             <Text style={styles.stopsText}>{stops} stops</Text>
           </View>
         ) : null}
+
+        {/* Day-vote heart pill — frosted chip, bottom-right of the photo */}
+        {tripId ? <DayVotePill tripId={tripId} dayNumber={dayNumber} /> : null}
       </View>
 
       {/* ── Content region (bottom ~40%) ──────────────────────────── */}
@@ -313,6 +393,31 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.monoMedium,
     fontSize: 11,
     fontWeight: '700',
+  },
+
+  // Day-vote heart pill (frosted, bottom-right of photo region)
+  votePillWrap: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    borderRadius: 999,
+    // Clips the BlurView to the pill shape. Frosted chips don't carry a
+    // drop shadow, so clipping on the same view is safe here (the iOS
+    // shadow-clipping split rule applies to shadowed cards only).
+    overflow: 'hidden',
+  },
+  votePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  votePillCount: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
 
   // Floating edit pencil

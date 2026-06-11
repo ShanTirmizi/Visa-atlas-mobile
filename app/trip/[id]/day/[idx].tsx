@@ -32,6 +32,12 @@ export default function DayDetailRoute() {
     api.trips.getTrip,
     isAuthenticated && tripId ? { id: tripId } : 'skip',
   );
+  // Same live query the Bookings tab uses (BookingTimeline) — threaded down
+  // so booked flights/stays render inside the day they cover.
+  const bookings = useQuery(
+    api.bookings.listBookingsByTrip,
+    isAuthenticated && tripId ? { tripId } : 'skip',
+  );
 
   const itinerary = useMemo<DayDetailDay[]>(
     // filter(Boolean): out-of-order per-day stream patches can leave
@@ -104,6 +110,11 @@ export default function DayDetailRoute() {
         onEdit={onEdit}
         onTweakWithAI={onTweakWithAI}
         onNavigateDay={onNavigateDay}
+        tripId={tripId}
+        isDayRewriting={(trip.retryingSections ?? []).includes(
+          `itinerary-day:${clampedIndex}`,
+        )}
+        bookings={bookings}
       />
       <EditDaySheet
         ref={editSheetRef}

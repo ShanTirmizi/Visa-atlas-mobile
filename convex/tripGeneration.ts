@@ -5,6 +5,9 @@ import { internal } from "./_generated/api";
 import { checkTripPermission, requireAuth } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import { lookupStaticFacts } from "../constants/staticTripFacts";
+import { deriveVisaDeadline } from "../utils/visaDeadline";
+import { visaData } from "../data/visaData";
+import { isActionableVisaCategory } from "./notifications";
 import { SECTION_FIELD_MAP, STREAMING_SECTIONS } from "./lib/sectionFieldMap";
 import {
   buildSystemPrompt,
@@ -50,6 +53,41 @@ const stripCodeFences = (raw: string): string =>
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+
+/** Extract the first complete top-level JSON object from a string —
+ * tolerant of prose preambles/codas the model sometimes adds around the
+ * JSON despite instructions. Returns null when no balanced object exists
+ * (e.g. truncated output). String-aware brace walk. */
+function extractFirstJsonObject(raw: string): string | null {
+  const s = stripCodeFences(raw);
+  const start = s.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
+}
 
 // Args validator for `generateTrip`; also embedded in `runGenerationStream`'s
 // args. Mirrors the planner sheet form; deliberately permissive on optional fields.
@@ -400,6 +438,29 @@ export const completeGeneration = internalMutation({
       await ctx.scheduler.runAfter(0, internal.notifications.sendTripReady, {
         tripId,
       });
+
+      // Visa apply-by reminder: scheduled for 09:00 UTC on the derived
+      // deadline date. The action recomputes everything at fire time, so
+      // deleted trips / moved dates make it a clean no-op.
+      if (isActionableVisaCategory(trip.visaCategory, trip.countryCode)) {
+        const staticEntry = visaData.find((c) => c.code === trip.countryCode);
+        const info = deriveVisaDeadline({
+          startDate: trip.startDate,
+          processingTime: trip.visaProcessingTime,
+          fallbackProcessingTime: staticEntry?.processingTime,
+        });
+        if (info) {
+          const reminderAt = new Date(info.deadline);
+          reminderAt.setUTCHours(9, 0, 0, 0);
+          if (reminderAt.getTime() > Date.now()) {
+            await ctx.scheduler.runAt(
+              reminderAt.getTime(),
+              internal.notifications.sendVisaDeadlineReminder,
+              { tripId },
+            );
+          }
+        }
+      }
     }
   },
 });
@@ -803,6 +864,123 @@ export const retrySection = mutation({
       tripId,
       section,
     });
+  },
+});
+
+// ── Day quick-tweaks ─────────────────────────────────────────────
+// One-tap single-day rewrites from the day-detail screen ("More relaxed",
+// "Rainy-day version", "Swap the evening"). Same mutation-schedules-action
+// shape as retrySection; progress is reactive via retryingSections with
+// the key 'itinerary-day:N'.
+
+const DAY_TWEAK_PROMPTS: Record<string, string> = {
+  relaxed:
+    "Rewrite this single day to be noticeably more relaxed: fewer stops, a later start, more lingering time at each place. Keep the day's best anchor activity.",
+  rainy:
+    "Rewrite this single day as a rainy-day version: indoor alternatives (museums, markets, food halls, cafés, galleries) that keep the day's spirit and neighborhood where possible.",
+  "swap-evening":
+    "Keep the morning and afternoon EXACTLY as they are (same text). Replace ONLY the evening with a different, equally specific plan — a different venue, ideally a different neighborhood.",
+};
+
+export const tweakDay = mutation({
+  args: {
+    tripId: v.id("trips"),
+    dayIndex: v.number(),
+    instruction: v.union(
+      v.literal("relaxed"),
+      v.literal("rainy"),
+      v.literal("swap-evening"),
+    ),
+  },
+  handler: async (ctx, { tripId, dayIndex, instruction }) => {
+    await checkTripPermission(ctx, tripId, "editor");
+    const trip = await ctx.db.get(tripId);
+    if (!trip || trip.deletedAt !== undefined) throw new Error("Trip not found");
+    if (!trip.originalInputs) throw new Error("No original inputs stored");
+    const days = trip.itinerary ? safeParseArray(trip.itinerary) : [];
+    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= days.length) {
+      throw new Error("Invalid day");
+    }
+    const key = `itinerary-day:${dayIndex}`;
+    const retrying = trip.retryingSections ?? [];
+    if (retrying.includes(key)) return; // already in flight
+    await ctx.db.patch(tripId, { retryingSections: [...retrying, key] });
+    await ctx.scheduler.runAfter(0, internal.tripGeneration.runDayTweak, {
+      tripId,
+      dayIndex,
+      instruction,
+    });
+  },
+});
+
+export const runDayTweak = internalAction({
+  args: {
+    tripId: v.id("trips"),
+    dayIndex: v.number(),
+    instruction: v.string(),
+  },
+  handler: async (ctx, { tripId, dayIndex, instruction }) => {
+    try {
+      const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
+      if (!trip?.originalInputs || !trip.itinerary) return;
+      const days = safeParseArray(trip.itinerary);
+      const day = days[dayIndex];
+      if (!day) return;
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+
+      const input = JSON.parse(trip.originalInputs);
+      const systemPrompt = buildSystemPrompt(input);
+      const guidance = DAY_TWEAK_PROMPTS[instruction];
+      if (!guidance) return;
+      const userPrompt = `Here is Day ${dayIndex + 1} of the traveler's itinerary as JSON:
+${JSON.stringify(day)}
+
+${guidance}
+
+Keep the exact same JSON shape (same keys), keep "day": ${dayIndex + 1}, recommend real places by name. Output ONLY the JSON object — no fences, no commentary.`;
+
+      await new Promise<void>((resolve) => {
+        streamAnthropic(
+          { apiKey, systemPrompt, userPrompt, maxTokens: 2048 },
+          makeWholeSectionBuffer(
+            async (full) => {
+              try {
+                // Tolerate prose around the JSON; null means truncated or
+                // no object at all — keep the old day rather than corrupt it.
+                const cleaned = extractFirstJsonObject(full);
+                if (!cleaned) {
+                  console.error(
+                    `Day tweak ${dayIndex}: no parseable JSON in output:`,
+                    full.slice(0, 200),
+                  );
+                  return;
+                }
+                JSON.parse(cleaned); // validate — a bad payload keeps the old day
+                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                  tripId,
+                  section: `itinerary-day:${dayIndex}`,
+                  content: cleaned,
+                });
+              } catch (err) {
+                console.error(`Day tweak ${dayIndex} patch failed:`, err);
+              } finally {
+                resolve();
+              }
+            },
+            (err) => {
+              console.error(`Day tweak ${dayIndex} stream errored:`, err);
+              resolve();
+            },
+          ),
+        );
+      });
+    } finally {
+      await ctx.runMutation(internal.tripGeneration._clearRetryingSection, {
+        tripId,
+        section: `itinerary-day:${dayIndex}`,
+      });
+    }
   },
 });
 

@@ -200,6 +200,7 @@ function ThemedApp() {
           <Stack.Screen name="more/visas" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="more/favorites" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="more/visited" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="more/passport" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="more/settings" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="more/edit-passport" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="more/edit-residence" options={{ animation: 'slide_from_right' }} />

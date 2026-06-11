@@ -164,6 +164,35 @@ export const setTripStarred = mutation({
   },
 });
 
+/**
+ * Toggle one pre-flight checklist item on the trip's Visa tab. Progress is
+ * keyed by the item's text — `checklistProgress` stores the checked strings —
+ * so state survives as long as the rendered list is stable (Apple Reminders
+ * keys completion the same way for templated lists).
+ */
+export const toggleChecklistItem = mutation({
+  args: {
+    id: v.id("trips"),
+    item: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await checkTripPermission(ctx, args.id, "editor");
+
+    const trip = await ctx.db.get(args.id);
+    // Soft-deleted trips read as gone everywhere (matches getTrip).
+    if (trip === null || trip.deletedAt !== undefined) {
+      throw new Error("Trip not found");
+    }
+
+    const progress = trip.checklistProgress ?? [];
+    const next = progress.includes(args.item)
+      ? progress.filter((entry) => entry !== args.item)
+      : [...progress, args.item];
+
+    await ctx.db.patch(args.id, { checklistProgress: next });
+  },
+});
+
 export const updateTripStatus = mutation({
   args: {
     id: v.id("trips"),

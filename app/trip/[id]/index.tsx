@@ -50,6 +50,9 @@ import BookingDetailSheet, {
 // ── DayDeck (for Itinerary tab) ────────────────────────────
 import DayDeck from '@/components/trip/DayDeck';
 
+// ── Collaboration — overlapping avatars in the header ──────
+import { CollabStack } from '@/components/trip/CollabStack';
+
 // ── Visa guide sheet — same flow used on country/[code] ────
 import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
 import { useVisa } from '@/contexts/visa-context';
@@ -60,6 +63,7 @@ import {
 } from '@/data/visaData';
 import { VisaHeroCardForCountry } from '@/components/visa/VisaHeroCardForCountry';
 import { VisaDeadlineCard } from '@/components/visa/VisaDeadlineCard';
+import { VisaChecklistCard } from '@/components/visa/VisaChecklistCard';
 
 // ── Streaming-generation UI: progress strip, skeletons, retry ──
 import { TripGenerationStrip } from '@/components/trip/TripGenerationStrip';
@@ -262,6 +266,10 @@ export default function TripDetailScreen() {
       {
         text: 'Edit itinerary',
         onPress: () => router.push(`/trip/${id}/day/0` as never),
+      },
+      {
+        text: 'Invite a travel partner',
+        onPress: () => router.push(`/trip/invite?tripId=${id}` as never),
       },
       {
         text: 'Delete trip',
@@ -467,8 +475,11 @@ export default function TripDetailScreen() {
             ) : null}
           </View>
 
-          {/* Right: heart save toggle + 3-dot menu (chat / edit / delete) */}
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          {/* Right: collaborator avatars + heart save toggle + 3-dot menu
+              (chat / edit / invite / delete). CollabStack renders nothing
+              on solo trips, so the header stays unchanged for most users. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <CollabStack tripId={trip._id} />
             <CircleBtn
               size={38}
               solid
@@ -838,99 +849,14 @@ export default function TripDetailScreen() {
                 fallbackProcessingTime={country.processingTime}
               />
 
-              {/* Bring-with-you checklist — paper card, coral check bullets */}
-              <View
-                style={{
-                  marginTop: 14,
-                  backgroundColor: colors.surface,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  padding: 18,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                    marginBottom: 6,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: FontFamily.monoMedium,
-                      fontSize: 10,
-                      fontWeight: '700',
-                      color: colors.inkMute,
-                      letterSpacing: 10 * 0.22,
-                    }}
-                  >
-                    PRE-FLIGHT CHECKLIST
-                  </Text>
-                </View>
-                <Text
-                  style={{
-                    fontFamily: FontFamily.display,
-                    fontSize: 22,
-                    fontWeight: '500',
-                    lineHeight: 26,
-                    letterSpacing: -22 * 0.022,
-                    color: colors.ink,
-                    marginBottom: 12,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: FontFamily.displayItalic,
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    {editorial.checklistTitle}
-                  </Text>
-                  <Text style={{ color: colors.coral }}>.</Text>
-                </Text>
-                <View style={{ gap: 10 }}>
-                  {editorial.checklist.map((item) => (
-                    <View
-                      key={item}
-                      style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}
-                    >
-                      <View
-                        style={{
-                          width: 18,
-                          height: 18,
-                          borderRadius: 9,
-                          backgroundColor: colors.coralBg,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginTop: 2,
-                        }}
-                      >
-                        <View
-                          style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: 3.5,
-                            backgroundColor: colors.coralDeep,
-                          }}
-                        />
-                      </View>
-                      <Text
-                        style={{
-                          flex: 1,
-                          fontFamily: FontFamily.regular,
-                          fontSize: 14,
-                          lineHeight: 21,
-                          color: colors.inkSoft,
-                        }}
-                      >
-                        {item}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
+              {/* Bring-with-you checklist — checkable rows, progress persisted
+                  on the trip doc (checklistProgress, keyed by item text) */}
+              <VisaChecklistCard
+                tripId={trip._id}
+                title={editorial.checklistTitle}
+                items={editorial.checklist}
+                checkedItems={trip.checklistProgress ?? []}
+              />
 
               {/* Traveller's tip — dark ink editorial card with quote glyph */}
               <View

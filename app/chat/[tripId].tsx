@@ -36,6 +36,7 @@ import {
   Wand2,
 } from 'lucide-react-native';
 import BackButton from '@/components/ui/BackButton';
+import { ItineraryDiffCard, diffItineraries } from '@/components/chat/ItineraryDiffCard';
 import { hapticSelect } from '@/utils/haptics';
 import { useTheme } from '@/contexts/theme-context';
 import { Squiggle } from '@/components/ui/Squiggle';
@@ -224,6 +225,14 @@ export default function ChatScreen() {
   // as "Refreshing photos…" on the stamp until images come back from the
   // trip-images endpoint and we patch dayImages/activityImages on the trip.
   const [refreshingPhotosFor, setRefreshingPhotosFor] = useState<Set<string>>(new Set());
+  // One un-applied AI itinerary proposal at a time, anchored to the assistant
+  // message that produced it. Held here (never auto-applied) until the user
+  // explicitly accepts or declines via the ItineraryDiffCard — a newer
+  // proposal simply replaces this slot, dismissing the previous card.
+  const [pendingUpdate, setPendingUpdate] = useState<{
+    itinerary: string;
+    forMessageId: string;
+  } | null>(null);
   const updateTripField = useMutation(api.trips.updateTripField);
 
   // Cycle the thinking phrase while the AI is composing. Reset to 0 on each
@@ -262,6 +271,62 @@ export default function ChatScreen() {
     userName: m.userName ?? undefined,
     userId: m.userId ?? undefined,
   }));
+
+  // The single write path for itinerary updates — used by the silent no-op
+  // path in sendChat and by the diff card's "Apply changes". Patches the
+  // trip, stamps the originating assistant bubble ("Itinerary updated"),
+  // and fires the photo regeneration exactly like the legacy auto-apply flow.
+  const applyItineraryUpdate = useCallback(
+    async (itinerary: string, stampId: string | null) => {
+      try {
+        await updateTripField({
+          id: tripId as Id<'trips'>,
+          field: 'itinerary',
+          value: itinerary,
+        });
+        if (stampId) {
+          setUpdatedMsgIds((prev) => {
+            const next = new Set(prev);
+            next.add(stampId);
+            return next;
+          });
+          // Mark photos as refreshing so the stamp shows the loading copy
+          // while the trip-images endpoint regenerates images for the new
+          // activities.
+          setRefreshingPhotosFor((prev) => {
+            const next = new Set(prev);
+            next.add(stampId);
+            return next;
+          });
+        }
+
+        // Fire-and-forget: regenerate per-day + per-activity images so the
+        // user sees fresh photography for the new itinerary the next time
+        // they open the trip detail. The text update is done; this just
+        // catches the visuals up.
+        void regenerateImagesForItinerary(
+          itinerary,
+          {
+            countryName: trip?.countryName,
+            capital: trip?.capital,
+          },
+          tripId as Id<'trips'>,
+          updateTripField,
+        ).finally(() => {
+          if (stampId) {
+            setRefreshingPhotosFor((prev) => {
+              const next = new Set(prev);
+              next.delete(stampId);
+              return next;
+            });
+          }
+        });
+      } catch (err) {
+        console.warn('itinerary patch failed', err);
+      }
+    },
+    [tripId, trip?.countryName, trip?.capital, updateTripField],
+  );
 
   const sendChat = useCallback(
     async (text: string) => {
@@ -322,54 +387,24 @@ export default function ChatScreen() {
         });
 
         if (data.itineraryUpdate) {
-          try {
-            await updateTripField({
-              id: tripId as Id<'trips'>,
-              field: 'itinerary',
-              value: data.itineraryUpdate,
+          const stampId = newMessageId ? String(newMessageId) : null;
+          // Never auto-apply a real edit. Diff the proposal against what the
+          // user has now: a no-op (or an unparseable payload we can't render
+          // a diff for) goes through the legacy silent-apply path, anything
+          // else is held in pendingUpdate for an explicit accept/decline via
+          // the ItineraryDiffCard under the assistant's reply.
+          const diffs = diffItineraries(
+            trip?.itinerary ?? '[]',
+            data.itineraryUpdate,
+          );
+          if (diffs === null || diffs.length === 0 || !stampId) {
+            await applyItineraryUpdate(data.itineraryUpdate, stampId);
+          } else {
+            // A newer proposal replaces any previous pending one.
+            setPendingUpdate({
+              itinerary: data.itineraryUpdate,
+              forMessageId: stampId,
             });
-            // Mark the assistant reply that triggered the patch so the bubble
-            // renders an "Itinerary updated" stamp immediately.
-            const stampId = newMessageId ? String(newMessageId) : null;
-            if (stampId) {
-              setUpdatedMsgIds((prev) => {
-                const next = new Set(prev);
-                next.add(stampId);
-                return next;
-              });
-              // Mark photos as refreshing so the stamp shows the loading copy
-              // while the trip-images endpoint regenerates images for the new
-              // activities.
-              setRefreshingPhotosFor((prev) => {
-                const next = new Set(prev);
-                next.add(stampId);
-                return next;
-              });
-            }
-
-            // Fire-and-forget: regenerate per-day + per-activity images so the
-            // user sees fresh photography for the new itinerary the next time
-            // they open the trip detail. The text update is done; this just
-            // catches the visuals up.
-            void regenerateImagesForItinerary(
-              data.itineraryUpdate,
-              {
-                countryName: trip?.countryName,
-                capital: trip?.capital,
-              },
-              tripId as Id<'trips'>,
-              updateTripField,
-            ).finally(() => {
-              if (stampId) {
-                setRefreshingPhotosFor((prev) => {
-                  const next = new Set(prev);
-                  next.delete(stampId);
-                  return next;
-                });
-              }
-            });
-          } catch (err) {
-            console.warn('itinerary patch failed', err);
           }
         }
       } catch (err) {
@@ -387,9 +422,23 @@ export default function ChatScreen() {
       convexMessages,
       trip,
       addMessage,
-      updateTripField,
+      applyItineraryUpdate,
     ],
   );
+
+  // Diff-card actions. Accept clears the card immediately (the "Itinerary
+  // updated" stamp takes over once the patch lands); decline just discards
+  // the proposal and keeps the user's current itinerary.
+  const acceptPendingUpdate = useCallback(() => {
+    if (!pendingUpdate) return;
+    const { itinerary, forMessageId } = pendingUpdate;
+    setPendingUpdate(null);
+    void applyItineraryUpdate(itinerary, forMessageId);
+  }, [pendingUpdate, applyItineraryUpdate]);
+
+  const declinePendingUpdate = useCallback(() => {
+    setPendingUpdate(null);
+  }, []);
 
   const sendMessage = useCallback(async () => {
     const text = inputText.trim();
@@ -531,6 +580,23 @@ export default function ChatScreen() {
                 </Pressable>
               ) : null}
             </View>
+
+            {/* Pending itinerary proposal — review card anchored under the
+                assistant reply that produced it. Only the changed days are
+                shown; the trip is untouched until "Apply changes". */}
+            {pendingUpdate?.forMessageId === item.id ? (
+              <Animated.View
+                entering={FadeIn.duration(280)}
+                style={{ alignSelf: 'stretch', marginTop: 8 }}
+              >
+                <ItineraryDiffCard
+                  currentItinerary={trip?.itinerary ?? '[]'}
+                  proposedItinerary={pendingUpdate.itinerary}
+                  onApply={acceptPendingUpdate}
+                  onKeep={declinePendingUpdate}
+                />
+              </Animated.View>
+            ) : null}
           </View>
         );
       }
@@ -589,7 +655,18 @@ export default function ChatScreen() {
         </View>
       );
     },
-    [colors, currentUser, updatedMsgIds, refreshingPhotosFor, router, tripId],
+    [
+      colors,
+      currentUser,
+      updatedMsgIds,
+      refreshingPhotosFor,
+      router,
+      tripId,
+      pendingUpdate,
+      trip?.itinerary,
+      acceptPendingUpdate,
+      declinePendingUpdate,
+    ],
   );
 
   return (

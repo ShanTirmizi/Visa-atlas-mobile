@@ -24,6 +24,7 @@ import { SectionKicker } from '@/components/ui/SectionKicker';
 
 import { TripsGreeting } from '@/components/trips/TripsGreeting';
 import { TripsSearch } from '@/components/trips/TripsSearch';
+import { UniversalSearchResults } from '@/components/search/UniversalSearchResults';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { NextTripHero } from '@/components/trips/NextTripHero';
 import { TripRow } from '@/components/trips/TripRow';
@@ -192,8 +193,10 @@ export default function TripsScreen() {
     },
   });
 
-  // Search query — live-filters the rows list by country name.
+  // Search query — when non-empty, the list area swaps to grouped
+  // universal results (trips / countries / guides), Spotlight-style.
   const [search, setSearch] = useState('');
+  const searchActive = search.trim().length > 0;
 
   // Filter chip state + previous-filter ref so the rows-list swap knows
   // which side to fade-slide in from when the user taps a different tab.
@@ -214,6 +217,14 @@ export default function TripsScreen() {
   const trips = useOfflineQuery(
     api.trips.listTrips,
     isAuthenticated ? {} : 'skip',
+  );
+
+  // Guides for universal search — same query the Guides tab subscribes to
+  // (offline-cached via useOfflineQuery), but only while a search is live
+  // so the home screen doesn't pay for a second subscription at rest.
+  const guides = useOfflineQuery(
+    api.visaGuides.listGuides,
+    isAuthenticated && searchActive ? {} : 'skip',
   );
 
   // When the screen swaps render branches (loading → empty → list), the
@@ -246,18 +257,15 @@ export default function TripsScreen() {
     return upcoming ?? sortedTrips[0];
   }, [sortedTrips]);
 
-  // Rows = all trips except featured, filtered by tab + search query.
+  // Rows = all trips except featured, filtered by tab. (The search query
+  // doesn't filter these rows — a non-empty query swaps the whole list
+  // area for UniversalSearchResults instead.)
   const rows = useMemo<RawTrip[]>(() => {
     const withoutFeatured = featured
       ? sortedTrips.filter((t) => t._id !== featured._id)
       : sortedTrips;
-    const filtered = applyFilter(withoutFeatured, filter);
-    const q = search.trim().toLowerCase();
-    if (!q) return filtered;
-    return filtered.filter((t) =>
-      t.countryName.toLowerCase().includes(q),
-    );
-  }, [sortedTrips, filter, featured, search]);
+    return applyFilter(withoutFeatured, filter);
+  }, [sortedTrips, filter, featured]);
 
   // ── Loading ──────────────────────────────────────
   if (trips === undefined) {
@@ -289,6 +297,8 @@ export default function TripsScreen() {
           showsVerticalScrollIndicator={false}
           onScroll={onScroll}
           scrollEventThrottle={16}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
         >
           {/* Greeting header */}
           <TripsGreeting />
@@ -298,11 +308,17 @@ export default function TripsScreen() {
             <TripsSearch plannerRef={plannerRef} value={search} onChangeText={setSearch} />
           </View>
 
-          {/* Empty state: dashed card + hand-picked row */}
-          <EmptyStateContent
-            onPlan={() => plannerRef.current?.present()}
-            onBrowse={() => router.push('/(tabs)/explore' as never)}
-          />
+          {searchActive ? (
+            /* Universal search results — countries (and guides) still match
+               even before the user has any trips. */
+            <UniversalSearchResults query={search} trips={[]} guides={guides} />
+          ) : (
+            /* Empty state: dashed card + hand-picked row */
+            <EmptyStateContent
+              onPlan={() => plannerRef.current?.present()}
+              onBrowse={() => router.push('/(tabs)/explore' as never)}
+            />
+          )}
 
           <TripPlannerSheet
             ref={plannerRef}
@@ -331,6 +347,8 @@ export default function TripsScreen() {
       showsVerticalScrollIndicator={false}
       onScroll={onScroll}
       scrollEventThrottle={16}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
     >
       {/* 1. Greeting header */}
       <TripsGreeting />
@@ -340,6 +358,16 @@ export default function TripsScreen() {
         <TripsSearch plannerRef={plannerRef} value={search} onChangeText={setSearch} />
       </View>
 
+      {searchActive ? (
+        /* Universal search — grouped TRIPS / COUNTRIES / GUIDES results
+           replace the list area while the query is non-empty. */
+        <UniversalSearchResults
+          query={search}
+          trips={sortedTrips}
+          guides={guides}
+        />
+      ) : (
+      <>
       {/* 3. Filter chips */}
       <View style={{ marginTop: 14, paddingHorizontal: 22 }}>
         <SegmentedControl
@@ -426,6 +454,8 @@ export default function TripsScreen() {
             />
           ))}
         </Animated.View>
+      )}
+      </>
       )}
 
       {/* TripPlannerSheet — stub, no country context from this screen */}

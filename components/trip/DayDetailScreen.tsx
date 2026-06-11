@@ -17,6 +17,10 @@ import { CircleBtn } from '@/components/ui/CircleBtn';
 import { Photo, type PhotoTone } from '@/components/ui/Photo';
 import { StopList, type Stop } from '@/components/trip/day/StopList';
 import { PullQuote } from '@/components/trip/day/PullQuote';
+import { DayTweakChips } from '@/components/trip/day/DayTweakChips';
+import { DayBookingsStrip, type DayStripBooking } from '@/components/trip/day/DayBookingsStrip';
+import DayMapStrip from '@/components/trip/DayMapStrip';
+import type { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
@@ -56,6 +60,15 @@ interface DayDetailScreenProps {
   onNavigateDay: (newIndex: number) => void;
   /** Open AI chat scoped to this specific day. */
   onTweakWithAI?: () => void;
+  /** Convex trip id — enables the one-tap tweak chips (DayTweakChips owns
+   *  the mutation). Absent → the chip row doesn't render. */
+  tripId?: Id<'trips'>;
+  /** True while `trip.retryingSections` contains `itinerary-day:${dayIndex}`
+   *  — a server-side tweakDay rewrite for THIS day is in flight. */
+  isDayRewriting?: boolean;
+  /** Trip bookings — rows whose dates cover this day render at the top of
+   *  the timeline. */
+  bookings?: DayStripBooking[];
 }
 
 const HERO_HEIGHT = 280;
@@ -196,6 +209,9 @@ function DayDetailScreen({
   onEdit,
   onNavigateDay,
   onTweakWithAI,
+  tripId,
+  isDayRewriting,
+  bookings,
 }: DayDetailScreenProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -456,11 +472,33 @@ function DayDetailScreen({
             { paddingBottom: insets.bottom + 40 },
           ]}
         >
+          {/* Bookings woven into the day — flights departing today, stays
+              covering it. Renders nothing without a startDate or matches. */}
+          <DayBookingsStrip
+            bookings={bookings}
+            tripStartDate={tripStartDate}
+            dayIndex={dayIndex}
+          />
+
           {/* Stop list */}
           {stops.length > 0 ? <StopList stops={stops} /> : null}
 
+          {/* Destination mini-map + open-in-Maps rows (renders nothing
+              when the day has no named places) */}
+          <DayMapStrip day={day} destination={destination} />
+
           {/* Pull quote */}
           <PullQuote tip={tip} />
+
+          {/* One-tap day rewrites — soft chips firing tweakDay; swaps to a
+              "Rewriting this day…" pill while the server run is in flight. */}
+          {tripId ? (
+            <DayTweakChips
+              tripId={tripId}
+              dayIndex={dayIndex}
+              isRewriting={isDayRewriting ?? false}
+            />
+          ) : null}
 
           {/* Tweak this day — AI chat scoped to this specific day */}
           {onTweakWithAI ? (

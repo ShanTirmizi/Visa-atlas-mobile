@@ -146,6 +146,10 @@ interface DeckCardItemProps {
   image: DayImage;
   date?: string;
   place?: string;
+  /** Threaded down to DayDeckCard so the day-vote heart pill can subscribe
+   *  to this trip's votes (Convex dedupes the identical subscription across
+   *  visible cards). */
+  tripId: string;
   activeIdxJS: number; // JS-side active index, used to compute integer offset
   dragX: SharedValue<number>;
   onCommit: (newIdx: number) => void;
@@ -162,6 +166,7 @@ function DeckCardItem({
   image,
   date,
   place,
+  tripId,
   activeIdxJS,
   dragX,
   onCommit,
@@ -243,6 +248,7 @@ function DeckCardItem({
           date={date}
           image={image}
           showCursor={showCursor}
+          tripId={tripId}
         />
       </Animated.View>
     </GestureDetector>
@@ -461,6 +467,7 @@ function DayDeck({
               image={dayImages[dayOffset] ?? null}
               place={pickPlace(day) ?? destination}
               date={formatDayDate(tripStartDate, dayOffset)}
+              tripId={tripId}
               activeIdxJS={activeIdx}
               dragX={dragX}
               onCommit={handleCommit}

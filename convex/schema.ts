@@ -74,6 +74,10 @@ export default defineSchema({
     // cleared by Undo, finalized by a scheduled hard delete. Trips with
     // deletedAt set are filtered out of every list/query.
     deletedAt: v.optional(v.number()),
+    // Visa checklist items the user has ticked off (stored by item text —
+    // items come from the streamed visaChecklist or the editorial static
+    // lists, both stable strings). Drives the checklist progress ring.
+    checklistProgress: v.optional(v.array(v.string())),
     // User's free-text trip brief — original text plus any merged-in answers
     // from the refinement clarifying-questions flow. Trimmed; whitespace-only
     // is normalized to undefined. Capped at 2000 chars in the action handler.

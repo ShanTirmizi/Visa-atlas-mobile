@@ -26,6 +26,7 @@ import {
   Shield,
   FileText,
   LogOut,
+  Stamp,
 } from 'lucide-react-native';
 import { useAuthActions } from '@convex-dev/auth/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -43,6 +44,7 @@ import BackButton from '@/components/ui/BackButton';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import VerifyEmailSheet, { type VerifyEmailSheetRef } from '@/components/settings/VerifyEmailSheet';
+import { isPassportStampTrip } from '@/components/passport/passportData';
 
 function buildWishlistRowValue(tripCount: number, countryCount: number): string {
   if (tripCount === 0 && countryCount === 0) return 'None';
@@ -184,6 +186,8 @@ export default function SettingsScreen() {
     isAuthenticated ? {} : 'skip',
   );
   const starredTripCount = (allTrips ?? []).filter((t) => t.starred).length;
+  // Passport stamps = past/completed trips — same filter the stamp wall uses.
+  const stampCount = (allTrips ?? []).filter((t) => isPassportStampTrip(t)).length;
 
   const passportInitial = passports[0] ? passports[0].slice(0, 1) : '?';
 
@@ -424,6 +428,18 @@ export default function SettingsScreen() {
                 }
                 onPress={() =>
                   router.push('/more/edit-passport' as import('expo-router').Href)
+                }
+              />
+              <SettingsRow
+                icon={<Stamp size={16} color={colors.teal} />}
+                label="Passport stamps"
+                value={
+                  stampCount > 0
+                    ? `${stampCount} stamp${stampCount === 1 ? '' : 's'}`
+                    : 'None yet'
+                }
+                onPress={() =>
+                  router.push('/more/passport' as import('expo-router').Href)
                 }
               />
               <SettingsRow
