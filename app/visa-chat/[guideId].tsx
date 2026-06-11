@@ -30,6 +30,7 @@ import { Id } from '@/convex/_generated/dataModel';
 import { Send, Sparkles, ArrowRight } from 'lucide-react-native';
 import BackButton from '@/components/ui/BackButton';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
 import { toAlpha2 } from '@/utils/countryCode';
@@ -58,6 +59,8 @@ const THINKING_PHRASES = [
 export default function VisaChatScreen() {
   const { guideId } = useLocalSearchParams<{ guideId: string }>();
   const { colors } = useTheme();
+  // Passport + residence keep the consultant's answers nationality-correct.
+  const { passports, residence } = useVisa();
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -122,6 +125,8 @@ export default function VisaChatScreen() {
             message: text,
             guideContext: { countryName, visaType, guide: guideJson },
             chatHistory,
+            passports,
+            residence,
           }),
         });
 
@@ -142,7 +147,7 @@ export default function VisaChatScreen() {
         setIsSending(false);
       }
     },
-    [isSending, guide, guideId, messages, countryName, visaType, guideJson, addGuideMessage],
+    [isSending, guide, guideId, messages, countryName, visaType, guideJson, passports, residence, addGuideMessage],
   );
 
   const sendMessage = useCallback(async () => {

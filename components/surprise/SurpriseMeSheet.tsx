@@ -229,7 +229,7 @@ function AnimatedSwitch({ value }: { value: boolean }) {
 const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
   ({ heldVisas, onCountrySelected }, ref) => {
     const { colors } = useTheme();
-    const { residence } = useVisa();
+    const { residence, passports } = useVisa();
     const dynamicVisaData = useVisaData();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
@@ -309,6 +309,8 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
             visited: [],
             includeVisaRequired: includeVisaReq,
             duration: 7,
+            passports,
+            residence,
           }),
         });
         if (!res.ok) throw new Error('Search failed');
@@ -322,7 +324,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
         setError('Something went wrong. Please try again.');
         setStep('prefs');
       }
-    }, [selectedVibes, maxFlight, budget, travelMonth, heldVisas, includeVisaReq]);
+    }, [selectedVibes, maxFlight, budget, travelMonth, heldVisas, includeVisaReq, passports, residence]);
 
     // ── Backdrop ────────────────────────────────────────────────────
     const renderBackdrop = useCallback(

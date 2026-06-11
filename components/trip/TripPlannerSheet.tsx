@@ -952,13 +952,16 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               </View>
 
               {/* "Anything else?" — free-form notes that flow into the
-                  generation prompt as userNotes (Task 8). KAW measures
-                  the focused TextInput itself and scrolls it above the
-                  keyboard; no ref-and-onFocus dance needed here. */}
+                  generation prompt as userNotes (Task 8). onFocus covers
+                  the case the keyboard-progress reaction can't: keyboard
+                  ALREADY open when the field is focused (e.g. planner
+                  presented over a focused search bar) — no progress
+                  transition fires, so scroll on focus too. */}
               <View style={{ marginTop: 18 }}>
                 <TripPlannerNotesField
                   value={userNotes}
                   onChangeText={setUserNotes}
+                  onFocus={scrollNotesIntoView}
                 />
               </View>
 

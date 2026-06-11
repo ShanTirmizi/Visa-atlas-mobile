@@ -35,7 +35,7 @@ export const sendVerificationCode = action({
   handler: async (
     ctx,
   ): Promise<
-    | { status: "sent" | "alreadyVerified" | "noEmail" }
+    | { status: "sent" | "alreadyVerified" | "noEmail" | "sendFailed" }
     | { status: "cooldown"; retryInSeconds: number }
   > => {
     const userId = await getAuthUserId(ctx);
@@ -88,7 +88,14 @@ export const sendVerificationCode = action({
       text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes. If you didn't request this, ignore this email.`,
     });
     if (error) {
-      throw new Error(`Resend rejected the email: ${error.message ?? "unknown error"}`);
+      // Log the provider detail for debugging, but never throw it — the
+      // client renders thrown action messages verbatim, and Resend errors
+      // leak provider internals (sandbox-mode rejection, request IDs).
+      console.error("Resend send failed:", error.message ?? error);
+      // The code row was stored before the send; clear it so the user's
+      // retry isn't blocked by a cooldown for an email that never arrived.
+      await ctx.runMutation(internal.emailVerification._clearCodes, { userId });
+      return { status: "sendFailed" };
     }
     return { status: "sent" };
   },
@@ -139,6 +146,20 @@ export const _storeCode = internalMutation({
     for (const e of existing) await ctx.db.delete(e._id);
     await ctx.db.insert("emailVerificationCodes", args);
     return { stored: true };
+  },
+});
+
+/** Internal — drop any stored codes for this user. Used when the email
+ *  provider rejects the send, so the cooldown doesn't block a retry for a
+ *  code that never reached the inbox. */
+export const _clearCodes = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const existing = await ctx.db
+      .query("emailVerificationCodes")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const e of existing) await ctx.db.delete(e._id);
   },
 });
 

@@ -30,6 +30,7 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { MessageSquare, Send, Bot, User } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
 import { endpoints } from '@/constants/api';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 
@@ -61,6 +62,8 @@ type GuideMessage = {
 const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
   ({ guideId, countryName, visaType, guideJson }, ref) => {
     const { colors } = useTheme();
+    // Passport + residence keep the consultant's answers nationality-correct.
+    const { passports, residence } = useVisa();
     const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
     const inputRef = useRef<GestureTextInput | null>(null);
@@ -131,6 +134,8 @@ const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
                 guide: guideJson,
               },
               chatHistory,
+              passports,
+              residence,
             }),
           });
 
@@ -158,7 +163,7 @@ const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
           setIsSending(false);
         }
       },
-      [isSending, guideId, messages, countryName, visaType, guideJson, addGuideMessage],
+      [isSending, guideId, messages, countryName, visaType, guideJson, passports, residence, addGuideMessage],
     );
 
     const sendMessage = useCallback(async () => {

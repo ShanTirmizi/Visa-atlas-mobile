@@ -75,6 +75,10 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
           setError("We don't have an email on file for your account.");
           return;
         }
+        if (result.status === 'sendFailed') {
+          setError("We couldn't send the code right now. Please try again later.");
+          return;
+        }
         if (result.status === 'cooldown') {
           // A code was sent moments ago — move to the verify step so the
           // user can type it, rather than dead-ending on an error.
@@ -86,9 +90,11 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
         }
         setStep('verify');
         setNotice(`Code sent to ${email ?? 'your email'}.`);
-      } catch (err) {
-        const msg = String((err as Error)?.message ?? '').replace(/^Uncaught Error:\s*/i, '');
-        setError(msg || 'Could not send the code. Try again.');
+      } catch {
+        // Never render raw action errors — they carry Convex request IDs
+        // and stack traces. Anything thrown here is unexpected; keep the
+        // copy generic.
+        setError('Could not send the code. Try again.');
       } finally {
         setSending(false);
       }

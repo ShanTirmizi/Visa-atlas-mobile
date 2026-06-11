@@ -21,6 +21,7 @@ import Animated, {
   FadeIn, FadeOut,
 } from 'react-native-reanimated';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
@@ -159,6 +160,9 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
   ({ countryCode, countryName, heldVisas, onGuideCreated }, ref) => {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    // Passport + residence make the generated guide nationality-correct —
+    // the API otherwise has no idea whose passport the documents are for.
+    const { passports, residence } = useVisa();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
     const [step, setStep] = useState<Step>('employment');
@@ -210,6 +214,8 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
             previousRejections: rejections,
             travelMonth,
             heldVisas: [...heldVisas],
+            passports,
+            residence,
           }),
         });
         if (!res.ok) throw new Error('Generation failed');
@@ -242,7 +248,7 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
         setError('Failed to generate guide. Please try again.');
         setStep('month');
       }
-    }, [countryCode, countryName, employment, purpose, rejections, travelMonth, heldVisas, createGuide, onGuideCreated]);
+    }, [countryCode, countryName, employment, purpose, rejections, travelMonth, heldVisas, passports, residence, createGuide, onGuideCreated]);
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => (

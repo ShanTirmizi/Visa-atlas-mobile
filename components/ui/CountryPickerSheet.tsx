@@ -11,6 +11,7 @@ import {
   Text,
   Pressable,
   StyleSheet,
+  Dimensions,
 } from 'react-native';
 import {
   BottomSheetModal,
@@ -265,7 +266,16 @@ export const CountryPickerSheet = forwardRef<CountryPickerSheetRef, Props>(
           keyExtractor={(item: CountryVisa) => item.code}
           renderItem={renderItem}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 24 }}
+          // minHeight pins the dynamic-sizing measurement at full height: a
+          // search sheet must not resize per keystroke (Apple Maps pattern).
+          // Without it, filtering down to a few rows shrinks the dynamic
+          // snap point while keyboardBehavior="extend" holds the sheet
+          // raised — gorhom lands out of range and DISMISSES the modal,
+          // stranding the backdrop and keyboard (QA-reproduced: "Vietn").
+          contentContainerStyle={{
+            paddingBottom: 24,
+            minHeight: Dimensions.get('window').height,
+          }}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Text

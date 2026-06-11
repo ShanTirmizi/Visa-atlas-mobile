@@ -397,7 +397,7 @@ export default function CompareScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { heldVisas, residence } = useVisa();
+  const { heldVisas, residence, passports } = useVisa();
   const plannerRef = useRef<TripPlannerSheetRef>(null);
   const [planTarget, setPlanTarget] = useState<'a' | 'b'>('a');
 
@@ -470,6 +470,8 @@ export default function CompareScreen() {
         visaCategory: categoryLabels[rB.category],
         bestTimeNote: travelB.bestTimeNote,
       },
+      passports,
+      residence,
     };
 
     fetch(endpoints.compare, {
@@ -498,7 +500,7 @@ export default function CompareScreen() {
       });
 
     return () => controller.abort();
-  }, [countryA, countryB, heldVisasSet]);
+  }, [countryA, countryB, heldVisasSet, passports, residence]);
 
   // ── Swap handler ─────────────────────────────────────────────────────────
   const swap = useCallback(() => {
