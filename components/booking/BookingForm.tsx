@@ -45,6 +45,10 @@ export interface BookingFormProps {
   defaultStartDate?: string;
   defaultEndDate?: string;
   prefillData?: Partial<BookingFormData>;
+  /** Editing an existing booking — hides the back-to-type-picker arrow
+   *  (changing a booking's type mid-edit is unsupported: the updateBooking
+   *  validator has no `type` field) and switches the kicker copy. */
+  isEditing?: boolean;
 }
 
 // ──────────────────────────────────────────────
@@ -59,6 +63,7 @@ export default function BookingForm({
   defaultStartDate = '',
   defaultEndDate = '',
   prefillData,
+  isEditing = false,
 }: BookingFormProps) {
   const { colors, isDark } = useTheme();
   const config = BOOKING_TYPES[type];
@@ -487,16 +492,22 @@ export default function BookingForm({
     <View style={{ padding: Spacing.lg, paddingBottom: 12 }}>
         {/* ── Editorial header — kicker + italic "Add {type}." ─ */}
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={onBack}
-            hitSlop={12}
-            style={[
-              styles.backBtn,
-              { backgroundColor: colors.surface, borderColor: colors.line },
-            ]}
-          >
-            <ArrowLeft size={18} color={colors.ink} strokeWidth={2} />
-          </TouchableOpacity>
+          {/* No back-to-type-picker while editing — a booking's type can't be
+              changed mid-edit (updateBooking has no `type` field), and a stale
+              editingId after re-picking a type would overwrite the original
+              booking with a mismatched type. */}
+          {!isEditing && (
+            <TouchableOpacity
+              onPress={onBack}
+              hitSlop={12}
+              style={[
+                styles.backBtn,
+                { backgroundColor: colors.surface, borderColor: colors.line },
+              ]}
+            >
+              <ArrowLeft size={18} color={colors.ink} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
 
           <View style={styles.headerText}>
             <Text
@@ -509,7 +520,7 @@ export default function BookingForm({
                 textTransform: 'uppercase',
               }}
             >
-              NEW BOOKING · 01
+              {isEditing ? 'EDIT BOOKING' : 'NEW BOOKING · 01'}
             </Text>
             <Text
               style={{
@@ -522,7 +533,7 @@ export default function BookingForm({
                 lineHeight: 28,
               }}
             >
-              Add{' '}
+              {isEditing ? 'Edit' : 'Add'}{' '}
               <Text
                 style={{
                   fontFamily: FontFamily.displayItalic,

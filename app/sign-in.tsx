@@ -9,7 +9,7 @@ import {
   TextInput,
   type TextInputProps,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,15 @@ import { Squiggle } from '@/components/ui/Squiggle';
 import { VAStamp } from '@/components/auth/VAStamp';
 import { PasswordStrength } from '@/components/auth/PasswordStrength';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
+
+// RNKC's KeyboardAwareScrollView scrolls the focused input above the keyboard
+// with the right delta (Apple Mail / Notes algorithm) — a plain ScrollView in
+// a KeyboardAvoidingView left low-on-screen fields (password) buried under the
+// keyboard. Wrapped with createAnimatedComponent so the reanimated onScroll
+// handler that drives TopSafeAreaBlur keeps working — same pattern as
+// components/onboarding/OnboardingScaffold.tsx.
+const AnimatedKeyboardAwareScrollView =
+  Animated.createAnimatedComponent(KeyboardAwareScrollView);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Mode = 'signIn' | 'signUp';
@@ -520,29 +529,23 @@ export default function SignInScreen() {
       {/* Guilloche background — absolutely positioned behind everything */}
       <Guilloche variant="wavy" color={colors.ink} opacity={0.04} />
 
-      <KeyboardAvoidingView
+      <AnimatedKeyboardAwareScrollView
         style={{ flex: 1 }}
-        // RNKC's KeyboardAvoidingView does nothing when behavior is undefined
-        // (its animated-style switch falls through to `return {}`), and with
-        // KeyboardProvider + edge-to-edge there is no OS adjustResize fallback
-        // on Android. Pass "padding" unconditionally — RNKC's whole point is
-        // identical cross-platform behavior.
-        behavior="padding"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        // Breathing room between the focused input and the keyboard top.
+        bottomOffset={24}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + 24,
+            paddingBottom: insets.bottom + 24,
+            paddingHorizontal: 22,
+          },
+        ]}
       >
-        <Animated.ScrollView
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingTop: insets.top + 24,
-              paddingBottom: insets.bottom + 24,
-              paddingHorizontal: 22,
-            },
-          ]}
-        >
           {/* ── Kicker row ─────────────────────────────── */}
           <View style={styles.kickerRow}>
             <Text style={[styles.kicker, { color: colors.inkMute }]}>{kickerText}</Text>
@@ -753,8 +756,7 @@ export default function SignInScreen() {
           <Text style={[styles.estLine, { color: colors.inkFaint }]}>
             EST · 2026 · YOUR PASSPORT, ORGANIZED
           </Text>
-        </Animated.ScrollView>
-      </KeyboardAvoidingView>
+      </AnimatedKeyboardAwareScrollView>
 
       {/* Glass header overlay — scroll-fade driven by the ScrollView above */}
       <TopSafeAreaBlur scrollY={scrollY} />

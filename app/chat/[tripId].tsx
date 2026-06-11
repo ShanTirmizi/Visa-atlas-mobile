@@ -10,7 +10,11 @@ import {
   ActivityIndicator,
   Pressable,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import {
+  KeyboardAvoidingView,
+  KeyboardEvents,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -40,6 +44,7 @@ import BackButton from '@/components/ui/BackButton';
 import { ItineraryDiffCard, diffItineraries } from '@/components/chat/ItineraryDiffCard';
 import { hapticSelect } from '@/utils/haptics';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
 import { toAlpha2 } from '@/utils/countryCode';
@@ -190,10 +195,31 @@ export default function ChatScreen() {
   const { tripId, day } = useLocalSearchParams<{ tripId: string; day?: string }>();
   const dayIndex = day !== undefined && day !== '' ? Number(day) : null;
   const { colors } = useTheme();
+  // Passport + residence keep visa-adjacent answers nationality-correct.
+  const { passports, residence } = useVisa();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+
+  // Re-pin the message list to the bottom the moment the keyboard finishes
+  // settling — event-driven (KeyboardEvents), never a guessed duration.
+  useEffect(() => {
+    const sub = KeyboardEvents.addListener('keyboardDidShow', () => {
+      requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: true }));
+    });
+    return () => sub.remove();
+  }, []);
+
+  // iMessage input-bar padding: at rest the bar clears the home indicator
+  // (insets.bottom); with the keyboard up, KeyboardAvoidingView already
+  // lifts the bar, so keeping the inset would double-count it as a dead
+  // band above the keyboard. Collapse it on the UI thread as the keyboard
+  // animates — also tracks interactive swipe-to-dismiss frame-by-frame.
+  const { progress: kbProgress } = useReanimatedKeyboardAnimation();
+  const inputBarAnimatedStyle = useAnimatedStyle(() => ({
+    paddingBottom: Spacing.sm + insets.bottom * (1 - kbProgress.value),
+  }));
 
   const trip = useOfflineQuery(api.trips.getTrip, {
     id: tripId as Id<'trips'>,
@@ -383,6 +409,8 @@ export default function ChatScreen() {
               role: m.role,
               content: m.content,
             })),
+            passports,
+            residence,
           }),
         });
 
@@ -440,6 +468,8 @@ export default function ChatScreen() {
       currentUser,
       convexMessages,
       trip,
+      passports,
+      residence,
       addMessage,
       applyItineraryUpdate,
     ],
@@ -984,11 +1014,11 @@ export default function ChatScreen() {
 
       {/* ── Input bar — paper input + persistent coral send button ── */}
       {!isOffline && (
-        <View
+        <Animated.View
           style={[
             styles.inputBar,
+            inputBarAnimatedStyle,
             {
-              paddingBottom: insets.bottom + Spacing.sm,
               borderTopColor: colors.line,
               backgroundColor: colors.background,
             },
@@ -1014,16 +1044,11 @@ export default function ChatScreen() {
               maxLength={500}
               onFocus={() => {
                 setIsFocused(true);
-                // Scroll the message list to the bottom so the latest reply
-                // stays visible once the keyboard rises and shrinks the
-                // visible area. RN's onContentSizeChange doesn't fire on
-                // keyboard open, so this has to be explicit.
+                // Immediate scroll-to-bottom on focus; the component-level
+                // keyboardDidShow listener re-pins once the keyboard settles.
                 requestAnimationFrame(() => {
                   flatListRef.current?.scrollToEnd({ animated: true });
                 });
-                setTimeout(() => {
-                  flatListRef.current?.scrollToEnd({ animated: true });
-                }, 280);
               }}
               onBlur={() => setIsFocused(false)}
               onSubmitEditing={sendMessage}
@@ -1035,7 +1060,7 @@ export default function ChatScreen() {
             sending={isSending}
             onPress={sendMessage}
           />
-        </View>
+        </Animated.View>
       )}
     </KeyboardAvoidingView>
   );

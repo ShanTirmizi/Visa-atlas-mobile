@@ -15,7 +15,7 @@ import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import { endpoints } from '@/constants/api';
-import type { BookingType } from '@/constants/bookings';
+import { BOOKING_TYPES, type BookingType } from '@/constants/bookings';
 import type { BookingFormData } from './BookingForm';
 
 interface ScanBookingProps {
@@ -37,8 +37,16 @@ export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
         });
         const result = await response.json();
 
-        if (result.success && result.data) {
-          onScanComplete(result.data.type, result.data);
+        // Never trust the server-returned `type` blindly — an unexpected
+        // string would crash BookingForm (BOOKING_TYPES[type] lookup).
+        // hasOwnProperty rather than `in` so prototype keys can't pass.
+        if (
+          result.success &&
+          result.data &&
+          typeof result.data.type === 'string' &&
+          Object.prototype.hasOwnProperty.call(BOOKING_TYPES, result.data.type)
+        ) {
+          onScanComplete(result.data.type as BookingType, result.data);
         } else {
           Alert.alert('Scan Failed', 'Could not read booking. Please try again or enter details manually.');
         }

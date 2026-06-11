@@ -427,6 +427,16 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const DRAFT_TTL_MS = 30 * 60_000;
     const dismissedAtRef = useRef<number | null>(null);
     const generationCompletedRef = useRef(false);
+    // Navigation handoff after a successful generation: the trip id parks
+    // here while the sheet's slide-down plays, and onDismiss fires the
+    // navigation exactly when the close animation completes — gorhom's iOS
+    // close animation is a distance-dependent spring, so a fixed timer
+    // either truncates it or adds dead time. isPresentedRef covers the
+    // backdrop-tap-during-loading edge: gorhom's dismiss() early-returns
+    // without firing onDismiss when the sheet is already closed, which
+    // would otherwise silently drop the navigation.
+    const pendingTripIdRef = useRef<string | null>(null);
+    const isPresentedRef = useRef(false);
 
     // Transient UI state never survives a dismiss/reopen cycle — a stale
     // spinner or error from the last session would read as broken.
@@ -450,6 +460,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         } else {
           resetTransientState();
         }
+        isPresentedRef.current = true;
         bottomSheetRef.current?.present();
       },
       dismiss: () => {
@@ -555,12 +566,16 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         // Generation succeeded — the draft has served its purpose, so the
         // next present() starts fresh (see draft-protection refs).
         generationCompletedRef.current = true;
-        // Dismiss the sheet, then give its slide-down animation ~250ms
-        // to play before pushing the trip detail screen — the sheet
-        // disappearing reveals the trips list briefly, then the trip
-        // detail slides in from the right. Smooth handoff.
-        bottomSheetRef.current?.dismiss();
-        setTimeout(() => onTripCreated(String(tripId)), 250);
+        // Hand navigation to onDismiss so the trip detail pushes exactly
+        // when the slide-down completes (see pendingTripIdRef comment). If
+        // the user already backdrop-tapped out mid-loading, dismiss() would
+        // no-op and onDismiss never refire — navigate directly instead.
+        if (isPresentedRef.current) {
+          pendingTripIdRef.current = String(tripId);
+          bottomSheetRef.current?.dismiss();
+        } else {
+          onTripCreated(String(tripId));
+        }
       } catch {
         setError("Couldn't start your trip. Please try again.");
         setIsLoading(false);
@@ -659,8 +674,17 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         // the time and clears only transient UI state; present() decides
         // whether to restore the draft or start fresh (see the draft refs).
         onDismiss={() => {
+          isPresentedRef.current = false;
           dismissedAtRef.current = Date.now();
           resetTransientState();
+          // Post-generation handoff: navigate now that the slide-down has
+          // fully completed (this callback fires from gorhom's close-
+          // animation completion).
+          if (pendingTripIdRef.current) {
+            const id = pendingTripIdRef.current;
+            pendingTripIdRef.current = null;
+            onTripCreated(id);
+          }
         }}
       >
         <BottomSheetScrollView

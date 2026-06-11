@@ -158,6 +158,12 @@ export default function BuildingScreen() {
         if (!res.ok) throw new Error('Generation failed');
         const data = await res.json();
         if (cancelled) return;
+        // Never persist an empty map — it would mark the account onboarded
+        // with no atlas data behind it (the broken state the Atlas tab
+        // crash grew from). Treat it like a failed generation instead.
+        if (!Array.isArray(data.countries) || data.countries.length === 0) {
+          throw new Error('Empty visa map');
+        }
         visa.setVisaMap(data.countries);
         visa.setOnboarded(true);
         const countries = data.countries as Array<{ category: string }>;
@@ -192,6 +198,10 @@ export default function BuildingScreen() {
         });
         if (!res.ok) throw new Error('Generation failed');
         const data = await res.json();
+        // Same empty-map guard as the mount effect above.
+        if (!Array.isArray(data.countries) || data.countries.length === 0) {
+          throw new Error('Empty visa map');
+        }
         visa.setVisaMap(data.countries);
         visa.setOnboarded(true);
         const countries = data.countries as Array<{ category: string }>;

@@ -364,6 +364,10 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
         ref={bottomSheetRef}
         enableDynamicSizing={true}
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
+        // maxDynamicContentSize caps HEIGHT only; topInset is the prop that
+        // clamps the sheet's POSITION below the Dynamic Island — see the
+        // overshoot writeup in TripPlannerSheet.tsx (canonical config).
+        topInset={insets.top + 10}
         enablePanDownToClose={step !== 'searching'}
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: colors.textMuted, width: 40 }}

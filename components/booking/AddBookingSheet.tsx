@@ -16,6 +16,7 @@ import {
 import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { type Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { Spacing } from '@/constants/theme';
 import { type BookingType } from '@/constants/bookings';
@@ -25,6 +26,9 @@ import BookingForm, { type BookingFormData } from './BookingForm';
 
 // ── Public API ─────────────────────────────────────────────────────────
 export interface BookingForEdit {
+  // Plain string for caller compatibility (BookingDetailSheet's
+  // BookingDetailData.id is a string) — narrowed to Id<'bookings'> at the
+  // openForEdit boundary so everything downstream is strongly typed.
   id: string;
   type: BookingType;
   title: string;
@@ -40,7 +44,7 @@ export interface BookingForEdit {
 }
 
 export interface AddBookingSheetRef {
-  open: (prelinkedTripId?: string) => void;
+  open: (prelinkedTripId?: string | Id<'trips'>) => void;
   openForEdit: (booking: BookingForEdit) => void;
   close: () => void;
 }
@@ -70,9 +74,9 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     // ── State ────────────────────────────────────────────────────────
     const [step, setStep] = useState<'type' | 'form'>('type');
     const [selectedType, setSelectedType] = useState<BookingType | null>(null);
-    const [prelinkedTripId, setPrelinkedTripId] = useState<string | undefined>();
+    const [prelinkedTripId, setPrelinkedTripId] = useState<Id<'trips'> | undefined>();
     const [prefillData, setPrefillData] = useState<Partial<BookingFormData> | undefined>();
-    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingId, setEditingId] = useState<Id<'bookings'> | null>(null);
 
     // ── Convex hooks ─────────────────────────────────────────────────
     const { isAuthenticated } = useConvexAuth();
@@ -91,14 +95,17 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
 
     // ── Imperative handle for parent ─────────────────────────────────
     useImperativeHandle(ref, () => ({
-      open: (tripId?: string) => {
+      open: (tripId?: string | Id<'trips'>) => {
         resetState();
-        setPrelinkedTripId(tripId);
+        // Callers may pass a stringified id (e.g. String(trip._id)) — narrow
+        // once at the public boundary; downstream stays strongly typed.
+        setPrelinkedTripId(tripId != null ? (tripId as Id<'trips'>) : undefined);
         bottomSheetRef.current?.present();
       },
       openForEdit: (booking) => {
         resetState();
-        setEditingId(booking.id);
+        // Same boundary narrowing as open() — see BookingForEdit.id comment.
+        setEditingId(booking.id as Id<'bookings'>);
         setSelectedType(booking.type);
         setPrefillData({
           title: booking.title,
@@ -122,6 +129,10 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
 
     // ── Scan complete handler ────────────────────────────────────────
     const handleScanComplete = useCallback((type: BookingType, data: Partial<BookingFormData>) => {
+      // Reaching the type picker means we're creating, not editing — a stale
+      // editingId here would make save overwrite the original booking with a
+      // mismatched type (updateBooking can't change `type`).
+      setEditingId(null);
       setSelectedType(type);
       setPrefillData(data);
       setStep('form');
@@ -129,6 +140,8 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
 
     // ── Step 1 handler: type selected ────────────────────────────────
     const handleTypeSelect = useCallback((type: BookingType) => {
+      // See handleScanComplete — clear any stale edit session.
+      setEditingId(null);
       setSelectedType(type);
       setPrefillData(undefined);
       setStep('form');
@@ -149,7 +162,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         if (editingId) {
           // Edit existing booking — patch only, preserve trip linkage.
           await updateBooking({
-            id: editingId as any,
+            id: editingId,
             title: data.title,
             startDate: data.startDate,
             endDate: data.endDate || undefined,
@@ -182,9 +195,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
           currency: data.currency || undefined,
           notes: data.notes || undefined,
           [detailsKey]: detailsJson,
-          tripId: prelinkedTripId
-            ? (prelinkedTripId as any)
-            : undefined,
+          tripId: prelinkedTripId,
           autoMatched: prelinkedTripId ? true : undefined,
         });
 
@@ -198,8 +209,8 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
           );
           if (match && match.confidence === 'high') {
             await linkBookingToTrip({
-              id: bookingId as any,
-              tripId: match.tripId as any,
+              id: bookingId,
+              tripId: match.tripId,
               autoMatched: true,
             });
           }
@@ -247,12 +258,21 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         ref={bottomSheetRef}
         enableDynamicSizing={true}
         maxDynamicContentSize={maxSheetHeight}
+        // topInset is what actually CLAMPS the sheet's top position below the
+        // Dynamic Island — maxDynamicContentSize only caps height, and
+        // gorhom's interactive keyboard shift can otherwise push the sheet
+        // over the island. Same shape as EditDaySheet (the reference impl).
+        topInset={insets.top + 10}
+        stackBehavior="push"
         backdropComponent={renderBackdrop}
         // Keyboard handling lives in BottomSheetKeyboardAwareScrollView
-        // (RNKC) below — same shape as EditDaySheet. "restore" returns the
+        // (RNKC) below — same shape as EditDaySheet. "interactive" is
+        // gorhom's default (there is no "none") — set explicitly because
+        // keyboard avoidance is shared with RNKC's KAW. "restore" returns the
         // sheet to its detent when the keyboard dismisses; adjustResize is
         // gorhom's documented Android requirement (the inherited adjustPan
         // default pans the whole window and fights edge-to-edge).
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         // Paper-bg sheet matching the rest of the Signature v2 surfaces;
@@ -277,6 +297,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
           {step === 'form' && selectedType && (
             <BookingForm
               type={selectedType}
+              isEditing={editingId != null}
               onBack={() => setStep('type')}
               onSubmit={handleSubmit}
               defaultCountryCode={prelinkedTrip?.countryCode}

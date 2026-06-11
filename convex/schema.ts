@@ -353,4 +353,23 @@ export default defineSchema({
     // first time the user generates a trip (contextual permission ask).
     pushToken: v.optional(v.string()),
   }).index("by_user", ["userId"]),
+
+  // ── Visa Profiles ──
+  // The onboarding output (passports, held visas, residence, generated visa
+  // map). Kept in its own table — NOT on userProfiles — because the visa map
+  // JSON is ~100KB and getCurrentProfile is subscribed app-wide; this doc is
+  // only fetched to rehydrate a device whose local cache is empty (fresh
+  // install / post sign-out). Without it, `onboarded` was server-truth while
+  // the data behind it was device-local, so a fresh device landed in the
+  // tabs with an empty atlas — and, before the VisaMap zero-branch guard,
+  // a native MapLibre crash on the Atlas tab.
+  visaProfiles: defineTable({
+    userId: v.id("users"),
+    passports: v.array(v.string()),
+    heldVisas: v.array(v.string()),
+    residence: v.union(v.string(), v.null()),
+    // JSON-encoded CountryVisa[] — same encoding convention as trips.itinerary.
+    visaMap: v.string(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
 });

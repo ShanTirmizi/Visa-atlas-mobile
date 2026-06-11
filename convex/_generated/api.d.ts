@@ -32,6 +32,7 @@ import type * as tripVotes from "../tripVotes.js";
 import type * as trips from "../trips.js";
 import type * as userProfiles from "../userProfiles.js";
 import type * as visaGuides from "../visaGuides.js";
+import type * as visaProfiles from "../visaProfiles.js";
 import type * as wipeTestData from "../wipeTestData.js";
 
 import type {
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   trips: typeof trips;
   userProfiles: typeof userProfiles;
   visaGuides: typeof visaGuides;
+  visaProfiles: typeof visaProfiles;
   wipeTestData: typeof wipeTestData;
 }>;
 

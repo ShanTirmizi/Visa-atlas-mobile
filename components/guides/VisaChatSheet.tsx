@@ -4,6 +4,7 @@ import React, {
   useRef,
   useState,
   useCallback,
+  useEffect,
 } from 'react';
 import {
   View,
@@ -14,6 +15,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import type { TextInput as GestureTextInput } from 'react-native-gesture-handler';
+import { KeyboardEvents } from 'react-native-keyboard-controller';
 import {
   BottomSheetModal,
   BottomSheetFlatList,
@@ -88,6 +90,17 @@ const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
       open: () => sheetRef.current?.present(),
       close: () => sheetRef.current?.dismiss(),
     }));
+
+    // Re-pin the message list to the bottom the moment the keyboard finishes
+    // settling — event-driven (KeyboardEvents), never a guessed duration.
+    // The sheet stays mounted after dismiss; the optional-chained ref makes
+    // stray keyboard events from other screens a harmless no-op.
+    useEffect(() => {
+      const sub = KeyboardEvents.addListener('keyboardDidShow', () => {
+        requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: true }));
+      });
+      return () => sub.remove();
+    }, []);
 
     const maxDynamicContentSize =
       Dimensions.get('window').height - insets.top - 10;
@@ -395,12 +408,11 @@ const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
             value={inputText}
             onChangeText={setInputText}
             onFocus={() => {
+              // Immediate scroll-to-bottom on focus; the component-level
+              // keyboardDidShow listener re-pins once the keyboard settles.
               requestAnimationFrame(() => {
                 flatListRef.current?.scrollToEnd({ animated: true });
               });
-              setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }, 280);
             }}
             placeholder="Ask about your visa..."
             placeholderTextColor={colors.inkFaint}

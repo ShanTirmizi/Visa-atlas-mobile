@@ -14,6 +14,9 @@ import {
   UIManager,
   LayoutAnimation,
 } from 'react-native';
+// RNKC's KeyboardAvoidingView (NOT react-native's) — RN's version is unaware
+// of the KeyboardProvider and does nothing under edge-to-edge Android.
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -326,6 +329,9 @@ function CountryPickerModal({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      {/* Without this the keyboard covered the bottom screenful of results —
+          the autofocused search left them unreachable. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
         {/* Handle */}
         <View style={styles.modalHandle}>
@@ -378,6 +384,7 @@ function CountryPickerModal({
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           ListEmptyComponent={
             <View style={styles.emptySearch}>
               <Text style={[Type.body13, { color: colors.inkMute }]}>No countries found</Text>
@@ -385,6 +392,7 @@ function CountryPickerModal({
           }
         />
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -408,6 +416,9 @@ export default function CompareScreen() {
   const [aiData, setAiData] = useState<AIComparison | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Retry nonce — bumping it re-runs the fetch effect without touching the
+  // country selection (the old blank-and-restore hack flashed the landing UI).
+  const [attempt, setAttempt] = useState(0);
   const fetchRef = useRef<AbortController | null>(null);
 
   const heldVisasSet = useMemo(() => new Set(heldVisas as HeldVisaType[]), [heldVisas]);
@@ -426,6 +437,8 @@ export default function CompareScreen() {
 
   // ── AI comparison fetch ──────────────────────────────────────────────────
   useEffect(() => {
+    // Referenced so the retry nonce in the dep array re-triggers this effect.
+    void attempt;
     if (!selectedA || !selectedB || !metaA || !metaB || !travelA || !travelB) {
       setAiData(null);
       setError(null);
@@ -500,7 +513,7 @@ export default function CompareScreen() {
       });
 
     return () => controller.abort();
-  }, [countryA, countryB, heldVisasSet, passports, residence]);
+  }, [countryA, countryB, heldVisasSet, passports, residence, attempt]);
 
   // ── Swap handler ─────────────────────────────────────────────────────────
   const swap = useCallback(() => {
@@ -510,11 +523,8 @@ export default function CompareScreen() {
   }, [countryA, countryB]);
 
   const retry = useCallback(() => {
-    setError(null);
-    const tmp = countryA;
-    setCountryA('');
-    setTimeout(() => setCountryA(tmp), 50);
-  }, [countryA]);
+    setAttempt((a) => a + 1);
+  }, []);
 
   // ── Build card data ───────────────────────────────────────────────────────
 

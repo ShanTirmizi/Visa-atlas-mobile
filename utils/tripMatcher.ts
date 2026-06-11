@@ -1,5 +1,8 @@
-type Trip = {
-  _id: string;
+// Generic over the id type so branded ids (e.g. Convex's Id<'trips'>) flow
+// through findMatchingTrip untouched — callers get back the same id type
+// they passed in, no casts needed.
+type Trip<TId extends string = string> = {
+  _id: TId;
   countryCode: string;
   startDate?: string;
   endDate?: string;
@@ -8,8 +11,8 @@ type Trip = {
   legs?: string; // JSON array of leg objects with countryCode
 };
 
-type MatchResult = {
-  tripId: string;
+type MatchResult<TId extends string = string> = {
+  tripId: TId;
   confidence: 'high' | 'medium' | 'low';
 };
 
@@ -42,18 +45,18 @@ function getTripCountries(trip: Trip): string[] {
  * Finds the best matching trip for a booking based on country code and date overlap.
  * Returns a MatchResult with the trip ID and confidence level, or null if no match.
  */
-export function findMatchingTrip(
+export function findMatchingTrip<TId extends string = string>(
   countryCode: string | undefined | null,
   startDate: string | undefined | null,
   endDate: string | undefined | null,
-  trips: Trip[]
-): MatchResult | null {
+  trips: Trip<TId>[]
+): MatchResult<TId> | null {
   if (!countryCode || !trips || trips.length === 0) {
     return null;
   }
 
   let bestScore = 0;
-  let bestTripId: string | null = null;
+  let bestTripId: TId | null = null;
 
   for (const trip of trips) {
     if (!trip.startDate) {

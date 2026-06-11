@@ -10,7 +10,11 @@ import {
   ActivityIndicator,
   Pressable,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import {
+  KeyboardAvoidingView,
+  KeyboardEvents,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -64,6 +68,25 @@ export default function VisaChatScreen() {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+
+  // Re-pin the message list to the bottom the moment the keyboard finishes
+  // settling — event-driven (KeyboardEvents), never a guessed duration.
+  useEffect(() => {
+    const sub = KeyboardEvents.addListener('keyboardDidShow', () => {
+      requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: true }));
+    });
+    return () => sub.remove();
+  }, []);
+
+  // iMessage input-bar padding: at rest the bar clears the home indicator
+  // (insets.bottom); with the keyboard up, KeyboardAvoidingView already
+  // lifts the bar, so keeping the inset would double-count it as a dead
+  // band above the keyboard. Collapse it on the UI thread as the keyboard
+  // animates — also tracks interactive swipe-to-dismiss frame-by-frame.
+  const { progress: kbProgress } = useReanimatedKeyboardAnimation();
+  const inputBarAnimatedStyle = useAnimatedStyle(() => ({
+    paddingBottom: Spacing.sm + insets.bottom * (1 - kbProgress.value),
+  }));
 
   const { isAuthenticated } = useConvexAuth();
 
@@ -520,11 +543,11 @@ export default function VisaChatScreen() {
       ) : null}
 
       {/* Input bar */}
-      <View
+      <Animated.View
         style={[
           styles.inputBar,
+          inputBarAnimatedStyle,
           {
-            paddingBottom: insets.bottom + Spacing.sm,
             borderTopColor: colors.line,
             backgroundColor: colors.background,
           },
@@ -550,12 +573,11 @@ export default function VisaChatScreen() {
             maxLength={500}
             onFocus={() => {
               setIsFocused(true);
+              // Immediate scroll-to-bottom on focus; the component-level
+              // keyboardDidShow listener re-pins once the keyboard settles.
               requestAnimationFrame(() => {
                 flatListRef.current?.scrollToEnd({ animated: true });
               });
-              setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }, 280);
             }}
             onBlur={() => setIsFocused(false)}
             onSubmitEditing={sendMessage}
@@ -567,7 +589,7 @@ export default function VisaChatScreen() {
           sending={isSending}
           onPress={sendMessage}
         />
-      </View>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 }

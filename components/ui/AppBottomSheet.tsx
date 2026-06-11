@@ -146,6 +146,14 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
         ref={ref}
         enableDynamicSizing
         maxDynamicContentSize={maxDynamicContentSize}
+        // topInset clamps the sheet's POSITION — maxDynamicContentSize only
+        // caps HEIGHT. Without it, gorhom's interactive keyboard shift can
+        // push a focused sheet above the Dynamic Island (shipped to
+        // TestFlight as exactly that bug on the planner sheet). gorhom
+        // shrinks the hosting container by topInset, so the sheet physically
+        // cannot render above this line; percent/dynamic sizing resolve
+        // against the inset container, consistent with the height cap above.
+        topInset={insets.top + 10}
         // "push" stacks this sheet over any already-open modal WITHOUT
         // minimizing it. The default "switch" minimizes the sheet below and
         // later restores it via snapToIndex(savedIndex) — but the saved

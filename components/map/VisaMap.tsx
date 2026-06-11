@@ -172,6 +172,13 @@ export function VisaMap({
   const fillColorExpression = useMemo(() => {
     // Unclassified countries use the stone base so the map reads as monochrome
     const defaultColor = colors.backgroundDeep;
+    // A 'match' with zero branches is structurally invalid — MapLibre's
+    // style validation throws a native NSInvalidArgumentException
+    // ("Expected at least 4 arguments, but found only 2") that kills the
+    // whole app. Reachable whenever the visa map hasn't hydrated yet
+    // (fresh install of an onboarded account); crash-log-confirmed on the
+    // release build. Fall back to a scalar paint value instead.
+    if (countryLookup.size === 0) return defaultColor;
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     for (const [code, entry] of countryLookup) {
       const color = getVisaCategoryColor(entry.categoryKey, colors);
@@ -188,6 +195,8 @@ export function VisaMap({
       return 0.75;
     }
     // With filters — matching at spec opacity, non-matching dimmed
+    // Same zero-branch 'match' guard as fillColorExpression above.
+    if (countryLookup.size === 0) return 0.1;
     const expr: unknown[] = ['match', ['get', 'iso_a3']];
     for (const [code, entry] of countryLookup) {
       if (activeFilters.has(entry.categoryKey)) {

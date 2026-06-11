@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, View, Text, TouchableOpacity, StyleSheet, Platform, Modal, Pressable } from 'react-native';
+import { Animated, View, Text, TouchableOpacity, StyleSheet, Platform, Modal, Pressable, Keyboard } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -45,6 +46,7 @@ export default function DateInput({
   accentColor,
 }: DateInputProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMounted, setPickerMounted] = useState(false);
   const [tempDate, setTempDate] = useState<Date>(parseValue(value));
@@ -94,6 +96,10 @@ export default function DateInput({
   }, [showPicker]);
 
   const handlePress = () => {
+    // Dismiss the keyboard before presenting — otherwise the iOS date-picker
+    // modal renders underneath the still-open keyboard. The host sheet's
+    // keyboardBlurBehavior="restore" settles the sheet back to its detent.
+    Keyboard.dismiss();
     setTempDate(parseValue(value));
     setShowPicker(true);
   };
@@ -185,7 +191,17 @@ export default function DateInput({
                 { transform: [{ translateY: sheetTranslateY }] },
               ]}
             >
-              <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <View
+                style={[
+                  styles.modalContent,
+                  {
+                    backgroundColor: colors.surface,
+                    // Real home-indicator inset, not a hardcoded 34 — falls
+                    // back to Spacing.md on devices without a bottom inset.
+                    paddingBottom: Math.max(insets.bottom, Spacing.md),
+                  },
+                ]}
+              >
                 <View style={[styles.modalHeader, { borderBottomColor: colors.lineMid }]}>
                   <TouchableOpacity onPress={() => setShowPicker(false)}>
                     <Text style={[styles.modalCancel, { color: colors.textMuted }]}>Cancel</Text>
@@ -241,7 +257,7 @@ const styles = StyleSheet.create({
   modalContent: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingBottom: 34, // safe area
+    // paddingBottom is applied inline from useSafeAreaInsets().
   },
   modalHeader: {
     flexDirection: 'row',

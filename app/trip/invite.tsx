@@ -8,9 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Share,
-  ScrollView,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
@@ -90,12 +89,7 @@ export default function InviteScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      // RNKC's KeyboardAvoidingView is a no-op when behavior is undefined —
-      // pass "padding" unconditionally so Android avoids the keyboard too.
-      behavior="padding"
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
       <View
         style={[
@@ -110,12 +104,17 @@ export default function InviteScreen() {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView
+      {/* RNKC's KeyboardAwareScrollView scrolls the focused input above the
+          keyboard with the right delta (Apple Mail / Notes algorithm) — same
+          pattern as components/onboarding/OnboardingScaffold.tsx. */}
+      <KeyboardAwareScrollView
         contentContainerStyle={[
           styles.content,
           { paddingBottom: insets.bottom + Spacing.xl },
         ]}
         keyboardShouldPersistTaps="handled"
+        // Breathing room between the focused input and the keyboard top.
+        bottomOffset={24}
       >
         {/* Role Picker */}
         <View style={styles.section}>
@@ -192,10 +191,10 @@ export default function InviteScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <TopSafeAreaBlur />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

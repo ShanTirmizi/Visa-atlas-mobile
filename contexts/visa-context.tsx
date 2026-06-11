@@ -166,6 +166,19 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
   );
   const markOnboardedMutation = useMutation(api.userProfiles.markOnboarded);
 
+  // ── Convex: server copy of the visa profile ────────────────────────
+  // `onboarded` is server-truth, but the data behind it (passports, visa
+  // map, residence, held visas) was historically device-local — so a fresh
+  // install of an onboarded account reached the tabs with an EMPTY atlas
+  // (and crashed the Atlas tab before the VisaMap zero-branch guard). The
+  // server doc lets a fresh device rehydrate; the client pushes its state
+  // up whenever the local profile changes.
+  const remoteVisaProfile = useQuery(
+    api.visaProfiles.getMyVisaProfile,
+    isAuthenticated ? {} : 'skip',
+  );
+  const saveVisaProfileMutation = useMutation(api.visaProfiles.saveVisaProfile);
+
   // Load all persisted data on mount
   useEffect(() => {
     Promise.all([
@@ -269,6 +282,65 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, [isAuthenticated, markOnboardedMutation]);
+
+  // ── Rehydrate from the server when the local cache is empty ────────
+  // Fires exactly once per empty-cache session: local `visaMapData === null`
+  // is the trigger, and a successful hydrate makes it non-null. Local data,
+  // when present, always wins — the server copy is a backup, not a source
+  // of live truth.
+  useEffect(() => {
+    if (!loaded || !isAuthenticated) return;
+    if (visaMapData !== null) return; // local cache populated — nothing to do
+    if (!remoteVisaProfile) return; // undefined = loading, null = never saved
+    try {
+      const parsed = JSON.parse(remoteVisaProfile.visaMap) as CountryVisa[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      setVisaMapState(parsed);
+      AsyncStorage.setItem(KEYS.visaMap, remoteVisaProfile.visaMap);
+      setPassportsState(remoteVisaProfile.passports);
+      AsyncStorage.setItem(
+        KEYS.passports,
+        JSON.stringify(remoteVisaProfile.passports),
+      );
+      setHeldVisasState(remoteVisaProfile.heldVisas);
+      persistArray(KEYS.heldVisas, remoteVisaProfile.heldVisas);
+      setResidenceState(remoteVisaProfile.residence);
+      if (remoteVisaProfile.residence) {
+        AsyncStorage.setItem(KEYS.residence, remoteVisaProfile.residence);
+      }
+    } catch {
+      // Corrupt server JSON — leave local state empty; onboarding's
+      // validation prevents this from being written in the first place.
+    }
+  }, [loaded, isAuthenticated, visaMapData, remoteVisaProfile]);
+
+  // ── Push local profile → server ─────────────────────────────────────
+  // Trailing debounce coalesces bursts (e.g. toggling several held visas
+  // in the editor) into one mutation — write-batching, not timing-derived
+  // UI logic. Saving the just-hydrated state back once is harmless.
+  useEffect(() => {
+    if (!loaded || !isAuthenticated) return;
+    if (!visaMapData || visaMapData.length === 0) return;
+    const timer = setTimeout(() => {
+      void saveVisaProfileMutation({
+        passports,
+        heldVisas,
+        residence,
+        visaMap: JSON.stringify(visaMapData),
+      }).catch((err) => {
+        console.warn('visaProfile sync failed', err);
+      });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [
+    loaded,
+    isAuthenticated,
+    visaMapData,
+    passports,
+    heldVisas,
+    residence,
+    saveVisaProfileMutation,
+  ]);
 
   // Effective `onboarded` — server-truth when authenticated, local cache
   // otherwise. While the profile query is still resolving (`undefined`)

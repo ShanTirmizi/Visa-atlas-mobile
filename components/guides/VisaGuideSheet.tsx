@@ -164,6 +164,10 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
     // the API otherwise has no idea whose passport the documents are for.
     const { passports, residence } = useVisa();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+    // True once the sheet has been dismissed (backdrop tap / pan-down) —
+    // gates the async generate() success path so it can't navigate after
+    // the user already bailed out mid-generation. Reset on present().
+    const dismissedRef = useRef(false);
 
     const [step, setStep] = useState<Step>('employment');
     const [employment, setEmployment] = useState('employed');
@@ -195,7 +199,11 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
     }, []);
 
     useImperativeHandle(ref, () => ({
-      present: () => { resetState(); bottomSheetRef.current?.present(); },
+      present: () => {
+        dismissedRef.current = false;
+        resetState();
+        bottomSheetRef.current?.present();
+      },
       dismiss: () => { bottomSheetRef.current?.dismiss(); },
     }));
 
@@ -240,10 +248,15 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
           status: 'preparing' as const,
         });
 
-        setTimeout(() => {
-          bottomSheetRef.current?.dismiss();
-          onGuideCreated(String(guideId));
-        }, 300);
+        // The user backdrop-tapped / panned out mid-generation — the guide
+        // doc exists (they'll find it in their guides list), but don't yank
+        // them into it from wherever they navigated to.
+        if (dismissedRef.current) return;
+
+        // Dismiss + navigate synchronously — the LLM fetch already took
+        // seconds, a tacked-on delay here is pure dead time.
+        bottomSheetRef.current?.dismiss();
+        onGuideCreated(String(guideId));
       } catch {
         setError('Failed to generate guide. Please try again.');
         setStep('month');
@@ -318,11 +331,23 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
         ref={bottomSheetRef}
         enableDynamicSizing={true}
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
+        // maxDynamicContentSize caps HEIGHT only; topInset is the prop that
+        // clamps the sheet's POSITION below the Dynamic Island — see the
+        // overshoot writeup in TripPlannerSheet.tsx (canonical config).
+        topInset={insets.top + 10}
         enablePanDownToClose={step !== 'loading'}
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: colors.textMuted, width: 40 }}
         backgroundStyle={{ backgroundColor: colors.background, borderRadius: 28 }}
-        onChange={(index) => { if (index === -1) resetState(); }}
+        onChange={(index) => {
+          if (index === -1) {
+            // Backdrop-tap / pan-down while generating still closes the sheet
+            // (gorhom's default pressBehavior='close') — record it so the
+            // in-flight generate() success path doesn't navigate afterwards.
+            dismissedRef.current = true;
+            resetState();
+          }
+        }}
       >
         <BottomSheetScrollView
           contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40 }}

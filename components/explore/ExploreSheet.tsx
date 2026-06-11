@@ -123,7 +123,9 @@ export function ExploreSheet({
     return filtered
       .filter((c) => c.code !== featured?.code)
       .filter((c) => !q || c.name.toLowerCase().includes(q));
-  }, [countries, filter, featured]);
+    // `search` was missing here, which made the search bar a no-op — the
+    // memo never recomputed as the user typed.
+  }, [countries, filter, featured, search]);
 
   const handleCarouselSelect = useCallback(
     (code: string) => {
@@ -382,7 +384,7 @@ export function ExploreSheet({
         styles.sheetBackground,
         { backgroundColor: colors.background },
       ]}
-      handleIndicatorStyle={styles.handleIndicator}
+      handleIndicatorStyle={[styles.handleIndicator, { backgroundColor: colors.inkFaint }]}
       enablePanDownToClose={false}
       // Same recipe as VisaChatSheet: "extend" raises the sheet to its top
       // snap when the search field focuses (the field rests in the bottom
@@ -414,8 +416,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: Radius['2xl'],
     borderTopRightRadius: Radius['2xl'],
   },
+  // Colour applied inline from the theme (colors.inkFaint) — static
+  // StyleSheet can't reach useTheme().
   handleIndicator: {
-    backgroundColor: '#9E9E9E',
     width: 36,
     height: 4,
     borderRadius: 2,

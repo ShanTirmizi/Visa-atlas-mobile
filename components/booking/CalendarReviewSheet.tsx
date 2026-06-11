@@ -7,7 +7,12 @@ import React, {
   useState,
 } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Dimensions } from 'react-native';
-import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import {
+  BottomSheetModal,
+  BottomSheetFlatList,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X } from 'lucide-react-native';
 import { useMutation } from 'convex/react';
@@ -244,6 +249,20 @@ const CalendarReviewSheet = forwardRef<CalendarReviewSheetRef, CalendarReviewShe
       [colors],
     );
 
+    // ── Backdrop — standard dim + tap-outside dismiss (mirrors
+    // AppBottomSheet); without it the sheet rendered with no scrim at all. ──
+    const renderBackdrop = useCallback(
+      (props: BottomSheetBackdropProps) => (
+        <BottomSheetBackdrop
+          {...props}
+          appearsOnIndex={0}
+          disappearsOnIndex={-1}
+          opacity={0.4}
+        />
+      ),
+      [],
+    );
+
     // ── Render ───────────────────────────────────────
     return (
       <BottomSheetModal
@@ -251,6 +270,7 @@ const CalendarReviewSheet = forwardRef<CalendarReviewSheetRef, CalendarReviewShe
         enableDynamicSizing
         maxDynamicContentSize={maxDynamicContentSize}
         topInset={insets.top + 10}
+        backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: colors.background }}
         handleIndicatorStyle={{ backgroundColor: colors.textMuted }}
       >

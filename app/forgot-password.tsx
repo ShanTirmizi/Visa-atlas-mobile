@@ -3,12 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Pressable,
   TextInput,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import Animated from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -250,27 +249,23 @@ export default function ForgotPasswordScreen() {
       {/* Guilloche background — absolutely positioned behind everything */}
       <Guilloche variant="wavy" color={colors.ink} opacity={0.04} />
 
-      <KeyboardAvoidingView
+      {/* RNKC's KeyboardAwareScrollView scrolls the focused input above the
+          keyboard with the right delta (Apple Mail / Notes algorithm) — a
+          plain ScrollView left the low-on-screen password field buried.
+          Same pattern as components/onboarding/OnboardingScaffold.tsx. */}
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
-        // RNKC's KeyboardAvoidingView is a no-op when behavior is undefined,
-        // and edge-to-edge Android has no OS adjustResize fallback — pass
-        // "padding" unconditionally (same fix as sign-in).
-        behavior="padding"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        // Breathing room between the focused input and the keyboard top.
+        bottomOffset={24}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingTop: insets.top + 24,
+          paddingBottom: insets.bottom + 24,
+          paddingHorizontal: 22,
+        }}
       >
-        {/* ScrollView (not a plain flex View) so that on small devices the
-            keyboard-compressed content scrolls instead of squashing the
-            code/password fields — mirrors sign-in. */}
-        <ScrollView
-          style={{ flex: 1 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            flexGrow: 1,
-            paddingTop: insets.top + 24,
-            paddingBottom: insets.bottom + 24,
-            paddingHorizontal: 22,
-          }}
-        >
           {/* Back button */}
           <View style={{ alignSelf: 'flex-start', marginBottom: 12 }}>
             <CircleBtn solid onPress={() => router.back()} accessibilityLabel="Back">
@@ -529,8 +524,7 @@ export default function ForgotPasswordScreen() {
               </>
             )}
           </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
 
       {/* Glass header overlay — always on top */}
       <TopSafeAreaBlur />
