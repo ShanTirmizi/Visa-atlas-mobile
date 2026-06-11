@@ -70,6 +70,10 @@ export default defineSchema({
     // reactive, survives websocket reconnects, and renders correctly on
     // every device viewing the trip.
     retryingSections: v.optional(v.array(v.string())),
+    // Soft-delete marker for the delete-with-Undo flow: set on delete,
+    // cleared by Undo, finalized by a scheduled hard delete. Trips with
+    // deletedAt set are filtered out of every list/query.
+    deletedAt: v.optional(v.number()),
     // User's free-text trip brief — original text plus any merged-in answers
     // from the refinement clarifying-questions flow. Trimmed; whitespace-only
     // is normalized to undefined. Capped at 2000 chars in the action handler.
@@ -335,5 +339,8 @@ export default defineSchema({
     userId: v.id("users"),
     onboarded: v.boolean(),
     onboardedAt: v.optional(v.number()),
+    // Expo push token for trip-ready notifications. Registered lazily the
+    // first time the user generates a trip (contextual permission ask).
+    pushToken: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 });

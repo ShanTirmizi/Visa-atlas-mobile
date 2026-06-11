@@ -70,6 +70,9 @@ export const getInviteByCode = query({
     if (invite.expiresAt < Date.now()) return null;
 
     const trip = await ctx.db.get(invite.tripId);
+    // A soft-deleted trip (pending hard delete) reads as gone — its invites
+    // are no longer redeemable previews.
+    if (trip !== null && trip.deletedAt !== undefined) return null;
     const countryName = trip?.countryName ?? null;
 
     // Redacted preview shape — never return createdBy or invitedEmail (PII)
@@ -168,11 +171,14 @@ export const getPendingInvitesForUser = query({
     const enriched = await Promise.all(
       pending.map(async (inv) => {
         const trip = await ctx.db.get(inv.tripId);
+        // Soft-deleted trips (pending hard delete) read as gone — drop
+        // their invites from the user's pending list.
+        if (trip !== null && trip.deletedAt !== undefined) return null;
         return { ...inv, countryName: trip?.countryName ?? null };
       }),
     );
 
-    return enriched;
+    return enriched.filter((inv) => inv !== null);
   },
 });
 

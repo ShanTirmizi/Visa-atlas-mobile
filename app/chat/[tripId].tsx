@@ -36,6 +36,7 @@ import {
   Wand2,
 } from 'lucide-react-native';
 import BackButton from '@/components/ui/BackButton';
+import { hapticSelect } from '@/utils/haptics';
 import { useTheme } from '@/contexts/theme-context';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
@@ -72,6 +73,16 @@ const THINKING_PHRASES = [
   'Sketching your day',
   'Pulling threads together',
   'Drafting suggestions',
+] as const;
+
+// Starter prompts shown only while the conversation is empty — tapping one
+// sends it immediately through the exact same path as typing + send
+// (iMessage / ChatGPT starter-suggestion pattern). Copy is deliberately
+// destination-agnostic so the same three work for any trip.
+const STARTER_PROMPTS = [
+  'Make one of the days more relaxed',
+  'Add a rainy-day backup plan',
+  'Suggest a great dinner spot for the last night',
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -395,19 +406,17 @@ export default function ChatScreen() {
 
   const dismissFailed = useCallback(() => setFailedMessage(null), []);
 
-  const suggestions = currentDay
-    ? [
-        `Suggest a different morning activity for Day ${currentDay.day}`,
-        `Add a hidden-gem stop to this day`,
-        `Make this day more relaxed`,
-        `What should I bring for Day ${currentDay.day}?`,
-      ]
-    : [
-        `What's the best restaurant near Day 1?`,
-        `How do I get around ${countryName}?`,
-        `What should I pack for this trip?`,
-        `Any hidden gems not in the itinerary?`,
-      ];
+  // Starter chips send straight through sendChat (same guards as the input
+  // bar) — never just prefill the input. Dimmed + disabled while offline or
+  // while a send is already in flight.
+  const startersDisabled = isOffline || isSending;
+  const onStarterPress = useCallback(
+    (prompt: string) => {
+      hapticSelect();
+      void sendChat(prompt);
+    },
+    [sendChat],
+  );
 
   const renderMessage = useCallback(
     ({ item }: { item: ChatMessage }) => {
@@ -749,43 +758,51 @@ export default function ChatScreen() {
             </Text>
           </View>
 
+          {/* Starter prompts — soft pills that send on tap. Soft pill =
+              bg-tint + coloured text, no leading dot (house rule). */}
           <View style={styles.suggestions}>
-            {suggestions.map((s, i) => (
+            <Text
+              style={{
+                fontFamily: FontFamily.displayItalic,
+                fontStyle: 'italic',
+                fontSize: 17,
+                lineHeight: 22,
+                letterSpacing: -17 * 0.014,
+                fontWeight: '500',
+                color: colors.inkSoft,
+                textAlign: 'center',
+                marginBottom: 4,
+              }}
+            >
+              Try asking
+              <Text style={{ color: colors.coral }}>.</Text>
+            </Text>
+            {STARTER_PROMPTS.map((s) => (
               <Pressable
-                key={i}
+                key={s}
+                disabled={startersDisabled}
+                accessibilityRole="button"
+                accessibilityLabel={s}
+                onPress={() => onStarterPress(s)}
                 style={({ pressed }) => [
-                  styles.suggestionChip,
+                  styles.starterChip,
                   {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.line,
-                    opacity: pressed ? 0.85 : 1,
+                    backgroundColor: colors.coralBg,
+                    opacity: startersDisabled ? 0.4 : pressed ? 0.7 : 1,
                   },
                 ]}
-                onPress={() => {
-                  setInputText(s);
-                  inputRef.current?.focus();
-                }}
               >
-                <View
-                  style={{
-                    width: 4,
-                    height: 4,
-                    borderRadius: 2,
-                    backgroundColor: colors.coral,
-                    marginRight: 10,
-                  }}
-                />
                 <Text
                   style={{
-                    fontFamily: FontFamily.regular,
+                    fontFamily: FontFamily.medium,
                     fontSize: 14,
-                    color: colors.ink,
-                    flex: 1,
+                    lineHeight: 19,
+                    color: colors.coralDeep,
+                    textAlign: 'center',
                   }}
                 >
                   {s}
                 </Text>
-                <ArrowRight size={13} color={colors.inkMute} strokeWidth={2} />
               </Pressable>
             ))}
           </View>
@@ -1067,14 +1084,12 @@ const styles = StyleSheet.create({
   },
   suggestions: {
     gap: 10,
+    alignItems: 'center', // pills hug their text and sit centered, iMessage-style
   },
-  suggestionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1,
+  starterChip: {
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 22, // full pill
   },
 
   // Messages

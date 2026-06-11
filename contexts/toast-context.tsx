@@ -24,12 +24,21 @@ import { FontFamily, FontSize, Radius, Spacing } from '@/constants/theme';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+/** Inline action rendered as a text button on the right of the toast row —
+ * e.g. the Undo affordance after deleting a trip. Pressing it runs onPress
+ * and dismisses the toast. */
+export interface ToastAction {
+  label: string;
+  onPress: () => void;
+}
+
 interface ToastMessage {
   id: string;
   type: ToastType;
   title: string;
   message?: string;
   duration?: number;
+  action?: ToastAction;
 }
 
 interface ToastContextValue {
@@ -38,6 +47,7 @@ interface ToastContextValue {
     title: string,
     message?: string,
     duration?: number,
+    action?: ToastAction,
   ) => void;
   hideToast: (id: string) => void;
 }
@@ -140,6 +150,21 @@ function Toast({
           </Text>
         ) : null}
       </View>
+      {toast.action ? (
+        <TouchableOpacity
+          onPress={() => {
+            toast.action?.onPress();
+            onDismiss(toast.id);
+          }}
+          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+        >
+          {/* coralDeep is the codebase token for readable coral text on
+              surface backgrounds (see VerifyEmailSheet bannerText). */}
+          <Text style={[styles.toastAction, { color: colors.coralDeep }]}>
+            {toast.action.label}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
       <TouchableOpacity
         onPress={() => onDismiss(toast.id)}
         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
@@ -164,9 +189,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const showToast = useCallback(
-    (type: ToastType, title: string, message?: string, duration?: number) => {
+    (
+      type: ToastType,
+      title: string,
+      message?: string,
+      duration?: number,
+      action?: ToastAction,
+    ) => {
       const id = `toast_${++counterRef.current}_${Date.now()}`;
-      const newToast: ToastMessage = { id, type, title, message, duration };
+      const newToast: ToastMessage = {
+        id,
+        type,
+        title,
+        message,
+        duration,
+        action,
+      };
       setToasts((prev) => [...prev.slice(-2), newToast]); // keep max 3
     },
     [],
@@ -240,5 +278,9 @@ const styles = StyleSheet.create({
   toastMessage: {
     fontSize: FontSize.xs,
     marginTop: 2,
+  },
+  toastAction: {
+    fontSize: FontSize.sm,
+    fontFamily: FontFamily.semibold,
   },
 });

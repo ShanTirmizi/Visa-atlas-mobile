@@ -1,3 +1,4 @@
+import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAuth } from "./lib/auth";
 
@@ -46,6 +47,32 @@ export const markOnboarded = mutation({
       userId,
       onboarded: true,
       onboardedAt: Date.now(),
+    });
+  },
+});
+
+// Stores the viewer's Expo push token for trip-ready notifications.
+// Registered lazily from the client the first time a trip is generated
+// (contextual permission ask). Idempotent; re-registering the same token
+// is a no-op write.
+export const setPushToken = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const userId = await requireAuth(ctx);
+    const existing = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (existing) {
+      if (existing.pushToken !== token) {
+        await ctx.db.patch(existing._id, { pushToken: token });
+      }
+      return;
+    }
+    await ctx.db.insert("userProfiles", {
+      userId,
+      onboarded: false,
+      pushToken: token,
     });
   },
 });

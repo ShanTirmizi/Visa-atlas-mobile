@@ -80,6 +80,38 @@ function ThemedApp() {
   // hasn't finished yet OR auth hasn't resolved — whichever takes longer.
   const [splashFinished, setSplashFinished] = useState(false);
 
+  // Deep-link taps on trip-ready notifications → that trip's screen.
+  // Lazily required + fully guarded: dev clients built before the
+  // expo-notifications module was added must not crash at import time.
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let sub: any;
+    try {
+      const Notifications = require('expo-notifications');
+      sub = Notifications.addNotificationResponseReceivedListener(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (response: any) => {
+          const tripId =
+            response?.notification?.request?.content?.data?.tripId;
+          if (typeof tripId === 'string') {
+            router.push(`/trip/${tripId}` as never);
+          }
+        },
+      );
+    } catch {
+      // Native module absent in this binary — notifications are an
+      // enhancement, never a crash.
+    }
+    return () => {
+      try {
+        sub?.remove();
+      } catch {
+        /* noop */
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auth gate: redirect based on auth state
   useEffect(() => {
     if (isLoading || !visaLoaded) return;

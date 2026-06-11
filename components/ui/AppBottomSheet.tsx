@@ -1,4 +1,11 @@
-import React, { forwardRef, useMemo, useCallback } from 'react';
+import React, {
+  createContext,
+  forwardRef,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from 'react';
 import { Dimensions } from 'react-native';
 import {
   BottomSheetModal,
@@ -23,6 +30,37 @@ import { useTheme } from '@/contexts/theme-context';
 //
 // Call sheetRef.current?.present() / .dismiss() as usual.
 // ──────────────────────────────────────────────
+
+// ──────────────────────────────────────────────
+// Sheet-settled context
+//
+// `true` once the sheet has finished animating to an open resting position,
+// `false` while it is presenting, snapping, or dismissing. Consumers gate
+// selection presses on it (e.g. CountryPickerSheet rows): a tap that lands
+// mid-present-animation fires the selection from a half-presented state, and
+// the resulting dismiss can wedge the stacked gorhom modal underneath into a
+// partially touch-dead state (QA-reproduced with CountryPickerSheet over
+// TripPlannerSheet). The guard is invisible — the present animation is
+// ~300ms, so rows are never visually dimmed.
+//
+// Default is `true` (fail-open): if a consumer renders outside an
+// AppBottomSheet, the guard must never leave it permanently inert.
+// ──────────────────────────────────────────────
+
+const SheetSettledContext = createContext(true);
+
+/**
+ * True once the surrounding AppBottomSheet has settled at an open position —
+ * gorhom's onChange landed at index >= 0. False from the moment an
+ * index-changing animation starts (onAnimate) until it lands. Designed for
+ * gating present/dismiss-adjacent presses; verified against gorhom v5.2.8:
+ * every onAnimate is followed by an onChange at animation completion
+ * (BottomSheet.tsx `animateToPosition` → `animateToPositionCompleted`), so a
+ * tap immediately after the sheet lands always goes through.
+ */
+export function useSheetSettled(): boolean {
+  return useContext(SheetSettledContext);
+}
 
 interface AppBottomSheetProps {
   children: React.ReactNode;
@@ -69,6 +107,24 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
       [insets.top],
     );
 
+    // Settled tracking — false on mount and whenever the sheet starts
+    // animating toward a position, true once onChange lands at an open
+    // index. onChange(-1) on dismiss resets it for the next present.
+    const [settled, setSettled] = useState(false);
+
+    const handleAnimate = useCallback(() => {
+      setSettled(false);
+    }, []);
+
+    const handleChange = useCallback(
+      (index: number) => {
+        setSettled(index >= 0);
+        // Preserve the existing public onChange contract.
+        onChange?.(index);
+      },
+      [onChange],
+    );
+
     const resolvedBg = backgroundColor ?? colors.background;
     const resolvedHandle =
       handleColor ?? (backgroundColor ? colors.solidTextMuted : colors.inkFaint);
@@ -110,9 +166,12 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: resolvedBg, borderRadius: 24 }}
         handleIndicatorStyle={{ backgroundColor: resolvedHandle, width: 36, height: 4 }}
-        onChange={onChange}
+        onAnimate={handleAnimate}
+        onChange={handleChange}
       >
-        {children}
+        <SheetSettledContext.Provider value={settled}>
+          {children}
+        </SheetSettledContext.Provider>
       </BottomSheetModal>
     );
   },

@@ -394,6 +394,13 @@ export const completeGeneration = internalMutation({
     await ctx.db.patch(tripId, {
       status: hasAnyContent ? "planned" : "failed",
     });
+    if (hasAnyContent) {
+      // Trip-ready push for users who left the app mid-generation.
+      // Best-effort — the action no-ops when no push token is registered.
+      await ctx.scheduler.runAfter(0, internal.notifications.sendTripReady, {
+        tripId,
+      });
+    }
   },
 });
 

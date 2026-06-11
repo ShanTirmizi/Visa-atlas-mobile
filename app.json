@@ -95,7 +95,8 @@
       "expo-secure-store",
       "expo-apple-authentication",
       "@maplibre/maplibre-react-native",
-      "expo-asset"
+      "expo-asset",
+      "expo-notifications"
     ],
     "extra": {
       "router": {

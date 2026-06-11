@@ -20,7 +20,7 @@ import {
   BottomSheetTextInput,
 } from '@gorhom/bottom-sheet';
 import { Search, X } from 'lucide-react-native';
-import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
+import { AppBottomSheet, useSheetSettled } from '@/components/ui/AppBottomSheet';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, getVisaCategoryColor } from '@/constants/theme';
 import { Squiggle } from '@/components/ui/Squiggle';
@@ -50,6 +50,88 @@ interface Props {
   /** Mono kicker shown above the title. */
   kicker?: string;
 }
+
+interface CountryRowProps {
+  item: CountryVisa;
+  heldSet: Set<HeldVisaType>;
+  onSelectRow: (country: CountryVisa) => void;
+}
+
+/** One tappable country row. Extracted into its own component (rather than
+ *  inline in renderItem) so it mounts *inside* AppBottomSheet's children,
+ *  where the SheetSettledContext provider lives — useSheetSettled() called
+ *  from the sheet component's own body would only see the context default. */
+const CountryRow = React.memo(function CountryRow({
+  item,
+  heldSet,
+  onSelectRow,
+}: CountryRowProps) {
+  const { colors } = useTheme();
+  // Invisible press guard (no dimming — the present animation is ~300ms):
+  // a tap that lands while the sheet is still animating in selects + dismisses
+  // from a half-presented state, which can wedge the stacked gorhom modal
+  // underneath (TripPlannerSheet) into a partially touch-dead state.
+  // QA-reproduced; see SheetSettledContext in AppBottomSheet.
+  const settled = useSheetSettled();
+
+  const resolved = resolveCountry(item, heldSet);
+  const catColor = getVisaCategoryColor(resolved.category, colors);
+  const alpha2 = toAlpha2(item.code);
+  const label =
+    resolved.category === 'visa-free'
+      ? 'Visa-free'
+      : resolved.category === 'visa-on-arrival'
+      ? 'On arrival'
+      : resolved.category === 'evisa'
+      ? 'eVisa'
+      : 'Visa req.';
+
+  return (
+    <Pressable
+      onPress={() => {
+        if (!settled) {
+          return;
+        }
+        onSelectRow(item);
+      }}
+      style={({ pressed }) => [
+        styles.row,
+        {
+          backgroundColor: pressed ? colors.surfaceMuted : 'transparent',
+          borderBottomColor: colors.line,
+        },
+      ]}
+    >
+      <View style={styles.flagWrap}>
+        <Flag code={alpha2} size={28} />
+      </View>
+      <Text
+        style={[
+          styles.rowName,
+          { color: colors.ink },
+        ]}
+        numberOfLines={1}
+      >
+        {item.name}
+      </Text>
+      {/* Soft pill: bg tint + coloured text only — no leading dot,
+          per the status-pill convention. */}
+      <View
+        style={[
+          styles.catPill,
+          { backgroundColor: catColor + '1F' },
+        ]}
+      >
+        <Text
+          style={[styles.catLabel, { color: catColor }]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      </View>
+    </Pressable>
+  );
+});
 
 /** Premium country picker bottom sheet — italic Fraunces title with a
  *  coral period, mono kicker + coral squiggle, soft paper search box,
@@ -106,61 +188,10 @@ export const CountryPickerSheet = forwardRef<CountryPickerSheetRef, Props>(
     );
 
     const renderItem = useCallback(
-      ({ item }: { item: CountryVisa }) => {
-        const resolved = resolveCountry(item, heldSet);
-        const catColor = getVisaCategoryColor(resolved.category, colors);
-        const alpha2 = toAlpha2(item.code);
-        const label =
-          resolved.category === 'visa-free'
-            ? 'Visa-free'
-            : resolved.category === 'visa-on-arrival'
-            ? 'On arrival'
-            : resolved.category === 'evisa'
-            ? 'eVisa'
-            : 'Visa req.';
-        return (
-          <Pressable
-            onPress={() => handleSelect(item)}
-            style={({ pressed }) => [
-              styles.row,
-              {
-                backgroundColor: pressed ? colors.surfaceMuted : 'transparent',
-                borderBottomColor: colors.line,
-              },
-            ]}
-          >
-            <View style={styles.flagWrap}>
-              <Flag code={alpha2} size={28} />
-            </View>
-            <Text
-              style={[
-                styles.rowName,
-                { color: colors.ink },
-              ]}
-              numberOfLines={1}
-            >
-              {item.name}
-            </Text>
-            <View
-              style={[
-                styles.catPill,
-                { backgroundColor: catColor + '1F' },
-              ]}
-            >
-              <View
-                style={[styles.catDot, { backgroundColor: catColor }]}
-              />
-              <Text
-                style={[styles.catLabel, { color: catColor }]}
-                numberOfLines={1}
-              >
-                {label}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      },
-      [colors, heldSet, handleSelect],
+      ({ item }: { item: CountryVisa }) => (
+        <CountryRow item={item} heldSet={heldSet} onSelectRow={handleSelect} />
+      ),
+      [heldSet, handleSelect],
     );
 
     return (
@@ -320,15 +351,9 @@ const styles = StyleSheet.create({
   catPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 999,
-  },
-  catDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   catLabel: {
     fontFamily: FontFamily.semibold,

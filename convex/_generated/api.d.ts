@@ -22,6 +22,7 @@ import type * as http from "../http.js";
 import type * as lib_anthropicStream from "../lib/anthropicStream.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_sectionFieldMap from "../lib/sectionFieldMap.js";
+import type * as notifications from "../notifications.js";
 import type * as tripCollaborators from "../tripCollaborators.js";
 import type * as tripGeneration from "../tripGeneration.js";
 import type * as tripInvites from "../tripInvites.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   "lib/anthropicStream": typeof lib_anthropicStream;
   "lib/auth": typeof lib_auth;
   "lib/sectionFieldMap": typeof lib_sectionFieldMap;
+  notifications: typeof notifications;
   tripCollaborators: typeof tripCollaborators;
   tripGeneration: typeof tripGeneration;
   tripInvites: typeof tripInvites;

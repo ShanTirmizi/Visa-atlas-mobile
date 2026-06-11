@@ -559,6 +559,9 @@ function Footer({
             fontSize: 17,
             fontWeight: '500',
             letterSpacing: -17 * 0.014,
+            // Italic Fraunces descenders need explicit room — the default
+            // line box trims the "y" tail ("itinerary" read as "itinerarv").
+            lineHeight: 24,
             color: '#FFFFFF',
           }}
         >

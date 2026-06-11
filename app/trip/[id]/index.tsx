@@ -21,7 +21,7 @@ import { tabSlideIn } from '@/utils/tabAnimation';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { useTheme } from '@/contexts/theme-context';
 import { useToast } from '@/contexts/toast-context';
-import { hapticSuccess } from '@/utils/haptics';
+import { hapticImpact, hapticSuccess } from '@/utils/haptics';
 import { Spacing, getVisaCategoryColor, FontFamily } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 
@@ -59,6 +59,7 @@ import {
   type HeldVisaType,
 } from '@/data/visaData';
 import { VisaHeroCardForCountry } from '@/components/visa/VisaHeroCardForCountry';
+import { VisaDeadlineCard } from '@/components/visa/VisaDeadlineCard';
 
 // ── Streaming-generation UI: progress strip, skeletons, retry ──
 import { TripGenerationStrip } from '@/components/trip/TripGenerationStrip';
@@ -189,6 +190,7 @@ export default function TripDetailScreen() {
   const heartbeatMutation = useMutation(api.tripPresence.heartbeat);
   const leaveMutation = useMutation(api.tripPresence.leave);
   const deleteTripMutation = useMutation(api.trips.deleteTrip);
+  const undoDeleteTripMutation = useMutation(api.trips.undoDeleteTrip);
 
   // ── Trip-ready moment ─────────────────────────────────────
   // When generation settles while the user is watching, mark the moment:
@@ -223,32 +225,32 @@ export default function TripDetailScreen() {
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete trip',
-      `Are you sure you want to delete this trip? This will also delete its bookings, messages, and itinerary. This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            // Navigate AWAY first so the live `getTrip` query stops re-running
-            // against a record we're about to delete (which would throw "no
-            // access" into render and surface as a Render Error).
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/' as never);
-            }
-            // Fire-and-forget the delete. The Convex mutation already enforces
-            // ownership server-side; a failure here is almost certainly a
-            // network issue, which is fine to swallow at this point since the
-            // user has already left the screen.
-            deleteTripMutation({ id: id as Id<'trips'> }).catch(() => {});
-          },
-        },
-      ],
-    );
+    // Apple Notes / Mail pattern: instant delete with an Undo toast instead
+    // of a confirmation dialog. The server soft-deletes and only hard-deletes
+    // after a 10s window, so Undo just clears the soft-delete flag.
+    hapticImpact();
+    // Navigate AWAY first so the live `getTrip` query stops re-running
+    // against a record we're about to delete (which would throw "no
+    // access" into render and surface as a Render Error).
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/' as never);
+    }
+    // Fire-and-forget the delete. The Convex mutation already enforces
+    // ownership server-side; a failure here is almost certainly a
+    // network issue, which is fine to swallow at this point since the
+    // user has already left the screen.
+    deleteTripMutation({ id: id as Id<'trips'> }).catch(() => {});
+    // 6s toast < 10s server undo window, so Undo always lands while the
+    // trip is still only soft-deleted. Past the window the mutation
+    // no-ops silently server-side.
+    showToast('info', 'Trip deleted', undefined, 6000, {
+      label: 'Undo',
+      onPress: () => {
+        undoDeleteTripMutation({ id: id as Id<'trips'> }).catch(() => {});
+      },
+    });
   };
 
   const handleOpenMenu = () => {
@@ -824,6 +826,16 @@ export default function TripDetailScreen() {
                 passports={passports}
                 hasGuide={!!existingGuide}
                 onCreateGuide={handleStartVisaApplication}
+              />
+
+              {/* Apply-by deadline — startDate − (processing + 2-week buffer).
+                  Renders only for action-required categories on dated trips
+                  whose processing time actually parses (no fake deadlines). */}
+              <VisaDeadlineCard
+                category={c}
+                startDate={trip.startDate}
+                processingTime={trip.visaProcessingTime}
+                fallbackProcessingTime={country.processingTime}
               />
 
               {/* Bring-with-you checklist — paper card, coral check bullets */}

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   ScrollView,
   ImageBackground,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { runOnJS } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, ChevronRight, Pencil, Sparkles } from 'lucide-react-native';
 import { FontFamily } from '@/constants/theme';
@@ -18,6 +20,8 @@ import { PullQuote } from '@/components/trip/day/PullQuote';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
+import { tabSlideIn } from '@/utils/tabAnimation';
+import { hapticSelect } from '@/utils/haptics';
 
 export interface DayDetailDay {
   day: number;
@@ -56,6 +60,13 @@ interface DayDetailScreenProps {
 
 const HERO_HEIGHT = 280;
 const SHEET_TOP = 260;
+
+// Swipe-to-page commit thresholds — UIScrollView paging semantics: a
+// decisive flick commits even on short travel, otherwise distance decides.
+// Distance matches DayDeck's commitThresholdPx so both day-paging surfaces
+// feel identical under the finger.
+const SWIPE_COMMIT_DISTANCE = 60;
+const SWIPE_COMMIT_VELOCITY = 500;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -189,6 +200,57 @@ function DayDetailScreen({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
+  // ── Day paging: one handler shared by header chevrons + horizontal swipe.
+  // Clamped no-op at the first/last day; selection haptic only when the day
+  // actually changes (same vocabulary as DayDeck's chevrons).
+  const hasNavigatedRef = useRef(false);
+  const goToDay = useCallback(
+    (target: number) => {
+      if (target < 0 || target > numDays - 1 || target === dayIndex) return;
+      hasNavigatedRef.current = true;
+      hapticSelect();
+      onNavigateDay(target);
+    },
+    [dayIndex, numDays, onNavigateDay],
+  );
+
+  // Track the previous index so the fade-slide knows which side to enter
+  // from — same ref pattern as the trip-detail tab swap.
+  const prevIndexRef = useRef(dayIndex);
+  const navDirection = dayIndex >= prevIndexRef.current ? 1 : -1;
+  useEffect(() => {
+    prevIndexRef.current = dayIndex;
+  }, [dayIndex]);
+  // Skip the entering animation on the very first mount — the screen push
+  // (slide_from_right) already animates the whole page in; only user-driven
+  // day changes get the directional content swap.
+  const dayEntering = hasNavigatedRef.current
+    ? tabSlideIn(navDirection * 18)
+    : undefined;
+
+  // Horizontal page swipe (Apple Photos / Books feel). activeOffsetX ±20 +
+  // failOffsetY ±15 keep vertical scrolling of the day content untouched —
+  // the pan only activates on a clearly horizontal drag and fails as soon
+  // as the drag turns vertical, handing the touch to the ScrollView.
+  const swipeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-20, 20])
+        .failOffsetY([-15, 15])
+        .onEnd((e) => {
+          const byVelocity = Math.abs(e.velocityX) > SWIPE_COMMIT_VELOCITY;
+          const byDistance = Math.abs(e.translationX) > SWIPE_COMMIT_DISTANCE;
+          if (!byVelocity && !byDistance) return;
+          // A decisive flick wins over net travel (matches iOS paging:
+          // dragging right then flicking left still pages forward).
+          const sign = byVelocity ? e.velocityX : e.translationX;
+          // Swipe LEFT → next day, swipe RIGHT → previous day.
+          const dir = sign < 0 ? 1 : -1;
+          runOnJS(goToDay)(dayIndex + dir);
+        }),
+    [goToDay, dayIndex],
+  );
+
   const stops = useMemo(
     () => buildStops(day, morningImage, afternoonImage, eveningImage),
     [day, morningImage, afternoonImage, eveningImage],
@@ -203,9 +265,18 @@ function DayDetailScreen({
   const heroTone = useMemo(() => heroToneFromDestination(destination), [destination]);
 
   return (
+    <GestureDetector gesture={swipeGesture}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* ── HERO (fixed, not scrollable) ────────────────────────────── */}
       <View style={styles.hero}>
+        {/* Day media + title page with the swipe (keyed remount per day);
+            the top bar stays mounted — Apple Books pattern: chrome is
+            fixed, page content slides. */}
+        <Animated.View
+          key={`hero-${dayIndex}`}
+          entering={dayEntering}
+          style={StyleSheet.absoluteFill}
+        >
         {heroImage?.url ? (
           <ImageBackground
             source={{ uri: heroImage.url }}
@@ -225,62 +296,6 @@ function DayDetailScreen({
             style={StyleSheet.absoluteFill}
           />
         )}
-
-        {/* ── Top bar (52px from top, 18px horizontal) ── */}
-        <View style={[styles.topBar, { top: 52 }]}>
-          <CircleBtn
-            solid
-            onPress={onBack}
-            accessibilityLabel="Go back"
-          >
-            <ChevronLeft size={20} color={colors.ink} strokeWidth={2.2} />
-          </CircleBtn>
-
-          {/* Day navigator — chevron buttons flank the count, all in one
-              glass pill so it reads as a single widget. Edge chevrons fade
-              when there's no further day in that direction. */}
-          <View style={styles.dayNav}>
-            <Pressable
-              onPress={() => dayIndex > 0 && onNavigateDay(dayIndex - 1)}
-              disabled={dayIndex <= 0}
-              accessibilityLabel="Previous day"
-              hitSlop={6}
-              style={({ pressed }) => [
-                styles.dayNavBtn,
-                {
-                  opacity: dayIndex <= 0 ? 0.35 : pressed ? 0.7 : 1,
-                },
-              ]}
-            >
-              <ChevronLeft size={16} color="#FFFFFF" strokeWidth={2.4} />
-            </Pressable>
-            <View style={styles.dayNavLabel}>
-              <Text style={styles.dayNavText}>{`Day ${dayIndex + 1} of ${numDays}`}</Text>
-            </View>
-            <Pressable
-              onPress={() => dayIndex < numDays - 1 && onNavigateDay(dayIndex + 1)}
-              disabled={dayIndex >= numDays - 1}
-              accessibilityLabel="Next day"
-              hitSlop={6}
-              style={({ pressed }) => [
-                styles.dayNavBtn,
-                {
-                  opacity: dayIndex >= numDays - 1 ? 0.35 : pressed ? 0.7 : 1,
-                },
-              ]}
-            >
-              <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.4} />
-            </Pressable>
-          </View>
-
-          <CircleBtn
-            solid
-            onPress={onEdit}
-            accessibilityLabel="Edit day"
-          >
-            <Pencil size={16} color={colors.ink} strokeWidth={2} />
-          </CircleBtn>
-        </View>
 
         {/* ── Hero bottom: kicker + italic title + coral squiggle ── */}
         <View style={styles.heroBottom}>
@@ -346,6 +361,65 @@ function DayDetailScreen({
           </Text>
           <Squiggle width={120} color={colors.coral} style={{ marginTop: 4 }} />
         </View>
+        </Animated.View>
+
+        {/* ── Top bar (52px from top, 18px horizontal) — stays mounted
+            across day changes (only the pill label updates), rendered after
+            the paging media so it sits on top. ── */}
+        <View style={[styles.topBar, { top: 52 }]}>
+          <CircleBtn
+            solid
+            onPress={onBack}
+            accessibilityLabel="Go back"
+          >
+            <ChevronLeft size={20} color={colors.ink} strokeWidth={2.2} />
+          </CircleBtn>
+
+          {/* Day navigator — chevron buttons flank the count, all in one
+              glass pill so it reads as a single widget. Edge chevrons fade
+              when there's no further day in that direction. */}
+          <View style={styles.dayNav}>
+            <Pressable
+              onPress={() => goToDay(dayIndex - 1)}
+              disabled={dayIndex <= 0}
+              accessibilityLabel="Previous day"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.dayNavBtn,
+                {
+                  opacity: dayIndex <= 0 ? 0.35 : pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <ChevronLeft size={16} color="#FFFFFF" strokeWidth={2.4} />
+            </Pressable>
+            <View style={styles.dayNavLabel}>
+              <Text style={styles.dayNavText}>{`Day ${dayIndex + 1} of ${numDays}`}</Text>
+            </View>
+            <Pressable
+              onPress={() => goToDay(dayIndex + 1)}
+              disabled={dayIndex >= numDays - 1}
+              accessibilityLabel="Next day"
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.dayNavBtn,
+                {
+                  opacity: dayIndex >= numDays - 1 ? 0.35 : pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.4} />
+            </Pressable>
+          </View>
+
+          <CircleBtn
+            solid
+            onPress={onEdit}
+            accessibilityLabel="Edit day"
+          >
+            <Pencil size={16} color={colors.ink} strokeWidth={2} />
+          </CircleBtn>
+        </View>
       </View>
 
       {/* ── SHEET (overlaps hero from top 260) ─────────────────────── */}
@@ -368,6 +442,13 @@ function DayDetailScreen({
           />
         </View>
 
+        {/* Keyed per day: pages with the swipe and resets scroll to the
+            top of the incoming day (Apple Photos behaviour). */}
+        <Animated.View
+          key={`sheet-${dayIndex}`}
+          entering={dayEntering}
+          style={styles.sheetBody}
+        >
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
@@ -431,8 +512,10 @@ function DayDetailScreen({
             </Pressable>
           ) : null}
         </ScrollView>
+        </Animated.View>
       </View>
     </View>
+    </GestureDetector>
   );
 }
 
@@ -529,6 +612,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
+  },
+  sheetBody: {
+    // Fills the sheet below the grab handle so the keyed remount per day
+    // doesn't change the ScrollView's available height.
+    flex: 1,
   },
   sheetContent: {
     paddingTop: 10,

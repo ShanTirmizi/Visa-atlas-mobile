@@ -27,6 +27,7 @@ import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { hapticSelect, hapticImpact } from '@/utils/haptics';
+import { registerForTripNotifications } from '@/utils/notifications';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
@@ -330,18 +331,24 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // Mutation (not action): auto-retried by the Convex client across
     // reconnects, so tap-Generate can't die on a websocket blip.
     const generateTripMutation = useMutation(api.tripGeneration.generateTrip);
+    const setPushTokenMutation = useMutation(api.userProfiles.setPushToken);
     const sparkleStyle = usePlaneAnimation(isLoading);
 
     // Keyboard progress (0 = closed, 1 = open). Used to collapse the CTA
     // when the keyboard appears so the input ends up just above the
     // keyboard after gorhom's interactive sheet shift. See top-of-file.
     const { progress: keyboardProgress } = useReanimatedKeyboardAnimation();
-    const CTA_FULL_HEIGHT = 70; // 52pt button + 18pt marginTop
+    // Natural height of the CTA block, measured at layout (button height +
+    // its 18pt marginTop from s.ctaButton). The previous hardcoded 70 was
+    // ~5pt shorter than the real button, and the overflow:'hidden' wrapper
+    // sliced the italic descenders — "Generate itinerary" rendered as
+    // "…itinerarv". Measured-at-layout, like the floating tab bar.
+    const ctaNaturalHeight = useSharedValue(80);
     const ctaAnimatedStyle = useAnimatedStyle(() => ({
       height: interpolate(
         keyboardProgress.value,
         [0, 1],
-        [CTA_FULL_HEIGHT, 0],
+        [ctaNaturalHeight.value, 0],
         Extrapolation.CLAMP,
       ),
       opacity: interpolate(
@@ -387,10 +394,38 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setDreamNights(7);
     }, []);
 
+    // ── Draft protection ────────────────────────────────────────
+    // An accidental swipe-down used to wipe everything the user had set up
+    // (destination, dates, vibes, a typed brief). The draft now survives
+    // dismissal and is restored on reopen — Airbnb-search style. A full
+    // reset only happens after a successful generation or once the draft
+    // has gone stale.
+    const DRAFT_TTL_MS = 30 * 60_000;
+    const dismissedAtRef = useRef<number | null>(null);
+    const generationCompletedRef = useRef(false);
+
+    // Transient UI state never survives a dismiss/reopen cycle — a stale
+    // spinner or error from the last session would read as broken.
+    const resetTransientState = useCallback(() => {
+      setIsLoading(false);
+      setError('');
+      setPickerSearch('');
+      setShowPicker(false);
+      setDatePicker(null);
+    }, []);
+
     // ── Imperative handle ───────────────────────────────────────
     useImperativeHandle(ref, () => ({
       present: () => {
-        resetState();
+        const draftExpired =
+          dismissedAtRef.current !== null &&
+          Date.now() - dismissedAtRef.current > DRAFT_TTL_MS;
+        if (generationCompletedRef.current || draftExpired) {
+          resetState();
+          generationCompletedRef.current = false;
+        } else {
+          resetTransientState();
+        }
         bottomSheetRef.current?.present();
       },
       dismiss: () => {
@@ -459,6 +494,10 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         return;
       }
       hapticImpact();
+      // Contextual notification opt-in — the moment a "trip ready" push has
+      // obvious value (Apple's permission-prompt guidance). Fire-and-forget;
+      // no-ops on binaries without the native module and on simulators.
+      void registerForTripNotifications(setPushTokenMutation);
       setIsLoading(true);
       setError('');
       try {
@@ -489,6 +528,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           }),
           minDisplay,
         ]);
+        // Generation succeeded — the draft has served its purpose, so the
+        // next present() starts fresh (see draft-protection refs).
+        generationCompletedRef.current = true;
         // Dismiss the sheet, then give its slide-down animation ~250ms
         // to play before pushing the trip detail screen — the sheet
         // disappearing reveals the trips list briefly, then the trip
@@ -502,7 +544,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     }, [
       resolveEffective, heldVisas, passports,
       days, vibe, budget, activeVibes, travelers, party,
-      generateTripMutation, onTripCreated, dreaming, startDate, endDate,
+      generateTripMutation, setPushTokenMutation, onTripCreated, dreaming, startDate, endDate,
     ]);
 
     // ── Generate trip ─────────────────────────────────────────────
@@ -579,13 +621,16 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         android_keyboardInputMode="adjustResize"
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
-        // Use onDismiss (not onChange === -1). The default stackBehavior is
-        // "switch", which MINIMIZES this sheet to index -1 when the refinement
-        // sheet is presented above. onChange would fire on that minimize and
-        // wipe pickedCode/notes — so by the time the user submits the
-        // refinement, resolveEffective() returns null. onDismiss only fires
-        // on a true dismissal (gesture or programmatic), not on minimize.
-        onDismiss={resetState}
+        // Use onDismiss (not onChange === -1) — onChange fires when a sheet
+        // stacked above minimizes this one and would wipe state mid-flow;
+        // onDismiss only fires on a true dismissal (gesture or programmatic).
+        // Draft protection: a dismissal no longer wipes the form — it stamps
+        // the time and clears only transient UI state; present() decides
+        // whether to restore the draft or start fresh (see the draft refs).
+        onDismiss={() => {
+          dismissedAtRef.current = Date.now();
+          resetTransientState();
+        }}
       >
         <BottomSheetScrollView
           contentContainerStyle={s.scrollContent}
@@ -912,6 +957,11 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                       onPress={ready ? generate : undefined}
                       activeOpacity={ready ? 0.85 : 1}
                       disabled={!ready}
+                      // +18 = s.ctaButton's marginTop, which layout height
+                      // doesn't include.
+                      onLayout={(e) => {
+                        ctaNaturalHeight.value = e.nativeEvent.layout.height + 18;
+                      }}
                       style={[
                         s.ctaButton,
                         {
@@ -944,6 +994,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                           fontSize: 17,
                           fontWeight: '500',
                           letterSpacing: -17 * 0.014,
+                          // Italic Fraunces descenders need explicit room —
+                          // the default line box trims the "y" tail.
+                          lineHeight: 24,
                           color: ready ? '#FFFFFF' : colors.inkMute,
                         }}
                       >

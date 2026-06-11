@@ -1,7 +1,13 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireAuth, checkTripPermission } from "./lib/auth";
 import type { Doc, Id } from "./_generated/dataModel";
+
+// How long a soft-deleted trip stays recoverable before the scheduled hard
+// delete cascades it away. The client's Undo toast lasts 6s — comfortably
+// inside this window.
+const HARD_DELETE_DELAY_MS = 10_000;
 
 // ===== Queries =====
 
@@ -16,11 +22,12 @@ export const listTrips = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    // Fetch each trip and append _role
+    // Fetch each trip and append _role. Soft-deleted trips (deletedAt set,
+    // awaiting their scheduled hard delete) read as gone everywhere.
     const trips: (Doc<"trips"> & { _role: string })[] = [];
     for (const collab of collaboratorRows) {
       const trip = await ctx.db.get(collab.tripId);
-      if (trip !== null) {
+      if (trip !== null && trip.deletedAt === undefined) {
         trips.push({ ...trip, _role: collab.role });
       }
     }
@@ -35,7 +42,12 @@ export const getTrip = query({
   args: { id: v.id("trips") },
   handler: async (ctx, args) => {
     await checkTripPermission(ctx, args.id, "viewer");
-    return await ctx.db.get(args.id);
+    const trip = await ctx.db.get(args.id);
+    // Soft-deleted trips read as missing — the trip screen already renders
+    // its not-found state for null, which is exactly what a viewer should
+    // see during the undo window.
+    if (trip === null || trip.deletedAt !== undefined) return null;
+    return trip;
   },
 });
 
@@ -226,10 +238,66 @@ export const updateTripMeta = mutation({
   },
 });
 
+/**
+ * Soft delete + scheduled hard delete (Apple Notes / Mail "instant action
+ * with Undo" pattern — no confirmation dialog). The trip is marked with
+ * `deletedAt` so every read treats it as gone immediately, then a scheduled
+ * job finalizes the cascade after the undo window closes.
+ *
+ * Undo works by clearing `deletedAt` — the scheduled job re-checks the flag
+ * and no-ops. That's simpler and more robust than `scheduler.cancel`: no job
+ * id bookkeeping, and a double-delete just refreshes the timestamp and
+ * schedules another guard-protected job (harmless).
+ */
 export const deleteTrip = mutation({
   args: { id: v.id("trips") },
   handler: async (ctx, args) => {
     await checkTripPermission(ctx, args.id, "owner");
+
+    await ctx.db.patch(args.id, { deletedAt: Date.now() });
+    await ctx.scheduler.runAfter(
+      HARD_DELETE_DELAY_MS,
+      internal.trips.hardDeleteTrip,
+      { id: args.id },
+    );
+  },
+});
+
+/**
+ * Restores a soft-deleted trip during the undo window. The scheduled
+ * `hardDeleteTrip` then no-ops via its `deletedAt` guard.
+ */
+export const undoDeleteTrip = mutation({
+  args: { id: v.id("trips") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+
+    // Undo pressed after the window closed: the hard delete already
+    // cascaded the trip (and its collaborator rows) away. Nothing to
+    // restore — exit silently rather than throw into the client's
+    // fire-and-forget call.
+    const trip = await ctx.db.get(args.id);
+    if (trip === null) return;
+
+    await checkTripPermission(ctx, args.id, "owner");
+
+    if (trip.deletedAt === undefined) return; // not deleted — nothing to undo
+
+    // Patching a field to undefined clears it from the document.
+    await ctx.db.patch(args.id, { deletedAt: undefined });
+  },
+});
+
+/**
+ * Finalizes a soft delete: cascades all trip-linked rows, then removes the
+ * trip itself. Scheduled by `deleteTrip`; aborts silently if the trip is
+ * already gone (double-delete raced) or the user undid the delete.
+ */
+export const hardDeleteTrip = internalMutation({
+  args: { id: v.id("trips") },
+  handler: async (ctx, args) => {
+    const trip = await ctx.db.get(args.id);
+    if (trip === null || trip.deletedAt === undefined) return;
 
     // Cascade: delete tripMessages
     const messages = await ctx.db
@@ -274,6 +342,17 @@ export const deleteTrip = mutation({
       .collect();
     for (const p of presence) {
       await ctx.db.delete(p._id);
+    }
+
+    // Cascade: delete bookings linked to this trip — the delete flow's copy
+    // has always promised "this will also delete its bookings"; leaving them
+    // behind would strand dangling tripId references.
+    const bookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_trip", (q) => q.eq("tripId", args.id))
+      .collect();
+    for (const booking of bookings) {
+      await ctx.db.delete(booking._id);
     }
 
     await ctx.db.delete(args.id);

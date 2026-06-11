@@ -158,7 +158,9 @@ export const exportUserData = query({
     const trips: (Record<string, unknown> & { _role: string })[] = [];
     for (const collab of collabRows) {
       const trip = await ctx.db.get(collab.tripId);
-      if (trip !== null) {
+      // Skip soft-deleted trips (deletedAt set) — they're pending hard
+      // delete and read as gone everywhere user-facing.
+      if (trip !== null && trip.deletedAt === undefined) {
         trips.push({ ...trip, _role: collab.role });
       }
     }
