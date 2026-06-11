@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 // BottomSheetTextInput so gorhom's keyboard handling engages — this input
 // only ever renders inside AddBookingSheet's bottom sheet.
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
@@ -31,6 +31,10 @@ export default function RouteInput({
   const tint = accentColor ?? colors.coral;
   const [depFocus, setDepFocus] = useState(false);
   const [arrFocus, setArrFocus] = useState(false);
+  // Whole airport box focuses its input — the bare IATA line is a small
+  // target (Apple HIG tap-target rule).
+  const depRef = useRef<React.ComponentRef<typeof BottomSheetTextInput>>(null);
+  const arrRef = useRef<React.ComponentRef<typeof BottomSheetTextInput>>(null);
 
   return (
     <View
@@ -59,7 +63,11 @@ export default function RouteInput({
       {/* Airports row with center plane stamp + dashed flight path */}
       <View style={styles.row}>
         {/* FROM */}
-        <View style={styles.airportBox}>
+        <Pressable
+          style={styles.airportBox}
+          onPress={() => depRef.current?.focus()}
+          accessible={false}
+        >
           <Text
             style={{
               fontFamily: FontFamily.monoMedium,
@@ -74,6 +82,7 @@ export default function RouteInput({
             FROM
           </Text>
           <BottomSheetTextInput
+            ref={depRef}
             style={[
               styles.airportInput,
               {
@@ -91,7 +100,7 @@ export default function RouteInput({
             onFocus={() => setDepFocus(true)}
             onBlur={() => setDepFocus(false)}
           />
-        </View>
+        </Pressable>
 
         {/* Flight path — dashed line behind a rotated coral plane stamp */}
         <View style={styles.pathWrap} pointerEvents="none">
@@ -126,7 +135,11 @@ export default function RouteInput({
         </View>
 
         {/* TO */}
-        <View style={styles.airportBox}>
+        <Pressable
+          style={styles.airportBox}
+          onPress={() => arrRef.current?.focus()}
+          accessible={false}
+        >
           <Text
             style={{
               fontFamily: FontFamily.monoMedium,
@@ -141,6 +154,7 @@ export default function RouteInput({
             TO
           </Text>
           <BottomSheetTextInput
+            ref={arrRef}
             style={[
               styles.airportInput,
               {
@@ -158,7 +172,7 @@ export default function RouteInput({
             onFocus={() => setArrFocus(true)}
             onBlur={() => setArrFocus(false)}
           />
-        </View>
+        </Pressable>
       </View>
     </View>
   );

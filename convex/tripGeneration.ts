@@ -31,6 +31,16 @@ const coerceToString = (v: unknown, fallback: string = "[]"): string => {
   return JSON.stringify(v);
 };
 
+/** Strip optional markdown code fences the model sometimes adds despite
+ * instructions — fenced JSON otherwise fails JSON.parse in the section
+ * transforms. */
+const stripCodeFences = (raw: string): string =>
+  raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
 // Args validator for `generateTrip`; also embedded in `runGenerationStream`'s
 // args. Mirrors the planner sheet form; deliberately permissive on optional fields.
 const generateTripArgs = {
@@ -44,6 +54,9 @@ const generateTripArgs = {
   activityStyles: v.array(v.string()),
   travelParty: v.string(),
   heldVisas: v.array(v.string()),
+  // ISO codes of the traveler's passport(s) — drives passport-correct visa
+  // sections. Optional for back-compat with pre-existing originalInputs.
+  passports: v.optional(v.array(v.string())),
   startDate: v.optional(v.string()),
   endDate: v.optional(v.string()),
   companions: v.optional(v.string()),
@@ -662,38 +675,30 @@ export const runGenerationStream = internalAction({
     // dailyBudget lands in its own schema field rather than getting
     // smuggled inside the budgetBreakdown JSON blob (which broke the
     // featured-trip card on the trips home).
+    //
+    // Throwing on a parse failure is deliberate: runSection's catch marks
+    // the bundle failed, which surfaces the retry card. The previous
+    // swallow-and-write-empty left a silently blank Budget section with
+    // no retry affordance whenever the model wrapped its JSON in fences.
     const budgetTransform = (raw: string): Array<{ section: string; content: string }> => {
-      try {
-        const parsed = JSON.parse(raw);
-        return [
-          { section: "dailyBudget", content: coerceToString(parsed.dailyBudget, "") },
-          { section: "budgetBreakdown", content: coerceToString(parsed.budgetBreakdown, "[]") },
-        ];
-      } catch {
-        return [
-          { section: "dailyBudget", content: "" },
-          { section: "budgetBreakdown", content: "[]" },
-        ];
-      }
+      const parsed = JSON.parse(stripCodeFences(raw));
+      return [
+        { section: "dailyBudget", content: coerceToString(parsed.dailyBudget, "") },
+        { section: "budgetBreakdown", content: coerceToString(parsed.budgetBreakdown, "[]") },
+      ];
     };
 
     // Visa returns three fields in one JSON; split into patches.
     // visaCategory is omitted from this v1 — the trip stub leaves it as ""
     // and the UI handles empty visaCategory gracefully. A followup task
     // can extend SECTION_FIELD_MAP to include visaCategory.
+    // Throws on parse failure for the same reason as budgetTransform.
     const visaTransform = (raw: string): Array<{ section: string; content: string }> => {
-      try {
-        const parsed = JSON.parse(raw);
-        return [
-          { section: "visaNotes", content: coerceToString(parsed.visaNotes, "") },
-          { section: "visaChecklist", content: coerceToString(parsed.visaChecklist, "[]") },
-        ];
-      } catch {
-        return [
-          { section: "visaNotes", content: "" },
-          { section: "visaChecklist", content: "[]" },
-        ];
-      }
+      const parsed = JSON.parse(stripCodeFences(raw));
+      return [
+        { section: "visaNotes", content: coerceToString(parsed.visaNotes, "") },
+        { section: "visaChecklist", content: coerceToString(parsed.visaChecklist, "[]") },
+      ];
     };
 
     try {

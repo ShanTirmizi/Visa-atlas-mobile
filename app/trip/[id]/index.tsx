@@ -74,7 +74,7 @@ import {
   getTotalSectionCount,
   getTabDotIndicators,
   getStreamingDayIndex,
-} from './_helpers/sectionState';
+} from '@/utils/sectionState';
 
 // ──────────────────────────────────────────────────────────
 // Types

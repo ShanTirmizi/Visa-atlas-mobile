@@ -11,6 +11,10 @@ interface GenerateInput {
   activityStyles: string[];
   travelParty: string;
   heldVisas: string[];
+  /** ISO country codes of the traveler's passport(s), from onboarding.
+   * Optional for back-compat with originalInputs saved before this field
+   * existed — the prompts state assumptions explicitly when absent. */
+  passports?: string[];
   startDate?: string;
   endDate?: string;
   companions?: string;
@@ -50,6 +54,7 @@ The user's trip:
 - Vibe / pace: ${input.vibe}
 - Interests: ${input.interests}
 - Activity styles: ${input.activityStyles.join(", ") || "none specified"}
+- Passport(s) held (ISO codes): ${input.passports?.length ? input.passports.join(", ") : "not specified"}
 - Visas already held: ${input.heldVisas.join(", ") || "none"}
 ${input.startDate && input.endDate ? `- Dates: ${input.startDate} → ${input.endDate}` : "- Dates: flexible (\"dreaming\" mode)"}
 
@@ -94,7 +99,11 @@ export function buildVisaUserPrompt(input: GenerateInput): string {
   "visaChecklist": "[\\"Passport valid 6mo\\", \\"Onward ticket\\", ...]"  // JSON-stringified array of bullet items
 }
 
-For US passport holders unless held visas suggest otherwise. Be concrete; cite typical durations and what's required at the border. Output ONLY the JSON object.`;
+${
+  input.passports?.length
+    ? `For holders of these passport(s) (ISO codes): ${input.passports.join(", ")} — adjusted for any held visas.`
+    : `The traveler's passport is unknown — state your nationality assumption explicitly in visaNotes (e.g. "For most Western passports…").`
+} Be concrete; cite typical durations and what's required at the border. Output ONLY the JSON object.`;
 }
 
 export function buildBudgetUserPrompt(input: GenerateInput): string {

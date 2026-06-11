@@ -106,10 +106,14 @@ function BoardingPassCard({
     title.split(/\s+to\s+/i)[1]?.split(/\s+/)[0]?.slice(0, 3).toUpperCase() ??
     '—';
   const flightNumber = typeDetails?.flightNumber ?? '';
-  const seat = typeDetails?.seat ?? '14A';
-  const gate = typeDetails?.gate ?? 'F23';
+  // Honest placeholders — never invent a seat/gate the user didn't enter.
+  const seat = typeDetails?.seat ?? '—';
+  const gate = typeDetails?.gate ?? '—';
   const cls = (typeDetails?.class ?? 'Economy').slice(0, 3).toUpperCase();
-  const departTime = formatTimeLabel(startDate);
+  // Date-only strings ("2026-07-11") have no real departure time — showing
+  // the parsed midnight as "1:00" fabricated data. Only render a clock when
+  // the source actually carries one.
+  const departTime = startDate.includes('T') ? formatTimeLabel(startDate) : '';
   const departDate = (() => {
     const d = new Date(startDate);
     if (Number.isNaN(d.getTime())) return '';
@@ -212,7 +216,7 @@ function BoardingPassCard({
                 letterSpacing: 0.4,
               }}
             >
-              {departDate} · {departTime}
+              {departTime ? `${departDate} · ${departTime}` : departDate}
             </Text>
           </View>
           <View style={{ flex: 1, alignItems: 'flex-start' }}>
@@ -347,7 +351,8 @@ function StandardBookingCard({
       ? formatMonoDateRange(startDate, endDate)
       : (() => {
           const d = formatMonoDateRange(startDate);
-          const t = formatTimeLabel(startDate);
+          // Date-only strings carry no real time — don't fabricate one.
+          const t = startDate.includes('T') ? formatTimeLabel(startDate) : '';
           return d ? (t ? `${d} · ${t}` : d) : null;
         })();
 

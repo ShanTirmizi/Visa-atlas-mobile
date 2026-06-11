@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
+import { useVisa } from '@/contexts/visa-context';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
@@ -232,6 +233,10 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
   ({ country, meta, travel, resolved, heldVisas, onTripCreated }, ref) => {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    // Passport codes from onboarding — passed to generation so the visa
+    // section is written for the traveler's actual passport instead of the
+    // model guessing a nationality per run.
+    const { passports } = useVisa();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const refinementSheetRef = useRef<TripRefinementSheetHandle>(null);
 
@@ -464,6 +469,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             capital: eff.meta?.capital ?? eff.country.name,
             duration: days,
             heldVisas: [...heldVisas],
+            passports: [...passports],
             vibe,
             budget,
             interests: [...activeVibes].join(', ') || 'culture, food, sightseeing',
@@ -487,7 +493,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         setIsLoading(false);
       }
     }, [
-      resolveEffective, heldVisas,
+      resolveEffective, heldVisas, passports,
       days, vibe, budget, activeVibes, travelers, party,
       generateTripMutation, onTripCreated, dreaming, startDate, endDate,
     ]);

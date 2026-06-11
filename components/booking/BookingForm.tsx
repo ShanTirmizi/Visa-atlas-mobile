@@ -1,9 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
 } from 'react-native';
 // BottomSheetTextInput (not a plain RN TextInput) so gorhom's keyboard
 // handling engages on focus — plain TextInputs are invisible to the sheet.
@@ -194,37 +198,34 @@ export default function BookingForm({
       required?: boolean;
     },
   ) => (
-    <View
-      style={[
+    <FieldCard
+      cardStyle={[
         fieldCardStyle,
         options?.flex != null && { flex: options.flex },
-        options?.multiline && { minHeight: options.minHeight ?? 92 },
+        options?.multiline ? { minHeight: options.minHeight ?? 92 } : null,
       ]}
-    >
-      <Text style={[labelStyle, { color: colors.inkMute }]}>
-        {label.toUpperCase()}
-        {options?.required ? ' *' : ''}
-      </Text>
-      <BottomSheetTextInput
-        style={[
-          inputStyle,
-          options?.multiline && {
-            minHeight: (options.minHeight ?? 80) - 30,
-            textAlignVertical: 'top',
-            // Body multiline reads better in non-italic upright text
-            fontFamily: FontFamily.regular,
-            fontStyle: 'normal',
-            fontSize: 14,
-          },
-        ]}
-        placeholder={placeholder}
-        placeholderTextColor={colors.inkFaint}
-        value={value}
-        onChangeText={onChange}
-        keyboardType={options?.keyboardType ?? 'default'}
-        multiline={options?.multiline}
-      />
-    </View>
+      labelStyle={[labelStyle, { color: colors.inkMute }]}
+      inputStyle={[
+        inputStyle as StyleProp<TextStyle>,
+        options?.multiline
+          ? {
+              minHeight: (options.minHeight ?? 80) - 30,
+              textAlignVertical: 'top' as const,
+              // Body multiline reads better in non-italic upright text
+              fontFamily: FontFamily.regular,
+              fontStyle: 'normal' as const,
+              fontSize: 14,
+            }
+          : null,
+      ]}
+      label={`${label.toUpperCase()}${options?.required ? ' *' : ''}`}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      placeholderColor={colors.inkFaint}
+      keyboardType={options?.keyboardType ?? 'default'}
+      multiline={options?.multiline}
+    />
   );
 
   // ── Type-specific layouts ──────────────────
@@ -639,6 +640,55 @@ export default function BookingForm({
 // ──────────────────────────────────────────────
 // Static styles
 // ──────────────────────────────────────────────
+
+// ── FieldCard ──────────────────────────────────
+// Labeled input card where the WHOLE card is the tap target — tapping the
+// padding or the kicker label focuses the input (Apple HIG: the bare input
+// line alone is an ~18pt-tall target that's easy to miss).
+function FieldCard({
+  cardStyle,
+  labelStyle,
+  inputStyle,
+  label,
+  value,
+  onChange,
+  placeholder,
+  placeholderColor,
+  keyboardType,
+  multiline,
+}: {
+  cardStyle: StyleProp<ViewStyle>;
+  labelStyle: StyleProp<TextStyle>;
+  inputStyle: StyleProp<TextStyle>;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  placeholderColor: string;
+  keyboardType: 'default' | 'numeric';
+  multiline?: boolean;
+}) {
+  const inputRef = useRef<React.ComponentRef<typeof BottomSheetTextInput>>(null);
+  return (
+    <Pressable
+      style={cardStyle}
+      onPress={() => inputRef.current?.focus()}
+      accessible={false}
+    >
+      <Text style={labelStyle}>{label}</Text>
+      <BottomSheetTextInput
+        ref={inputRef}
+        style={inputStyle}
+        placeholder={placeholder}
+        placeholderTextColor={placeholderColor}
+        value={value}
+        onChangeText={onChange}
+        keyboardType={keyboardType}
+        multiline={multiline}
+      />
+    </Pressable>
+  );
+}
 
 const styles = StyleSheet.create({
   header: {
