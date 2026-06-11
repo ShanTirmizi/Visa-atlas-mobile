@@ -90,6 +90,14 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
         ref={ref}
         enableDynamicSizing
         maxDynamicContentSize={maxDynamicContentSize}
+        // "push" stacks this sheet over any already-open modal WITHOUT
+        // minimizing it. The default "switch" minimizes the sheet below and
+        // later restores it via snapToIndex(savedIndex) — but the saved
+        // index can be captured while the keyboard has temporarily inflated
+        // that sheet's detents, so the restore throws "'index' was provided
+        // but out of the provided snap points range" and crashes the submit
+        // path (hit by TripRefinementSheet presenting over TripPlannerSheet).
+        stackBehavior="push"
         // Canonical keyboard defaults for every AppBottomSheet consumer:
         // "restore" returns the sheet to its detent when the keyboard
         // dismisses (gorhom's default "none" left it stranded lifted), and
