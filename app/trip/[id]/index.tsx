@@ -20,6 +20,8 @@ import Animated from 'react-native-reanimated';
 import { tabSlideIn } from '@/utils/tabAnimation';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { useTheme } from '@/contexts/theme-context';
+import { useToast } from '@/contexts/toast-context';
+import { hapticSuccess } from '@/utils/haptics';
 import { Spacing, getVisaCategoryColor, FontFamily } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 
@@ -126,6 +128,30 @@ function getVisaLabel(category: string): string {
   return category;
 }
 
+/**
+ * Map the streamed (LLM) visaCategory vocabulary onto the static resolver's
+ * category vocabulary used by the Visa tab. Generation receives the
+ * traveler's actual passport(s), so when a streamed value exists it beats
+ * the static table (which is not passport-aware yet). 'varies' and unknown
+ * values return null → static resolution stays in charge.
+ */
+function normalizeStreamedVisaCategory(
+  raw: string | undefined,
+): 'visa-free' | 'visa-on-arrival' | 'evisa' | 'visa-required' | null {
+  switch (raw) {
+    case 'visa-free':
+      return 'visa-free';
+    case 'visa-on-arrival':
+      return 'visa-on-arrival';
+    case 'e-visa':
+      return 'evisa';
+    case 'embassy':
+      return 'visa-required';
+    default:
+      return null;
+  }
+}
+
 // ──────────────────────────────────────────────────────────
 // Tab options
 // ──────────────────────────────────────────────────────────
@@ -163,6 +189,22 @@ export default function TripDetailScreen() {
   const heartbeatMutation = useMutation(api.tripPresence.heartbeat);
   const leaveMutation = useMutation(api.tripPresence.leave);
   const deleteTripMutation = useMutation(api.trips.deleteTrip);
+
+  // ── Trip-ready moment ─────────────────────────────────────
+  // When generation settles while the user is watching, mark the moment:
+  // a success haptic + quiet toast. Only fires on a transition observed in
+  // THIS mount — opening an already-planned trip stays silent.
+  const wasGeneratingRef = useRef(false);
+  const { showToast } = useToast();
+  useEffect(() => {
+    const status = trip?.status;
+    if (!status) return;
+    if (wasGeneratingRef.current && status === 'planned') {
+      hapticSuccess();
+      showToast('success', 'Your trip is ready.');
+    }
+    wasGeneratingRef.current = status === 'generating';
+  }, [trip?.status, showToast]);
 
   // Look up an existing visa guide for this country so the Visa tab's
   // "Start visa application" button either resumes it or kicks off the
@@ -499,7 +541,10 @@ export default function TripDetailScreen() {
                 so it takes zero space for trips without notes. Sits above
                 the day deck so it explains *why* the trip looks the way it
                 does before the user sees the day breakdown. */}
-            <TripBriefReadout notes={trip.userNotes} />
+            <TripBriefReadout
+              notes={trip.userNotes}
+              answers={trip.refinementAnswers}
+            />
 
             {/* Highlights strip — driven by itinerary days (the strip maps
                 first 6 days to cards). Show skeleton while no days have
@@ -648,8 +693,11 @@ export default function TripDetailScreen() {
           if (!country) return null;
           const resolved = resolveCountry(country, heldVisasSet);
 
-          // Status-derived editorial copy.
-          const c = resolved.category;
+          // Status-derived editorial copy. Prefer the streamed category —
+          // generation receives the traveler's actual passport(s), while the
+          // static table is not passport-aware yet — and fall back to the
+          // static resolution for older trips / off-vocabulary values.
+          const c = normalizeStreamedVisaCategory(trip.visaCategory) ?? resolved.category;
           const editorial = (() => {
             if (c === 'visa-free' || c === 'home') {
               return {
@@ -768,10 +816,10 @@ export default function TripDetailScreen() {
                 />
               </View>
 
-              {/* Visa hero card */}
+              {/* Visa hero card — same streamed-first category as the editorial */}
               <VisaHeroCardForCountry
                 country={country}
-                category={resolved.category}
+                category={c}
                 days={resolved.days}
                 passports={passports}
                 hasGuide={!!existingGuide}

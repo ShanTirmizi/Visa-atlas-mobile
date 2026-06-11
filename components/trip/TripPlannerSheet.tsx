@@ -26,6 +26,7 @@ import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
+import { hapticSelect, hapticImpact } from '@/utils/haptics';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
@@ -361,6 +362,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
 
     // ── Toggle vibe chip ────────────────────────────────────────
     const toggleVibe = useCallback((v: string) => {
+      hapticSelect();
       setActiveVibes((prev) => {
         const n = new Set(prev);
         n.has(v) ? n.delete(v) : n.add(v);
@@ -447,12 +449,16 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // answers (when the user came through the refinement sheet) or the raw
     // (trimmed) notes when no refinement was needed. Empty string means no
     // notes — passed through as undefined.
-    const runGeneration = useCallback(async (notesForAction: string) => {
+    const runGeneration = useCallback(async (
+      notesForAction: string,
+      refinementAnswers: string[] = [],
+    ) => {
       const eff = resolveEffective();
       if (!eff) {
         setError('Pick a destination first.');
         return;
       }
+      hapticImpact();
       setIsLoading(true);
       setError('');
       try {
@@ -479,6 +485,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             startDate: dreaming ? undefined : startDate.toISOString().slice(0, 10),
             endDate: dreaming ? undefined : endDate.toISOString().slice(0, 10),
             userNotes: notesForAction.trim() || undefined,
+            refinementAnswers: refinementAnswers.length ? refinementAnswers : undefined,
           }),
           minDisplay,
         ]);
@@ -525,10 +532,14 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
 
     // Called by the refinement sheet on submit (questions answered) or after
     // its affirmation animation (no questions returned). `mergedNotes` is the
-    // final brief that should land on the trip doc.
-    const handleRefinementSubmit = useCallback((mergedNotes: string) => {
-      void runGeneration(mergedNotes);
-    }, [runGeneration]);
+    // final brief that should land on the trip doc; `answerFragments` are the
+    // interpolated answers, stored separately for the brief readout's chips.
+    const handleRefinementSubmit = useCallback(
+      (mergedNotes: string, answerFragments: string[]) => {
+        void runGeneration(mergedNotes, answerFragments);
+      },
+      [runGeneration],
+    );
 
     // ── Backdrop ────────────────────────────────────────────────
     const renderBackdrop = useCallback(

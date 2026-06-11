@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Pressable, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily } from '@/constants/theme';
+import { hapticSelect } from '@/utils/haptics';
 
 interface PillSelectorProps {
   options: string[];
@@ -23,6 +24,13 @@ export default function PillSelector({
   const { colors } = useTheme();
   const tint = accentColor ?? colors.coral;
 
+  // Selection haptic only on an actual change — re-pressing the active
+  // pill stays silent (Apple HIG: selection feedback).
+  const handleSelect = (option: string) => {
+    if (option !== selected) hapticSelect();
+    onSelect(option);
+  };
+
   return (
     <View style={styles.container}>
       {options.map((option) => {
@@ -30,7 +38,7 @@ export default function PillSelector({
         return (
           <Pressable
             key={option}
-            onPress={() => onSelect(option)}
+            onPress={() => handleSelect(option)}
             style={({ pressed }) => [
               styles.pill,
               {

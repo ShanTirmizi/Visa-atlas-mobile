@@ -24,6 +24,7 @@ import { Photo } from '@/components/ui/Photo';
 import { Countdown } from '@/components/ui/Countdown';
 import { FlightPath } from '@/components/ui/FlightPath';
 import { Flag } from '@/components/ui/Flag';
+import { TypingDots } from '@/components/ui/TypingDots';
 import { toAlpha2 } from '@/utils/countryCode';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -250,6 +251,7 @@ export function NextTripHero({
   endDate,
   duration,
   heroImage,
+  status,
   iataCode,
   flightHours,
   dailyBudget,
@@ -258,6 +260,11 @@ export function NextTripHero({
   const { colors } = useTheme();
   const router = useRouter();
   const { residence } = useVisa();
+
+  // Mirrors TripRow's status language: 'generating' → Planning pill with
+  // TypingDots, 'failed' → quiet Needs-attention pill.
+  const isGenerating = status === 'generating';
+  const isFailed = status === 'failed';
 
   const imageUri = parseHeroImage(heroImage);
   const monoDate = formatMonoDateRange(startDate, endDate, duration);
@@ -304,9 +311,11 @@ export function NextTripHero({
             { backgroundColor: colors.surfaceMuted, opacity: pressed ? 0.95 : 1 },
           ]}
         >
-          {/* Photo or neutral placeholder */}
+          {/* Photo or neutral placeholder. While generating, force the
+              placeholder — a stale/partial heroImage mid-stream shouldn't
+              masquerade as the finished trip (same rule as TripRow). */}
           <Photo
-            uri={imageUri ?? undefined}
+            uri={isGenerating ? undefined : (imageUri ?? undefined)}
             tone="sunset"
             style={StyleSheet.absoluteFillObject}
           />
@@ -319,23 +328,45 @@ export function NextTripHero({
             pointerEvents="none"
           />
 
-          {/* Top-left: NEXT TRIP pill with flag */}
+          {/* Top-left: status pill with flag. Generating/failed trips swap
+              the NEXT TRIP copy for TripRow's soft status language — coral
+              text, trailing TypingDots while planning, radius-999 pill, no
+              leading dot. The bg stays the hero's near-opaque white pill
+              rather than TripRow's translucent coralBg: over a photo +
+              darkening gradient a 12%-alpha tint isn't legible, and coral
+              text on the white pill reads as the same coral-on-light-tint
+              treatment. */}
           <View style={styles.statusPill}>
             <Flag code={alpha2} size={16} />
             <Text
               style={[
                 Type.kickerSm,
-                { color: colors.ink, fontSize: 9, letterSpacing: 9 * 0.18, flexShrink: 1 },
+                {
+                  color: isGenerating || isFailed ? colors.coral : colors.ink,
+                  fontSize: 9,
+                  letterSpacing: 9 * 0.18,
+                  flexShrink: 1,
+                },
               ]}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              NEXT TRIP · {countryName.toUpperCase()}
+              {isGenerating
+                ? `PLANNING · ${countryName.toUpperCase()}`
+                : isFailed
+                  ? 'NEEDS ATTENTION'
+                  : `NEXT TRIP · ${countryName.toUpperCase()}`}
             </Text>
+            {isGenerating ? (
+              <TypingDots color={colors.coral} size="sm" gap={2} />
+            ) : null}
           </View>
 
-          {/* Top-right: countdown pill */}
-          {cd ? (
+          {/* Top-right: countdown pill. Hidden while generating — a
+              countdown implies a ready itinerary; the Planning pill is the
+              focus until the trip lands. Failed trips keep it (dates are
+              still real). */}
+          {cd && !isGenerating ? (
             <View style={styles.countdownWrap}>
               <Countdown days={cd.d} hours={cd.h} />
             </View>

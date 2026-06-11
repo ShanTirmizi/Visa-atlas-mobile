@@ -29,7 +29,12 @@ import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { RefinementChoiceCard } from './refinement/RefinementChoiceCard';
 import { RefinementTextCard } from './refinement/RefinementTextCard';
-import { mergeUserNotes, type AnsweredQuestion } from '@/utils/mergeUserNotes';
+import {
+  mergeUserNotes,
+  buildAnswerFragments,
+  type AnsweredQuestion,
+} from '@/utils/mergeUserNotes';
+import { hapticImpact } from '@/utils/haptics';
 import type { RefinementQuestion } from '@/convex/tripRefinement';
 
 const STAGGER_MS = 150;
@@ -57,9 +62,11 @@ interface Props {
   /**
    * Called with the merged brief once the user submits the refinement (or
    * immediately, if there are 0 questions, with the original notes after
-   * the affirmation animation completes).
+   * the affirmation animation completes). `answerFragments` are the
+   * interpolated answer phrases (empty when no questions were answered) —
+   * stored on the trip so the brief readout can render them as chips.
    */
-  onSubmit: (mergedNotes: string) => void;
+  onSubmit: (mergedNotes: string, answerFragments: string[]) => void;
   /**
    * Called if the user dismisses the sheet via gesture / handle drag without
    * submitting. The planner sheet stays open with the user's notes intact.
@@ -174,7 +181,7 @@ export const TripRefinementSheet = forwardRef<
       const merged = mergeUserNotes(input.userNotes, []);
       submittedRef.current = true;
       sheetRef.current?.dismiss();
-      onSubmit(merged);
+      onSubmit(merged, []);
     }, AFFIRMATION_MS);
     return () => clearTimeout(timer);
   }, [status, input, onSubmit]);
@@ -182,6 +189,7 @@ export const TripRefinementSheet = forwardRef<
   // ── Questions → submit (build merged brief, dismiss, hand off) ─
   const handleSubmit = useCallback(() => {
     if (!input) return;
+    hapticImpact();
     const answered: AnsweredQuestion[] = questions.map((q) => ({
       type: q.type,
       summarizePattern: q.summarizePattern,
@@ -190,16 +198,16 @@ export const TripRefinementSheet = forwardRef<
     const merged = mergeUserNotes(input.userNotes, answered);
     submittedRef.current = true;
     sheetRef.current?.dismiss();
-    onSubmit(merged);
+    onSubmit(merged, buildAnswerFragments(answered));
   }, [input, questions, answers, onSubmit]);
 
-  // ── Error → fallback (skip questions, generate from original) ──
+  // ── Skip / error fallback (no answers, generate from original) ──
   const handleSkipQuestionsFallback = useCallback(() => {
     if (!input) return;
     const merged = mergeUserNotes(input.userNotes, []);
     submittedRef.current = true;
     sheetRef.current?.dismiss();
-    onSubmit(merged);
+    onSubmit(merged, []);
   }, [input, onSubmit]);
 
   const handleAnswerChange = useCallback(
@@ -243,6 +251,16 @@ export const TripRefinementSheet = forwardRef<
               onAnswerChange={handleAnswerChange}
             />
             <Footer colors={colors} onSubmit={handleSubmit} />
+            {/* Quiet escape hatch — questions are optional, never a gate. */}
+            <Pressable
+              onPress={handleSkipQuestionsFallback}
+              hitSlop={8}
+              style={{ alignSelf: 'center', marginTop: 14, padding: 4 }}
+            >
+              <Text style={[Type.body13, { color: colors.inkMute }]}>
+                Skip — plan from my brief as is
+              </Text>
+            </Pressable>
           </>
         )}
 

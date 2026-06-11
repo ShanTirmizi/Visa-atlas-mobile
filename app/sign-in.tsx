@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Pressable,
   TextInput,
+  type TextInputProps,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, { useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
@@ -39,19 +40,32 @@ interface UnderlineFieldProps {
   secureTextEntry?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words';
   keyboardType?: 'default' | 'email-address';
+  returnKeyType?: TextInputProps['returnKeyType'];
+  onSubmitEditing?: () => void;
+  textContentType?: TextInputProps['textContentType'];
+  autoComplete?: TextInputProps['autoComplete'];
   colors: ThemeColors;
 }
 
-function UnderlineField({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  secureTextEntry,
-  autoCapitalize,
-  keyboardType,
-  colors,
-}: UnderlineFieldProps) {
+// forwardRef so forms can chain focus across fields (email → password →
+// confirm) via the iOS return key — standard sign-in form UX.
+const UnderlineField = forwardRef<TextInput, UnderlineFieldProps>(function UnderlineField(
+  {
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    secureTextEntry,
+    autoCapitalize,
+    keyboardType,
+    returnKeyType,
+    onSubmitEditing,
+    textContentType,
+    autoComplete,
+    colors,
+  },
+  ref
+) {
   const [focused, setFocused] = useState(false);
 
   return (
@@ -69,6 +83,7 @@ function UnderlineField({
         {label}
       </Text>
       <TextInput
+        ref={ref}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -77,6 +92,13 @@ function UnderlineField({
         autoCapitalize={autoCapitalize ?? 'none'}
         autoCorrect={false}
         keyboardType={keyboardType}
+        returnKeyType={returnKeyType}
+        onSubmitEditing={onSubmitEditing}
+        textContentType={textContentType}
+        autoComplete={autoComplete}
+        // "next" chains focus to the following field — keep the keyboard up
+        // while focus moves (iOS-native form behavior); "go"/default dismisses.
+        submitBehavior={returnKeyType === 'next' ? 'submit' : 'blurAndSubmit'}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={{
@@ -91,7 +113,7 @@ function UnderlineField({
       />
     </View>
   );
-}
+});
 
 // ─── Inline Error Banner ──────────────────────────────────────────────────────
 function ErrorBanner({ error, colors }: { error: string | null; colors: ThemeColors }) {
@@ -134,6 +156,7 @@ interface SignInFormProps {
 function SignInForm({ colors, onForgotPassword, loading, error, onSubmit }: SignInFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const passwordRef = useRef<TextInput>(null);
 
   return (
     <View>
@@ -144,14 +167,25 @@ function SignInForm({ colors, onForgotPassword, loading, error, onSubmit }: Sign
         placeholder="you@example.com"
         keyboardType="email-address"
         autoCapitalize="none"
+        textContentType="emailAddress"
+        autoComplete="email"
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
         colors={colors}
       />
       <UnderlineField
+        ref={passwordRef}
         label="PASSWORD"
         value={password}
         onChangeText={setPassword}
         placeholder="At least 8 characters"
         secureTextEntry
+        textContentType="password"
+        autoComplete="password"
+        returnKeyType="go"
+        onSubmitEditing={() => {
+          if (!loading) onSubmit(email, password);
+        }}
         colors={colors}
       />
 
@@ -206,6 +240,12 @@ function SignUpForm({ colors, loading, error, onSubmit }: SignUpFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
+
+  // Mirror the CTA's disabled condition so the return key can't submit a
+  // form the button itself would reject.
+  const submitBlocked = loading || (confirmPassword.length > 0 && password !== confirmPassword);
 
   return (
     <View>
@@ -216,14 +256,23 @@ function SignUpForm({ colors, loading, error, onSubmit }: SignUpFormProps) {
         placeholder="you@example.com"
         keyboardType="email-address"
         autoCapitalize="none"
+        textContentType="emailAddress"
+        autoComplete="email"
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
         colors={colors}
       />
       <UnderlineField
+        ref={passwordRef}
         label="PASSWORD"
         value={password}
         onChangeText={setPassword}
         placeholder="At least 8 characters"
         secureTextEntry
+        textContentType="newPassword"
+        autoComplete="new-password"
+        returnKeyType="next"
+        onSubmitEditing={() => confirmRef.current?.focus()}
         colors={colors}
       />
 
@@ -231,11 +280,18 @@ function SignUpForm({ colors, loading, error, onSubmit }: SignUpFormProps) {
       {password.length > 0 && <PasswordStrength password={password} />}
 
       <UnderlineField
+        ref={confirmRef}
         label="CONFIRM PASSWORD"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         placeholder="Re-enter your password"
         secureTextEntry
+        textContentType="newPassword"
+        autoComplete="new-password"
+        returnKeyType="go"
+        onSubmitEditing={() => {
+          if (!submitBlocked) onSubmit(email, password);
+        }}
         colors={colors}
       />
 

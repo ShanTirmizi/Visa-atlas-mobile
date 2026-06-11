@@ -31,6 +31,16 @@ const coerceToString = (v: unknown, fallback: string = "[]"): string => {
   return JSON.stringify(v);
 };
 
+/** The visaCategory vocabulary buildVisaUserPrompt requests — anything else
+ * from the model is dropped rather than patched into category-driven UI. */
+const STREAMED_VISA_CATEGORIES = new Set([
+  "visa-free",
+  "visa-on-arrival",
+  "e-visa",
+  "embassy",
+  "varies",
+]);
+
 /** Strip optional markdown code fences the model sometimes adds despite
  * instructions — fenced JSON otherwise fails JSON.parse in the section
  * transforms. */
@@ -65,6 +75,10 @@ const generateTripArgs = {
   // User's free-text brief, optionally merged with refinement answers.
   // Trimmed and length-capped (≤2000) in the stub handler.
   userNotes: v.optional(v.string()),
+  // The interpolated refinement-answer phrases (e.g. "drawn to mountain
+  // trails"), stored separately so the trip brief readout can render them
+  // as chips. The merged prose in userNotes remains the LLM's context.
+  refinementAnswers: v.optional(v.array(v.string())),
 };
 
 /**
@@ -137,6 +151,9 @@ export const generateTrip = mutation({
       surpriseMe: input.surpriseMe,
       vibeTag: input.vibeTag,
       userNotes: normalizedUserNotes,
+      refinementAnswers: input.refinementAnswers?.length
+        ? input.refinementAnswers
+        : undefined,
     });
     // Owner collaborator row — same pattern as createTrip
     await ctx.db.insert("tripCollaborators", {
@@ -689,16 +706,24 @@ export const runGenerationStream = internalAction({
     };
 
     // Visa returns three fields in one JSON; split into patches.
-    // visaCategory is omitted from this v1 — the trip stub leaves it as ""
-    // and the UI handles empty visaCategory gracefully. A followup task
-    // can extend SECTION_FIELD_MAP to include visaCategory.
+    // visaCategory is passport-aware (the prompt receives the traveler's
+    // passports), so the client prefers it over the static table's
+    // not-passport-aware category. Only patched when it's a known value —
+    // an off-vocabulary string would break the category-driven UI.
     // Throws on parse failure for the same reason as budgetTransform.
     const visaTransform = (raw: string): Array<{ section: string; content: string }> => {
       const parsed = JSON.parse(stripCodeFences(raw));
-      return [
+      const patches = [
         { section: "visaNotes", content: coerceToString(parsed.visaNotes, "") },
         { section: "visaChecklist", content: coerceToString(parsed.visaChecklist, "[]") },
       ];
+      if (
+        typeof parsed.visaCategory === "string" &&
+        STREAMED_VISA_CATEGORIES.has(parsed.visaCategory)
+      ) {
+        patches.push({ section: "visaCategory", content: parsed.visaCategory });
+      }
+      return patches;
     };
 
     try {

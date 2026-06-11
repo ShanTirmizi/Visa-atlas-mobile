@@ -11,6 +11,7 @@ import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { FontFamily } from '@/constants/theme';
 import { Squiggle } from './Squiggle';
+import { hapticSelect } from '@/utils/haptics';
 
 type Variant = 'pill' | 'underline' | 'squiggle';
 
@@ -65,6 +66,13 @@ export function SegmentedControl({
 }: Props) {
   const { colors } = useTheme();
 
+  // Selection haptic only when the active segment actually changes —
+  // re-pressing the current tab stays silent (Apple HIG: selection feedback).
+  const handlePress = (o: string) => {
+    if (o !== value) hapticSelect();
+    onChange(o);
+  };
+
   if (variant === 'squiggle') {
     // Trip-tabs style: text-only with coral squiggle underline on the active tab.
     return (
@@ -83,7 +91,7 @@ export function SegmentedControl({
           return (
             <Pressable
               key={o}
-              onPress={() => onChange(o)}
+              onPress={() => handlePress(o)}
               style={{ position: 'relative', paddingBottom: 6 }}
             >
               <View style={{ position: 'relative' }}>
@@ -135,7 +143,7 @@ export function SegmentedControl({
           return (
             <Pressable
               key={o}
-              onPress={() => onChange(o)}
+              onPress={() => handlePress(o)}
               style={{
                 paddingBottom: 10,
                 borderBottomWidth: active ? 2 : 0,
@@ -161,7 +169,7 @@ export function SegmentedControl({
         return (
           <Pressable
             key={o}
-            onPress={() => onChange(o)}
+            onPress={() => handlePress(o)}
             style={{
               position: 'relative',
               paddingVertical: 7,

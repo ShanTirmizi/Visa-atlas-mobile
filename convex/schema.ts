@@ -75,6 +75,9 @@ export default defineSchema({
     // is normalized to undefined. Capped at 2000 chars in the action handler.
     // Surfaced on the trip detail page via TripBriefReadout.
     userNotes: v.optional(v.string()),
+    // The interpolated refinement-answer phrases, stored alongside the
+    // merged userNotes so the brief readout can render them as chips.
+    refinementAnswers: v.optional(v.array(v.string())),
   })
     .index("by_status", ["status"])
     .index("by_country", ["countryCode"])

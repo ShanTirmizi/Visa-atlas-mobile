@@ -4,6 +4,7 @@ import { Check } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { FontFamily } from '@/constants/theme';
+import { hapticSelect } from '@/utils/haptics';
 
 interface Props {
   prompt: string;
@@ -29,6 +30,7 @@ export function RefinementChoiceCard({
   const { colors } = useTheme();
 
   const toggle = (option: string) => {
+    hapticSelect();
     if (multiSelect) {
       onChange(
         selected.includes(option)

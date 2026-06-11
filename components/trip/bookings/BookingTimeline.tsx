@@ -417,6 +417,7 @@ export function BookingTimeline({
                       cost={b.cost}
                       currency={b.currency}
                       confirmationNumber={b.confirmationNumber}
+                      bookingId={b._id as Id<'bookings'>}
                       onPress={() => onBookingPress(detail)}
                     />
                   );

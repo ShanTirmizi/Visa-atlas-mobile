@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, Platform } from 'react-native';
 import {
   Plane,
   Hotel,
@@ -9,9 +9,13 @@ import {
   UtensilsCrossed,
 } from 'lucide-react-native';
 import Svg, { Line, Circle as SvgCircle } from 'react-native-svg';
+import { useMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { Type } from '@/constants/typography';
 import { FontFamily } from '@/constants/theme';
 import { useTheme } from '@/contexts/theme-context';
+import { hapticSelect } from '@/utils/haptics';
 import type { BookingType } from '@/constants/bookings';
 
 // ─────────────────────────────────────────────────────────────
@@ -91,15 +95,18 @@ function BoardingPassCard({
   startDate,
   typeDetails,
   confirmationNumber,
+  bookingId,
   onPress,
 }: {
   title: string;
   startDate: string;
   typeDetails?: Record<string, string>;
   confirmationNumber?: string;
+  bookingId?: Id<'bookings'>;
   onPress?: () => void;
 }) {
   const { colors } = useTheme();
+  const updateBooking = useMutation(api.bookings.updateBooking);
   const dep = typeDetails?.departure ?? title.split(/\s+to\s+/i)[0]?.slice(0, 3).toUpperCase() ?? '—';
   const arr =
     typeDetails?.arrival ??
@@ -121,6 +128,43 @@ function BoardingPassCard({
     return `${m} ${d.getDate()}`;
   })();
   const kickerCode = flightNumber || confirmationNumber || '';
+
+  // Flighty-style tap-to-fill: the SEAT / GATE blocks are their own
+  // Pressables so a tap edits the value inline instead of opening the
+  // detail sheet. Alert.prompt is the iOS-native UIAlertController text
+  // field; on Android (no prompt support) fall back to the detail sheet
+  // so the affordance is never dead.
+  const handleEditField = (field: 'seat' | 'gate') => {
+    hapticSelect();
+    if (Platform.OS !== 'ios' || !bookingId) {
+      onPress?.();
+      return;
+    }
+    const current = typeDetails?.[field];
+    Alert.prompt(
+      field === 'seat' ? 'Seat' : 'Gate',
+      field === 'seat' ? 'e.g. 14A' : 'e.g. B22',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: (value?: string) => {
+            const next = value?.trim().toUpperCase();
+            if (!next || next === current) return;
+            const merged = { ...(typeDetails ?? {}), [field]: next };
+            updateBooking({
+              id: bookingId,
+              flightDetails: JSON.stringify(merged),
+            }).catch(() => {
+              Alert.alert('Could not save', 'Please try again.');
+            });
+          },
+        },
+      ],
+      'plain-text',
+      current,
+    );
+  };
 
   return (
     <Pressable
@@ -219,7 +263,17 @@ function BoardingPassCard({
               {departTime ? `${departDate} · ${departTime}` : departDate}
             </Text>
           </View>
-          <View style={{ flex: 1, alignItems: 'flex-start' }}>
+          <Pressable
+            onPress={() => handleEditField('seat')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Edit seat"
+            style={({ pressed }) => ({
+              flex: 1,
+              alignItems: 'flex-start' as const,
+              opacity: pressed ? 0.55 : 1,
+            })}
+          >
             <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
               SEAT
             </Text>
@@ -235,8 +289,18 @@ function BoardingPassCard({
             >
               {seat}
             </Text>
-          </View>
-          <View style={{ flex: 1, alignItems: 'flex-start' }}>
+          </Pressable>
+          <Pressable
+            onPress={() => handleEditField('gate')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Edit gate"
+            style={({ pressed }) => ({
+              flex: 1,
+              alignItems: 'flex-start' as const,
+              opacity: pressed ? 0.55 : 1,
+            })}
+          >
             <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
               GATE
             </Text>
@@ -252,7 +316,7 @@ function BoardingPassCard({
             >
               {gate}
             </Text>
-          </View>
+          </Pressable>
         </View>
       </View>
 
@@ -279,22 +343,34 @@ function BoardingPassCard({
 
       {/* Right stub */}
       <View style={passStyles.stub}>
-        <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
-          SEAT
-        </Text>
-        <Text
-          style={{
-            fontFamily: FontFamily.displayItalic,
-            fontStyle: 'italic',
-            fontSize: 22,
-            fontWeight: '500',
-            color: colors.ink,
-            marginTop: 4,
-            letterSpacing: -22 * 0.018,
-          }}
+        <Pressable
+          onPress={() => handleEditField('seat')}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Edit seat"
+          style={({ pressed }) => ({
+            alignItems: 'flex-start' as const,
+            alignSelf: 'stretch' as const,
+            opacity: pressed ? 0.55 : 1,
+          })}
         >
-          {seat}
-        </Text>
+          <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
+            SEAT
+          </Text>
+          <Text
+            style={{
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+              fontSize: 22,
+              fontWeight: '500',
+              color: colors.ink,
+              marginTop: 4,
+              letterSpacing: -22 * 0.018,
+            }}
+          >
+            {seat}
+          </Text>
+        </Pressable>
         <Text
           style={{
             fontFamily: FontFamily.monoMedium,
@@ -453,6 +529,8 @@ interface BookingRowProps {
   cost?: number;
   currency?: string;
   confirmationNumber?: string;
+  /** Convex id — enables inline seat/gate editing on the boarding pass. */
+  bookingId?: Id<'bookings'>;
   onPress?: () => void;
 }
 
@@ -465,6 +543,7 @@ export function BookingRow({
   cost,
   currency,
   confirmationNumber,
+  bookingId,
   onPress,
 }: BookingRowProps) {
   if (type === 'flight') {
@@ -474,6 +553,7 @@ export function BookingRow({
         startDate={startDate}
         typeDetails={typeDetails}
         confirmationNumber={confirmationNumber}
+        bookingId={bookingId}
         onPress={onPress}
       />
     );

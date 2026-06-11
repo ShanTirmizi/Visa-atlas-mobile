@@ -47,13 +47,33 @@ export function mergeUserNotes(
     return originalWithPeriod;
   }
 
-  const joined = fragments.join(', ');
-  const capitalized = capitalizeFirstLetter(joined);
-  const continuation = `${capitalized}.`;
+  const continuation = buildAnswerSentence(fragments);
 
   return originalWithPeriod === ''
     ? continuation
     : `${originalWithPeriod} ${continuation}`;
+}
+
+/**
+ * The interpolated answer fragments, exactly as mergeUserNotes embeds them
+ * (lowercase, e.g. "drawn to mountain trails and forest walks"). Exposed so
+ * the trip stores them for display as chips while `userNotes` stays a single
+ * prose string for the LLM.
+ */
+export function buildAnswerFragments(answers: AnsweredQuestion[]): string[] {
+  return answers
+    .map(buildFragment)
+    .filter((f): f is string => f !== null);
+}
+
+/**
+ * The sentence mergeUserNotes appends for a set of fragments. Exposed so the
+ * brief readout can deterministically strip it back off the merged string and
+ * show the original note + answer chips separately.
+ */
+export function buildAnswerSentence(fragments: string[]): string {
+  if (fragments.length === 0) return '';
+  return `${capitalizeFirstLetter(fragments.join(', '))}.`;
 }
 
 function buildFragment(answer: AnsweredQuestion): string | null {
