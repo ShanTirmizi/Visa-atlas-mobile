@@ -164,7 +164,7 @@ const TABS: TabKey[] = ['Overview', 'Itinerary', 'Food', 'Bookings', 'Visa', 'Ti
 // ──────────────────────────────────────────────────────────
 
 export default function TripDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab } = useLocalSearchParams<{ id: string; tab?: string }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -273,6 +273,12 @@ export default function TripDetailScreen() {
   };
 
   const [activeTab, setActiveTab] = useState<TabKey>('Overview');
+  // Deep-linkable tabs — `visaatlas://trip/<id>?tab=Food` lands on that tab
+  // directly. Lets notifications, chat replies, and cross-screen links point
+  // at a specific tab instead of always dropping the user on Overview.
+  useEffect(() => {
+    if (tab && TABS.includes(tab as TabKey)) setActiveTab(tab as TabKey);
+  }, [tab]);
   // Track previous tab so the fade-slide knows which direction to come from.
   const prevTabRef = useRef<TabKey>('Overview');
   const tabDirection = TABS.indexOf(activeTab) >= TABS.indexOf(prevTabRef.current) ? 1 : -1;
