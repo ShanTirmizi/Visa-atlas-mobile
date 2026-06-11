@@ -83,13 +83,16 @@ function ThemedApp() {
   // Auth gate: redirect based on auth state
   useEffect(() => {
     if (isLoading || !visaLoaded) return;
+    // Widen the typed segment tuple — expo-router types `segments` per
+    // route-tree depth, which rejects index 1 on single-segment routes.
+    const seg = segments as string[];
     const inAuthGroup =
-      segments[0] === 'sign-in' ||
-      segments[0] === 'forgot-password';
-    const inOnboarding = segments[0] === 'onboarding';
+      seg[0] === 'sign-in' ||
+      seg[0] === 'forgot-password';
+    const inOnboarding = seg[0] === 'onboarding';
     const inPublicLegal =
-      segments[0] === 'more' &&
-      (segments[1] === 'terms' || segments[1] === 'privacy-policy');
+      seg[0] === 'more' &&
+      (seg[1] === 'terms' || seg[1] === 'privacy-policy');
 
     if (!isAuthenticated && !inAuthGroup && !inPublicLegal) {
       router.replace('/sign-in');

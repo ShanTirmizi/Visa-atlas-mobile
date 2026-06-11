@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { Spacing } from '@/constants/theme';
 import { Type } from '@/constants/typography';
-import { useAction, useMutation } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Doc } from '@/convex/_generated/dataModel';
 import { useRouter } from 'expo-router';
@@ -29,7 +29,7 @@ interface TripFailedScreenProps {
 export function TripFailedScreen({ trip }: TripFailedScreenProps) {
   const { colors } = useTheme();
   const router = useRouter();
-  const generate = useAction(api.tripGeneration.generateTrip);
+  const generate = useMutation(api.tripGeneration.generateTrip);
   const deleteTrip = useMutation(api.trips.deleteTrip);
   const [retrying, setRetrying] = useState(false);
 

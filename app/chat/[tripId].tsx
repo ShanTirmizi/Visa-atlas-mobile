@@ -261,12 +261,11 @@ export default function ChatScreen() {
       setIsSending(true);
       setFailedMessage(null);
 
+      // Attribution (userId/userName) is derived server-side in addMessage.
       await addMessage({
         tripId: tripId as Id<'trips'>,
         role: 'user',
         content: text,
-        userId: currentUser?._id,
-        userName: currentUser?.name ?? 'You',
       });
 
       try {

@@ -65,6 +65,11 @@ export default defineSchema({
     failedSections: v.optional(v.array(v.string())),
     originalInputs: v.optional(v.string()),
     generationStartedAt: v.optional(v.number()),
+    // Sections currently being re-run via `tripGeneration.retrySection`.
+    // Lives on the doc (not client useState) so the retry spinner is
+    // reactive, survives websocket reconnects, and renders correctly on
+    // every device viewing the trip.
+    retryingSections: v.optional(v.array(v.string())),
     // User's free-text trip brief — original text plus any merged-in answers
     // from the refinement clarifying-questions flow. Trimmed; whitespace-only
     // is normalized to undefined. Capped at 2000 chars in the action handler.
@@ -74,6 +79,37 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_country", ["countryCode"])
     .index("by_user", ["userId"]),
+
+  // ── Refinement Sessions ──
+  // One row per clarifying-questions analysis (the step between "user wrote
+  // a trip brief" and "generation starts"). The client creates a session via
+  // the `startAnalysis` mutation, a scheduled internal action fills in the
+  // LLM result, and the client watches the row reactively via `getSession`.
+  // This replaces a direct client→action websocket round-trip, which died
+  // with "Connection lost while action was in flight" whenever the socket
+  // blipped mid-call (token refresh, network transition, redeploy).
+  refinementSessions: defineTable({
+    userId: v.id("users"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("ready"),
+      v.literal("error"),
+    ),
+    questions: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          prompt: v.string(),
+          type: v.union(v.literal("choice"), v.literal("text")),
+          options: v.optional(v.array(v.string())),
+          multiSelect: v.optional(v.boolean()),
+          placeholder: v.optional(v.string()),
+          summarizePattern: v.string(),
+        }),
+      ),
+    ),
+    errorMessage: v.optional(v.string()),
+  }).index("by_user", ["userId"]),
 
   // ── Country Tips Cache ──
   // LLM-generated country-level tips for any country not covered by the

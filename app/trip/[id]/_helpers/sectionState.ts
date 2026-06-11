@@ -12,6 +12,7 @@ type TripLike = {
   readonly visaNotes?: string;
   readonly budgetBreakdown: string;
   readonly failedSections?: readonly string[];
+  readonly retryingSections?: readonly string[];
   readonly duration: number;
   readonly heroImage?: string;
 };
@@ -41,6 +42,11 @@ export function isGenerating(trip: TripLike): boolean {
 
 export function hasFailed(trip: TripLike, section: string): boolean {
   return (trip.failedSections ?? []).includes(section);
+}
+
+/** True while a server-side `retrySection` run is in flight for `section`. */
+export function isRetrying(trip: TripLike, section: string): boolean {
+  return (trip.retryingSections ?? []).includes(section);
 }
 
 export function isSectionPending(trip: TripLike, section: SectionName): boolean {

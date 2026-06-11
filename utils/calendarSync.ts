@@ -40,13 +40,20 @@ async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
   const filteredCalendars = calendars.filter((cal) => {
     const name = (cal.title || '').toLowerCase();
     const sourceName = ((cal.source as Record<string, unknown>)?.name as string || '').toLowerCase();
+    // expo-calendar's CalendarType values are lowercase ('subscribed') —
+    // the previous uppercase comparison never matched, so subscription
+    // calendars slipped through the filter.
+    const calType = String(cal.type ?? '').toLowerCase();
+    const sourceType = String(
+      ((cal.source as Record<string, unknown>)?.type as string) ?? '',
+    ).toLowerCase();
     const isHolidayCalendar =
       name.includes('holiday') ||
       name.includes('holidays') ||
       sourceName.includes('holiday') ||
       sourceName.includes('holidays') ||
-      cal.type === 'SUBSCRIBED' ||
-      (cal.source as Record<string, unknown>)?.type === 'SUBSCRIBED';
+      calType === Calendar.CalendarType.SUBSCRIBED ||
+      sourceType === Calendar.CalendarType.SUBSCRIBED;
     return !isHolidayCalendar;
   });
 

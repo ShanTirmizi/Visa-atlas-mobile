@@ -1,12 +1,23 @@
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  mutation,
+  query,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireAuth } from "./lib/auth";
+import type { Id } from "./_generated/dataModel";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-sonnet-4-6";
 
 const QUESTION_CAP = 3;
+// Hard ceiling on the Anthropic round-trip. Anything slower is treated as a
+// failure and retried once; the client additionally has its own watchdog
+// that surfaces the "generate without questions" fallback.
+const FETCH_TIMEOUT_MS = 30_000;
 
 export type RefinementQuestion = {
   id: string;
@@ -16,6 +27,29 @@ export type RefinementQuestion = {
   multiSelect?: boolean;
   placeholder?: string;
   summarizePattern: string;
+};
+
+// Mirrors RefinementQuestion (and the `refinementSessions.questions` shape
+// in schema.ts) so the internal action can hand validated questions to the
+// finishing mutation.
+const refinementQuestionValidator = v.object({
+  id: v.string(),
+  prompt: v.string(),
+  type: v.union(v.literal("choice"), v.literal("text")),
+  options: v.optional(v.array(v.string())),
+  multiSelect: v.optional(v.boolean()),
+  placeholder: v.optional(v.string()),
+  summarizePattern: v.string(),
+});
+
+// Shared by `startAnalysis` (public mutation) and `runAnalysis` (internal
+// action) — the mutation forwards its args verbatim to the scheduled action.
+const analyzeArgs = {
+  countryCode: v.string(),
+  countryName: v.string(),
+  duration: v.number(),
+  vibes: v.array(v.string()),
+  userNotes: v.string(),
 };
 
 const buildAnalyzeSystemPrompt = (args: {
@@ -88,40 +122,157 @@ Return ONLY a JSON object matching this exact shape — no preamble, no markdown
 
 If no questions are warranted, return { "questions": [] }.`;
 
-export const analyzeUserNotes = action({
-  args: {
-    countryCode: v.string(),
-    countryName: v.string(),
-    duration: v.number(),
-    vibes: v.array(v.string()),
-    userNotes: v.string(),
-  },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ questions: RefinementQuestion[] }> => {
-    await requireAuth(ctx);
+/**
+ * Public entry point for the clarifying-questions flow.
+ *
+ * This is a MUTATION that schedules the LLM call — deliberately NOT an
+ * action called from the client. The Convex client auto-retries mutations
+ * across websocket reconnects, and the result lands in a `refinementSessions`
+ * row the client subscribes to, so a token refresh / network blip / redeploy
+ * mid-analysis can no longer kill the flow with "Connection lost while
+ * action was in flight".
+ */
+export const startAnalysis = mutation({
+  args: analyzeArgs,
+  handler: async (ctx, args): Promise<Id<"refinementSessions">> => {
+    const userId = await requireAuth(ctx);
+
+    // A user only ever has one live analysis — drop stale rows so
+    // dismiss-and-retry loops don't accumulate orphans.
+    const stale = await ctx.db
+      .query("refinementSessions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const doc of stale) {
+      await ctx.db.delete(doc._id);
+    }
 
     const trimmed = args.userNotes.trim();
     if (trimmed.length === 0) {
-      // Defensive: client shouldn't call with empty notes, but if it does,
-      // we have no questions to ask.
-      return { questions: [] };
+      // Defensive: client shouldn't call with empty notes — resolve
+      // immediately with zero questions instead of burning an LLM call.
+      return await ctx.db.insert("refinementSessions", {
+        userId,
+        status: "ready",
+        questions: [],
+      });
+    }
+    // Same cap as generateTrip's stub handler — defense in depth against
+    // unbounded LLM spend (the client caps the field at 500 chars).
+    if (trimmed.length > 2000) {
+      throw new Error("userNotes exceeds 2000 character limit");
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY is not set");
-    }
-
-    const systemPrompt = buildAnalyzeSystemPrompt({
+    const sessionId = await ctx.db.insert("refinementSessions", {
+      userId,
+      status: "pending",
+    });
+    await ctx.scheduler.runAfter(0, internal.tripRefinement.runAnalysis, {
+      sessionId,
+      countryCode: args.countryCode,
       countryName: args.countryName,
       duration: args.duration,
       vibes: args.vibes,
       userNotes: trimmed,
     });
+    return sessionId;
+  },
+});
 
-    const response = await fetch(ANTHROPIC_URL, {
+/**
+ * Reactive readout for a refinement session. Returns null when the row no
+ * longer exists (superseded by a newer `startAnalysis`) — the client treats
+ * that the same as still-pending.
+ */
+export const getSession = query({
+  args: { sessionId: v.id("refinementSessions") },
+  handler: async (ctx, { sessionId }) => {
+    const userId = await requireAuth(ctx);
+    const session = await ctx.db.get(sessionId);
+    if (!session) return null;
+    if (session.userId !== userId) {
+      throw new Error("Not authorized");
+    }
+    return {
+      status: session.status,
+      questions: session.questions,
+      errorMessage: session.errorMessage,
+    };
+  },
+});
+
+/** Scheduled LLM call. Always settles the session row — success or error. */
+export const runAnalysis = internalAction({
+  args: { sessionId: v.id("refinementSessions"), ...analyzeArgs },
+  handler: async (ctx, { sessionId, ...args }) => {
+    try {
+      const questions = await fetchQuestionsWithRetry(args);
+      await ctx.runMutation(internal.tripRefinement.finishAnalysis, {
+        sessionId,
+        status: "ready",
+        questions,
+      });
+    } catch (err) {
+      await ctx.runMutation(internal.tripRefinement.finishAnalysis, {
+        sessionId,
+        status: "error",
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  },
+});
+
+export const finishAnalysis = internalMutation({
+  args: {
+    sessionId: v.id("refinementSessions"),
+    status: v.union(v.literal("ready"), v.literal("error")),
+    questions: v.optional(v.array(refinementQuestionValidator)),
+    errorMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, { sessionId, status, questions, errorMessage }) => {
+    const session = await ctx.db.get(sessionId);
+    // Row deleted by a newer startAnalysis — this result is stale, drop it.
+    if (!session) return;
+    await ctx.db.patch(sessionId, { status, questions, errorMessage });
+  },
+});
+
+// ── Anthropic call ───────────────────────────────────────────────
+
+async function fetchQuestionsWithRetry(args: {
+  countryName: string;
+  duration: number;
+  vibes: string[];
+  userNotes: string;
+}): Promise<RefinementQuestion[]> {
+  try {
+    return await fetchQuestions(args);
+  } catch {
+    // One retry covers transient blips (429/5xx/timeout). A second failure
+    // settles the session as error, where the client offers "generate
+    // without questions".
+    return await fetchQuestions(args);
+  }
+}
+
+async function fetchQuestions(args: {
+  countryName: string;
+  duration: number;
+  vibes: string[];
+  userNotes: string;
+}): Promise<RefinementQuestion[]> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not set");
+  }
+
+  const systemPrompt = buildAnalyzeSystemPrompt(args);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -135,31 +286,33 @@ export const analyzeUserNotes = action({
         messages: [
           {
             role: "user",
-            content: `User notes: "${trimmed}". Analyze and return your questions JSON now.`,
+            content: `User notes: "${args.userNotes}". Analyze and return your questions JSON now.`,
           },
         ],
       }),
+      signal: controller.signal,
     });
+  } finally {
+    clearTimeout(timer);
+  }
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `Anthropic API error ${response.status}: ${text.slice(0, 500)}`,
-      );
-    }
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Anthropic API error ${response.status}: ${text.slice(0, 500)}`,
+    );
+  }
 
-    const body = (await response.json()) as {
-      content: Array<{ type: string; text?: string }>;
-    };
-    const text = body.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text ?? "")
-      .join("");
+  const body = (await response.json()) as {
+    content: Array<{ type: string; text?: string }>;
+  };
+  const text = body.content
+    .filter((b) => b.type === "text")
+    .map((b) => b.text ?? "")
+    .join("");
 
-    const parsed = parseQuestionsResponse(text);
-    return { questions: parsed.slice(0, QUESTION_CAP) };
-  },
-});
+  return parseQuestionsResponse(text).slice(0, QUESTION_CAP);
+}
 
 function parseQuestionsResponse(raw: string): RefinementQuestion[] {
   const trimmed = raw.trim();

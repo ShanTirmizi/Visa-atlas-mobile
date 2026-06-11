@@ -69,6 +69,7 @@ import {
   isGenerating,
   isSectionPending,
   hasFailed,
+  isRetrying,
   getCompletedSectionCount,
   getTotalSectionCount,
   getTabDotIndicators,
@@ -604,6 +605,7 @@ export default function TripDetailScreen() {
                   tripId={trip._id}
                   section="visaChecklist"
                   label="visa info"
+                  retrying={isRetrying(trip, 'visaChecklist')}
                 />
               </Animated.View>
             );

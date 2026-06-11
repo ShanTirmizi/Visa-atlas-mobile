@@ -196,6 +196,14 @@ interface StreamCallbacks {
   onError: (err: Error) => void;
 }
 
+// Abort the stream if no bytes arrive for this long — a stalled SSE
+// connection would otherwise hang the action until the platform kills it
+// at the 10-minute cap, leaving the trip wedged in 'generating'.
+const STREAM_STALL_TIMEOUT_MS = 90_000;
+// Hard ceiling on any single stream, kept under Convex's 10-minute action
+// limit so our own error path (mark section failed, settle) always runs.
+const STREAM_TOTAL_TIMEOUT_MS = 8 * 60_000;
+
 /**
  * Open a streaming POST to the Anthropic Messages API. Parses SSE,
  * extracts text deltas, and invokes onDelta as tokens arrive.
@@ -207,7 +215,18 @@ export async function streamAnthropic(
   opts: StreamOptions,
   cb: StreamCallbacks,
 ): Promise<void> {
+  const controller = new AbortController();
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  const armStallTimer = () => {
+    if (stallTimer) clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => controller.abort(), STREAM_STALL_TIMEOUT_MS);
+  };
+  const totalTimer = setTimeout(
+    () => controller.abort(),
+    STREAM_TOTAL_TIMEOUT_MS,
+  );
   try {
+    armStallTimer();
     const response = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: {
@@ -228,6 +247,7 @@ export async function streamAnthropic(
         ],
         messages: [{ role: "user", content: opts.userPrompt }],
       }),
+      signal: controller.signal,
     });
 
     if (!response.ok || !response.body) {
@@ -240,6 +260,7 @@ export async function streamAnthropic(
     let buffer = "";
     while (true) {
       const { done, value } = await reader.read();
+      armStallTimer();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       // SSE events are separated by blank lines
@@ -268,6 +289,9 @@ export async function streamAnthropic(
     cb.onComplete();
   } catch (err) {
     cb.onError(err instanceof Error ? err : new Error(String(err)));
+  } finally {
+    if (stallTimer) clearTimeout(stallTimer);
+    clearTimeout(totalTimer);
   }
 }
 
@@ -353,9 +377,13 @@ export function makeItineraryStreamParser(
             try {
               JSON.parse(slice); // validate
               onDayComplete(dayIndex, slice);
-              dayIndex++;
             } catch (err) {
               onErr(new Error(`Malformed day ${dayIndex}: ${(err as Error).message}`));
+            } finally {
+              // Always advance — without this, every day after a malformed
+              // one lands one index early and gets mislabeled with the
+              // previous day's number.
+              dayIndex++;
             }
             dayStart = -1;
           }

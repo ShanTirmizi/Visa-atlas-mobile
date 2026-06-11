@@ -1,7 +1,8 @@
 import { v } from "convex/values";
-import { internalMutation, internalAction, internalQuery, action } from "./_generated/server";
+import { internalMutation, internalAction, internalQuery, mutation } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { requireAuth } from "./lib/auth";
+import { checkTripPermission, requireAuth } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
 import { lookupStaticFacts } from "../constants/staticTripFacts";
 import { SECTION_FIELD_MAP, STREAMING_SECTIONS } from "./lib/sectionFieldMap";
@@ -30,8 +31,8 @@ const coerceToString = (v: unknown, fallback: string = "[]"): string => {
   return JSON.stringify(v);
 };
 
-// Args validator shared by `generateTrip` and `insertGenerationStub`.
-// Mirrors the planner sheet form; deliberately permissive on optional fields.
+// Args validator for `generateTrip`; also embedded in `runGenerationStream`'s
+// args. Mirrors the planner sheet form; deliberately permissive on optional fields.
 const generateTripArgs = {
   countryCode: v.string(),
   countryName: v.string(),
@@ -54,16 +55,29 @@ const generateTripArgs = {
 };
 
 /**
- * Insert the trip stub immediately on tap-Generate. All content fields
- * are empty strings; static facts come from the local lookup so they're
- * present from t=0. Returns the new tripId so the client can navigate.
+ * Public entry point. Inserts the trip stub immediately on tap-Generate
+ * (content fields empty; static facts from the local lookup so they're
+ * present from t=0), schedules the streaming action, and returns the new
+ * tripId so the client can navigate straight onto the live trip screen.
+ *
+ * This is a MUTATION on purpose — the Convex client auto-retries mutations
+ * across websocket reconnects, so a network blip on tap can't strand the
+ * user the way a dropped in-flight action does ("Connection lost while
+ * action was in flight"). The heavy LLM work runs in the scheduled
+ * `runGenerationStream` internal action and streams into the doc, which
+ * the trip screen watches reactively.
  */
-export const insertGenerationStub = internalMutation({
-  args: {
-    userId: v.id("users"),
-    input: v.object(generateTripArgs),
-  },
-  handler: async (ctx, { userId, input }): Promise<Id<"trips">> => {
+export const generateTrip = mutation({
+  args: generateTripArgs,
+  handler: async (ctx, input): Promise<Id<"trips">> => {
+    const userId = await requireAuth(ctx);
+    if (
+      !Number.isInteger(input.duration) ||
+      input.duration < 1 ||
+      input.duration > 60
+    ) {
+      throw new Error("duration must be between 1 and 60 days");
+    }
     const facts = lookupStaticFacts(input.countryCode);
 
     // Normalize userNotes — trim, treat whitespace-only as undefined,
@@ -118,11 +132,15 @@ export const insertGenerationStub = internalMutation({
       role: "owner",
       joinedAt: Date.now(),
     });
+    await ctx.scheduler.runAfter(0, internal.tripGeneration.runGenerationStream, {
+      tripId,
+      input,
+    });
     return tripId;
   },
 });
 
-// Re-exported so the action file can use the args shape.
+// Re-exported so other modules can reuse the args shape.
 export { generateTripArgs };
 
 /**
@@ -155,10 +173,12 @@ export const patchTripSection = internalMutation({
     }
     if (args.failed) {
       const existing = trip.failedSections ?? [];
-      if (!existing.includes(args.section)) {
-        await ctx.db.patch(args.tripId, {
-          failedSections: [...existing, args.section],
-        });
+      const next = [...existing];
+      for (const key of toFailureKeys(args.section)) {
+        if (!next.includes(key)) next.push(key);
+      }
+      if (next.length !== existing.length) {
+        await ctx.db.patch(args.tripId, { failedSections: next });
       }
       return;
     }
@@ -175,11 +195,13 @@ export const patchTripSection = internalMutation({
         // expects `day.day` to be set. Without this they render "DAY · undefined".
         days[idx] = { ...parsed, day: idx + 1 };
       } catch {
-        // Malformed day payload — record as failed without touching itinerary.
+        // Malformed day payload — record the itinerary as failed (the
+        // retry UI speaks in section keys, not 'itinerary-day:N' slices)
+        // without touching the days that already landed.
         const existing = trip.failedSections ?? [];
-        if (!existing.includes(args.section)) {
+        if (!existing.includes("itinerary")) {
           await ctx.db.patch(args.tripId, {
-            failedSections: [...existing, args.section],
+            failedSections: [...existing, "itinerary"],
           });
         }
         return;
@@ -214,15 +236,163 @@ function safeParseArray(raw: string): any[] {
 }
 
 /**
+ * Output-token budget for the itinerary stream, scaled to trip length.
+ * A generated day runs ~400–700 output tokens; a flat 8192 cap silently
+ * truncated long itineraries, which then completed as 'planned' with
+ * missing days. Sonnet supports 64k output tokens, so even the planner's
+ * 60-night ceiling fits comfortably.
+ */
+const itineraryMaxTokens = (duration: number) =>
+  Math.min(64_000, Math.max(8_192, 2_048 + duration * 800));
+
+/**
+ * Stream the itinerary (day-by-day) into the trip doc. Shared by the main
+ * generation run and the per-section retry path. Resolves when the stream
+ * settles — success or failure — and marks 'itinerary' failed on stream
+ * errors so the retry card can surface. Every path ends in settle(); an
+ * escaped rejection here would hang the caller's Promise.all and wedge
+ * the run in 'generating'.
+ */
+function streamItineraryIntoTrip(
+  ctx: ActionCtx,
+  tripId: Id<"trips">,
+  // Parsed originalInputs / generateTrip args — only duration is read here;
+  // the prompt builders consume the rest.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  input: any,
+  apiKey: string,
+  systemPrompt: string,
+): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const userPrompt = buildItineraryUserPrompt(input);
+    const itineraryParser = makeItineraryStreamParser(
+      async (dayIndex, dayJson) => {
+        try {
+          await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+            tripId,
+            section: `itinerary-day:${dayIndex}`,
+            content: dayJson,
+          });
+          if (dayIndex === 0) {
+            await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
+          }
+        } catch (err) {
+          // The parser fire-and-forgets this callback — never let a
+          // rejection escape as unhandled.
+          console.error(`Itinerary day ${dayIndex} patch failed:`, err);
+        }
+      },
+      (err) => console.error("Itinerary parse error:", err),
+    );
+    streamAnthropic(
+      {
+        apiKey,
+        systemPrompt,
+        userPrompt,
+        maxTokens: itineraryMaxTokens(Number(input?.duration) || 7),
+      },
+      {
+        onDelta: (text) => itineraryParser.onDelta(text),
+        onComplete: async () => {
+          try {
+            itineraryParser.onComplete();
+            await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
+          } catch (err) {
+            console.error("Itinerary completion hook failed:", err);
+          } finally {
+            settle();
+          }
+        },
+        onError: async (err) => {
+          console.error("Itinerary stream errored:", err);
+          try {
+            await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+              tripId,
+              section: "itinerary",
+              content: "",
+              failed: true,
+            });
+          } catch (patchErr) {
+            console.error("Failed to record itinerary failure:", patchErr);
+          } finally {
+            settle();
+          }
+        },
+      },
+    );
+  });
+}
+
+/**
+ * Map internal stream identifiers to the section keys the client's retry
+ * UI checks. The streams run as bundles ('__visa-bundle__') and per-day
+ * slices ('itinerary-day:3'), but hasFailed()/retrySection speak in real
+ * section keys — recording the internal names verbatim left the retry
+ * cards permanently unreachable.
+ */
+function toFailureKeys(section: string): string[] {
+  if (section === "__visa-bundle__") return ["visaChecklist", "visaNotes"];
+  if (section === "__budget-bundle__") return ["budgetBreakdown", "dailyBudget"];
+  if (section.startsWith("itinerary-day:") || section === "itinerary") {
+    return ["itinerary"];
+  }
+  return [section];
+}
+
+/**
  * Flip status from "generating" to "planned". Called once all streamed
  * sections have either completed or been marked failed.
+ *
+ * If literally nothing landed (LLM outage / every stream failed), 'planned'
+ * would render an empty trip that looks normal in the trips list — settle
+ * those as 'failed' so TripFailedScreen offers a full retry instead.
  */
 export const completeGeneration = internalMutation({
   args: { tripId: v.id("trips") },
   handler: async (ctx, { tripId }) => {
     const trip = await ctx.db.get(tripId);
     if (!trip || trip.status !== "generating") return;
-    await ctx.db.patch(tripId, { status: "planned" });
+    const days = trip.itinerary ? safeParseArray(trip.itinerary) : [];
+    const hasAnyContent =
+      days.length > 0 || STREAMING_SECTIONS.some((s) => !!trip[s]);
+    await ctx.db.patch(tripId, {
+      status: hasAnyContent ? "planned" : "failed",
+    });
+  },
+});
+
+/**
+ * Last-resort watchdog. Convex actions are capped at 10 minutes; a trip
+ * still 'generating' 12 minutes after kickoff means the streaming action
+ * died without settling (crash, redeploy, platform kill). Salvage whatever
+ * landed: mark the empty sections failed so their retry cards surface,
+ * then settle the status so the trip can't stay bricked in 'generating'.
+ */
+export const finalizeStuckGeneration = internalMutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip || trip.status !== "generating") return;
+    const failed = new Set(trip.failedSections ?? []);
+    for (const section of STREAMING_SECTIONS) {
+      if (!trip[section]) failed.add(section);
+    }
+    const days = trip.itinerary ? safeParseArray(trip.itinerary) : [];
+    if (days.length < trip.duration) failed.add("itinerary");
+    const hasAnyContent =
+      days.length > 0 || STREAMING_SECTIONS.some((s) => !!trip[s]);
+    await ctx.db.patch(tripId, {
+      failedSections: [...failed],
+      retryingSections: [],
+      status: hasAnyContent ? "planned" : "failed",
+    });
+    console.error(`Trip ${tripId} finalized by stuck-generation watchdog`);
   },
 });
 
@@ -297,8 +467,11 @@ export const runGenerationStream = internalAction({
 
     const systemPrompt = buildSystemPrompt(input);
 
-    // Schedule the 60s watchdog
+    // Schedule the 60s zero-content watchdog and the 12-minute stuck-
+    // generation finalizer (actions cap at 10 minutes, so by 12 this run
+    // is provably dead if the trip is still 'generating').
     await ctx.scheduler.runAfter(60_000, internal.tripGeneration.checkGenerationTimeout, { tripId });
+    await ctx.scheduler.runAfter(12 * 60_000, internal.tripGeneration.finalizeStuckGeneration, { tripId });
 
     // Helper that runs one section call and patches the doc on completion
     const runSection = async (
@@ -314,6 +487,22 @@ export const runGenerationStream = internalAction({
           if (settled) return;
           settled = true;
           resolve();
+        };
+        // Every code path below MUST end in settle(), even when the
+        // failure-marking mutation itself throws — an escaped rejection
+        // here would hang the Promise.all and wedge the whole run in
+        // 'generating' until the stuck-generation watchdog fires.
+        const markFailed = async () => {
+          try {
+            await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+              tripId,
+              section: sectionName,
+              content: "",
+              failed: true,
+            });
+          } catch (patchErr) {
+            console.error(`Section ${sectionName} failure marker also failed:`, patchErr);
+          }
         };
         streamAnthropic(
           { apiKey, systemPrompt, userPrompt, maxTokens },
@@ -338,24 +527,18 @@ export const runGenerationStream = internalAction({
                 }
               } catch (err) {
                 console.error(`Section ${sectionName} patch failed:`, err);
-                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                  tripId,
-                  section: sectionName,
-                  content: "",
-                  failed: true,
-                });
+                await markFailed();
+              } finally {
+                settle();
               }
-              settle();
             },
             async (err) => {
               console.error(`Section ${sectionName} stream errored:`, err);
-              await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                tripId,
-                section: sectionName,
-                content: "",
-                failed: true,
-              });
-              settle();
+              try {
+                await markFailed();
+              } finally {
+                settle();
+              }
             },
           ),
         );
@@ -363,51 +546,8 @@ export const runGenerationStream = internalAction({
     };
 
     // Itinerary streams day-by-day with its own parser
-    const runItinerary = async (): Promise<void> => {
-      return new Promise((resolve) => {
-        let settled = false;
-        const settle = () => {
-          if (settled) return;
-          settled = true;
-          resolve();
-        };
-        const userPrompt = buildItineraryUserPrompt(input);
-        const itineraryParser = makeItineraryStreamParser(
-          async (dayIndex, dayJson) => {
-            await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-              tripId,
-              section: `itinerary-day:${dayIndex}`,
-              content: dayJson,
-            });
-            if (dayIndex === 0) {
-              await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
-            }
-          },
-          (err) => console.error("Itinerary parse error:", err),
-        );
-        streamAnthropic(
-          { apiKey, systemPrompt, userPrompt, maxTokens: 8192 },
-          {
-            onDelta: (text) => itineraryParser.onDelta(text),
-            onComplete: async () => {
-              itineraryParser.onComplete();
-              await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
-              settle();
-            },
-            onError: async (err) => {
-              console.error("Itinerary stream errored:", err);
-              await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                tripId,
-                section: "itinerary",
-                content: "",
-                failed: true,
-              });
-              settle();
-            },
-          },
-        );
-      });
-    };
+    const runItinerary = (): Promise<void> =>
+      streamItineraryIntoTrip(ctx, tripId, input, apiKey, systemPrompt);
 
     // ── Country tips — static-first, cache-second, LLM-fallback ─────
     //
@@ -582,46 +722,78 @@ export const runGenerationStream = internalAction({
   },
 });
 
-/**
- * Public entry point. Inserts a stub trip row, schedules the streaming
- * action, returns the trip ID immediately so the client can navigate.
- */
-export const generateTrip = action({
-  args: generateTripArgs,
-  handler: async (ctx, args): Promise<Id<"trips">> => {
-    const userId = await requireAuth(ctx);
-    const tripId: Id<"trips"> = await ctx.runMutation(
-      internal.tripGeneration.insertGenerationStub,
-      { userId, input: args },
-    );
-    await ctx.scheduler.runAfter(0, internal.tripGeneration.runGenerationStream, {
-      tripId,
-      input: args,
-    });
-    return tripId;
-  },
-});
+/** Sections the retry flow knows how to re-run. packingSuggestions /
+ * accommodationTips / localEssentials are no longer generated by the
+ * streaming flow — country-level tips come from data/localInfo.ts or the
+ * countryTipsCache table now. */
+const RETRYABLE_SECTIONS = new Set([
+  "highlights",
+  "visaChecklist",
+  "visaNotes",
+  "budgetBreakdown",
+  "dailyBudget",
+  "itinerary",
+]);
 
 /**
- * Retry a single section after a failure. Re-runs that one section's
- * stream and removes it from failedSections on success.
- *
- * Auth: ownership is verified via the `_verifyTripOwner` internal query
- * because actions can't access `ctx.db` directly.
+ * Retry a single section after a failure. Validates and marks the section
+ * as retrying, then schedules `runRetrySection` to re-run that one slice's
+ * stream — the same mutation-schedules-action shape as `generateTrip`, so
+ * a websocket blip mid-retry can't kill it. Progress is reactive: the
+ * section leaves `retryingSections` when the run settles, and leaves
+ * `failedSections` only on success.
  */
-export const retrySection = action({
+export const retrySection = mutation({
   args: {
     tripId: v.id("trips"),
     section: v.string(),
   },
   handler: async (ctx, { tripId, section }) => {
-    const userId = await requireAuth(ctx);
-    const isOwner = await ctx.runQuery(internal.tripGeneration._verifyTripOwner, {
-      tripId,
-      userId,
-    });
-    if (!isOwner) throw new Error("Not authorized");
+    await checkTripPermission(ctx, tripId, "owner");
 
+    const trip = await ctx.db.get(tripId);
+    if (!trip) throw new Error("Trip not found");
+    if (!trip.originalInputs) throw new Error("No original inputs stored — cannot retry");
+    if (!RETRYABLE_SECTIONS.has(section)) {
+      // Stale failedSections entry from an older generation pipeline.
+      throw new Error(`Cannot retry unknown section: ${section}`);
+    }
+
+    const retrying = trip.retryingSections ?? [];
+    if (retrying.includes(section)) return; // already in flight
+    await ctx.db.patch(tripId, { retryingSections: [...retrying, section] });
+    await ctx.scheduler.runAfter(0, internal.tripGeneration.runRetrySection, {
+      tripId,
+      section,
+    });
+  },
+});
+
+/** Scheduled worker for `retrySection`. Re-runs one section's stream and
+ * always clears the section from `retryingSections` when it settles. */
+export const runRetrySection = internalAction({
+  args: {
+    tripId: v.id("trips"),
+    section: v.string(),
+  },
+  handler: async (ctx, { tripId, section }) => {
+    try {
+      await runRetrySectionInner(ctx, tripId, section);
+    } finally {
+      await ctx.runMutation(internal.tripGeneration._clearRetryingSection, {
+        tripId,
+        section,
+      });
+    }
+  },
+});
+
+async function runRetrySectionInner(
+  ctx: ActionCtx,
+  tripId: Id<"trips">,
+  section: string,
+) {
+  {
     const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
     if (!trip) throw new Error("Trip not found");
     if (!trip.originalInputs) throw new Error("No original inputs stored — cannot retry");
@@ -631,6 +803,28 @@ export const retrySection = action({
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
 
     const systemPrompt = buildSystemPrompt(input);
+
+    if (section === "itinerary") {
+      // Clear any partial itinerary so re-streamed days land in a clean
+      // array — stale days from the failed run could otherwise linger
+      // past the new day count.
+      await ctx.runMutation(internal.tripGeneration._patchTripField, {
+        tripId,
+        field: "itinerary",
+        value: "",
+      });
+      await streamItineraryIntoTrip(ctx, tripId, input, apiKey, systemPrompt);
+      // Only clear the failure marker if the re-run actually produced days.
+      const after = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
+      const days = after?.itinerary ? safeParseArray(after.itinerary) : [];
+      if (days.length > 0) {
+        await ctx.runMutation(internal.tripGeneration._clearFailedSection, {
+          tripId,
+          section: "itinerary",
+        });
+      }
+      return;
+    }
 
     let userPrompt: string;
     let maxTokens = 1024;
@@ -648,10 +842,7 @@ export const retrySection = action({
         userPrompt = buildBudgetUserPrompt(input);
         break;
       default:
-        // packingSuggestions / accommodationTips / localEssentials are no
-        // longer generated by the streaming flow — country-level tips
-        // come from data/localInfo.ts or the countryTipsCache table now.
-        // If a stale failedSections entry is referenced, surface it.
+        // Validated in the retrySection mutation; kept for defense in depth.
         throw new Error(`Cannot retry unknown section: ${section}`);
     }
 
@@ -699,8 +890,8 @@ export const retrySection = action({
         ),
       );
     });
-  },
-});
+  }
+}
 
 /** Internal query for retrySection to read the trip — keeps the action stateless. */
 export const _getTripForRetry = internalQuery({
@@ -722,27 +913,6 @@ export const _getCachedCountryTips = internalQuery({
   },
 });
 
-/**
- * Verify the caller is the trip owner. The action calls this so it can
- * run an ownership check from a context where `ctx.db` is available.
- * (We can't use `checkTripPermission` directly because that helper
- * accepts only Query/MutationCtx — its `ctx.db` access wouldn't compile
- * in an action.) Returns `true` only when the caller is the owner.
- */
-export const _verifyTripOwner = internalQuery({
-  args: { tripId: v.id("trips"), userId: v.id("users") },
-  handler: async (ctx, { tripId, userId }) => {
-    const trip = await ctx.db.get(tripId);
-    if (!trip) return false;
-    const collab = await ctx.db
-      .query("tripCollaborators")
-      .withIndex("by_trip_and_user", (q) =>
-        q.eq("tripId", tripId).eq("userId", userId))
-      .first();
-    return collab?.role === "owner";
-  },
-});
-
 /** Remove a section (and any siblings from a bundle retry) from failedSections. */
 export const _clearFailedSection = internalMutation({
   args: { tripId: v.id("trips"), section: v.string() },
@@ -759,6 +929,17 @@ export const _clearFailedSection = internalMutation({
     const toRemove = bundleSiblings[section] ?? [section];
     const next = failed.filter((s) => !toRemove.includes(s));
     await ctx.db.patch(tripId, { failedSections: next });
+  },
+});
+
+/** Remove a section from retryingSections once its retry run settles. */
+export const _clearRetryingSection = internalMutation({
+  args: { tripId: v.id("trips"), section: v.string() },
+  handler: async (ctx, { tripId, section }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip) return;
+    const next = (trip.retryingSections ?? []).filter((s) => s !== section);
+    await ctx.db.patch(tripId, { retryingSections: next });
   },
 });
 

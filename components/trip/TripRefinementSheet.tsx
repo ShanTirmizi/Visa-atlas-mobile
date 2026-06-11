@@ -19,8 +19,9 @@ import {
   type BottomSheetModal,
 } from '@gorhom/bottom-sheet';
 import { Sparkles } from 'lucide-react-native';
-import { useAction } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { FontFamily, Radius, type ThemeColors } from '@/constants/theme';
@@ -33,6 +34,10 @@ import type { RefinementQuestion } from '@/convex/tripRefinement';
 
 const STAGGER_MS = 150;
 const AFFIRMATION_MS = 800;
+// Client-side watchdog on the scheduled analysis. The server settles the
+// session row even on LLM failure, so this only fires if the scheduled run
+// itself was lost (e.g. a dev redeploy killed it mid-flight).
+const ANALYSIS_TIMEOUT_MS = 45_000;
 
 export interface RefinementInput {
   countryCode: string;
@@ -75,13 +80,24 @@ export const TripRefinementSheet = forwardRef<
 >(function TripRefinementSheet({ onSubmit, onDismiss }, ref) {
   const { colors } = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
-  const analyzeAction = useAction(api.tripRefinement.analyzeUserNotes);
+  const startAnalysis = useMutation(api.tripRefinement.startAnalysis);
 
   const [input, setInput] = useState<RefinementInput | null>(null);
   const [status, setStatus] = useState<Status>('idle');
+  const [sessionId, setSessionId] = useState<Id<'refinementSessions'> | null>(
+    null,
+  );
   const [questions, setQuestions] = useState<RefinementQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
-  const [errorText, setErrorText] = useState<string | null>(null);
+
+  // Reactive result of the scheduled analysis. The mutation+subscription
+  // shape survives websocket reconnects, token refreshes, and redeploys —
+  // unlike the old direct `useAction` call, which died with "Connection
+  // lost while action was in flight" whenever the socket blipped mid-call.
+  const session = useQuery(
+    api.tripRefinement.getSession,
+    sessionId ? { sessionId } : 'skip',
+  );
   // Tracks whether onSubmit has fired this presentation cycle, so the
   // sheet's onChange→dismiss callback knows not to call onDismiss after a
   // successful submit (we dismiss programmatically before invoking submit).
@@ -95,7 +111,7 @@ export const TripRefinementSheet = forwardRef<
         setInput(next);
         setQuestions([]);
         setAnswers({});
-        setErrorText(null);
+        setSessionId(null);
         setStatus('analyzing');
         sheetRef.current?.present();
       },
@@ -106,37 +122,50 @@ export const TripRefinementSheet = forwardRef<
     [],
   );
 
-  // ── Run analyze when entering the analyzing state ────────────
+  // ── Kick off the analysis when entering the analyzing state ──
   useEffect(() => {
-    if (status !== 'analyzing' || !input) return;
+    if (status !== 'analyzing' || !input || sessionId) return;
     let cancelled = false;
-    analyzeAction({
+    startAnalysis({
       countryCode: input.countryCode,
       countryName: input.countryName,
       duration: input.duration,
       vibes: input.vibes,
       userNotes: input.userNotes,
     })
-      .then((result) => {
-        if (cancelled) return;
-        if (result.questions.length === 0) {
-          setStatus('affirmation');
-        } else {
-          setQuestions(result.questions);
-          setStatus('questions');
-        }
+      .then((id) => {
+        if (!cancelled) setSessionId(id);
       })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : 'Something went wrong.';
-        setErrorText(message);
-        setStatus('error');
+      .catch(() => {
+        if (!cancelled) setStatus('error');
       });
     return () => {
       cancelled = true;
     };
-  }, [status, input, analyzeAction]);
+  }, [status, input, sessionId, startAnalysis]);
+
+  // ── Watch the session row for the analysis result ─────────────
+  useEffect(() => {
+    if (status !== 'analyzing' || !session) return;
+    if (session.status === 'ready') {
+      const next = session.questions ?? [];
+      if (next.length === 0) {
+        setStatus('affirmation');
+      } else {
+        setQuestions(next);
+        setStatus('questions');
+      }
+    } else if (session.status === 'error') {
+      setStatus('error');
+    }
+  }, [status, session]);
+
+  // ── Watchdog → fallback CTA if no result lands in time ────────
+  useEffect(() => {
+    if (status !== 'analyzing') return;
+    const timer = setTimeout(() => setStatus('error'), ANALYSIS_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [status]);
 
   // ── Affirmation timer → dismiss + submit with original notes ──
   useEffect(() => {
@@ -220,11 +249,7 @@ export const TripRefinementSheet = forwardRef<
         {status === 'affirmation' && <Affirmation colors={colors} />}
 
         {status === 'error' && (
-          <ErrorCard
-            colors={colors}
-            errorText={errorText ?? 'Something went wrong.'}
-            onFallback={handleSkipQuestionsFallback}
-          />
+          <ErrorCard colors={colors} onFallback={handleSkipQuestionsFallback} />
         )}
       </BottomSheetScrollView>
     </AppBottomSheet>
@@ -356,11 +381,9 @@ function Affirmation({ colors }: { colors: ThemeColors }) {
 
 function ErrorCard({
   colors,
-  errorText,
   onFallback,
 }: {
   colors: ThemeColors;
-  errorText: string;
   onFallback: () => void;
 }) {
   return (
@@ -379,7 +402,8 @@ function ErrorCard({
           { color: colors.danger, marginBottom: 12 },
         ]}
       >
-        We couldn{"’"}t load clarifying questions. ({errorText})
+        We couldn{"’"}t load clarifying questions — no problem, we can plan
+        straight from your brief.
       </Text>
       <Pressable
         onPress={onFallback}

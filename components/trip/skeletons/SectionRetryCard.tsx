@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { Radius, Spacing } from '@/constants/theme';
 import { Type } from '@/constants/typography';
-import { useAction } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { RotateCw } from 'lucide-react-native';
@@ -14,29 +14,32 @@ interface SectionRetryCardProps {
   section: string;
   /** User-facing label for the failed section, e.g. "visa info" */
   label: string;
+  /**
+   * True while the server is re-running this section. Derived from the trip
+   * doc's `retryingSections` (see `isRetrying` in sectionState.ts) so the
+   * spinner is reactive and survives reconnects — not local useState.
+   */
+  retrying: boolean;
 }
 
 /**
  * Per-section failure state card surfaced when streamed trip generation
  * fails for one slice (visa, highlights, tips, etc.). Other sections are
- * unaffected — tapping retry re-runs only this slice via the
- * `tripGeneration.retrySection` Convex action.
+ * unaffected — tapping retry schedules a server-side re-run of only this
+ * slice via the `tripGeneration.retrySection` mutation; the result streams
+ * back into the trip doc reactively.
  */
-export function SectionRetryCard({ tripId, section, label }: SectionRetryCardProps) {
+export function SectionRetryCard({ tripId, section, label, retrying }: SectionRetryCardProps) {
   const { colors } = useTheme();
-  const retry = useAction(api.tripGeneration.retrySection);
-  const [retrying, setRetrying] = useState(false);
+  const retry = useMutation(api.tripGeneration.retrySection);
   const [error, setError] = useState<string | null>(null);
 
   const onPress = async () => {
-    setRetrying(true);
     setError(null);
     try {
       await retry({ tripId, section });
     } catch {
       setError("Couldn't retry. Try again in a moment.");
-    } finally {
-      setRetrying(false);
     }
   };
 

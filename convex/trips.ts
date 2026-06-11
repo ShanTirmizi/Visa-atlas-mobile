@@ -319,22 +319,22 @@ export const addMessage = mutation({
     tripId: v.id("trips"),
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
-    userId: v.optional(v.id("users")),
-    userName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // For user-role messages, verify viewer permission
-    if (args.role === "user") {
-      await checkTripPermission(ctx, args.tripId, "viewer");
-    }
+    // Both roles require viewer access: assistant replies are inserted by
+    // the authenticated participant whose prompt produced them. Attribution
+    // is derived server-side — a client-supplied userId/userName would be
+    // spoofable.
+    const { userId } = await checkTripPermission(ctx, args.tripId, "viewer");
+    const user = args.role === "user" ? await ctx.db.get(userId) : null;
 
     return await ctx.db.insert("tripMessages", {
       tripId: args.tripId,
       role: args.role,
       content: args.content,
       timestamp: Date.now(),
-      userId: args.userId,
-      userName: args.userName,
+      userId: args.role === "user" ? userId : undefined,
+      userName: args.role === "user" ? (user?.name ?? undefined) : undefined,
     });
   },
 });

@@ -33,15 +33,17 @@ export type SectionName =
   | "heroImage";
 
 /**
- * The full ordered list of sections that the generation flow expects
- * to populate. Used by completeGeneration to determine "all done".
+ * The sections the generation flow actually streams today. Used by the
+ * watchdogs and completeGeneration to judge content / mark failures.
  * Itinerary days are tracked separately via the parsed array length.
+ * (packingSuggestions / accommodationTips / localEssentials are NOT
+ * streamed anymore — country-level tips come from data/localInfo.ts or
+ * the countryTipsCache table.)
  */
 export const STREAMING_SECTIONS = [
   "highlights",
   "visaChecklist",
   "visaNotes",
   "budgetBreakdown",
-  "packingSuggestions",
-  "accommodationTips",
+  "dailyBudget",
 ] as const satisfies readonly (keyof typeof SECTION_FIELD_MAP)[];

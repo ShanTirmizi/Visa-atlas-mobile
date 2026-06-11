@@ -22,7 +22,7 @@ import {
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAction } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import {
@@ -321,7 +321,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const [budget] = useState('mid');
     const [party] = useState('couple');
 
-    const generateTripAction = useAction(api.tripGeneration.generateTrip);
+    // Mutation (not action): auto-retried by the Convex client across
+    // reconnects, so tap-Generate can't die on a websocket blip.
+    const generateTripMutation = useMutation(api.tripGeneration.generateTrip);
     const sparkleStyle = usePlaneAnimation(isLoading);
 
     // Keyboard progress (0 = closed, 1 = open). Used to collapse the CTA
@@ -431,7 +433,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     }, [effective, country, meta, travel, resolved]);
 
     // ── Run generation ────────────────────────────────────────────
-    // Inserts a generation stub via Convex action; the action schedules
+    // Inserts a generation stub via Convex mutation; the mutation schedules
     // server-side streaming so we can dismiss the sheet immediately and
     // navigate the user onto the trip detail screen, where sections
     // arrive live as they finish.
@@ -449,14 +451,14 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setIsLoading(true);
       setError('');
       try {
-        // Run the action and a minimum-display timer in parallel so the
+        // Run the mutation and a minimum-display timer in parallel so the
         // user always gets ~700ms of the "Starting your trip…" orb. The
-        // action usually resolves in 200-400ms (just inserts the stub +
+        // mutation usually resolves in 200-400ms (just inserts the stub +
         // schedules the streaming work) — without the floor, the sheet
         // would feel like it just "snapped" closed.
         const minDisplay = new Promise<void>((r) => setTimeout(r, 700));
         const [tripId] = await Promise.all([
-          generateTripAction({
+          generateTripMutation({
             countryCode: eff.country.code,
             countryName: eff.country.name,
             capital: eff.meta?.capital ?? eff.country.name,
@@ -487,7 +489,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     }, [
       resolveEffective, heldVisas,
       days, vibe, budget, activeVibes, travelers, party,
-      generateTripAction, onTripCreated, dreaming, startDate, endDate,
+      generateTripMutation, onTripCreated, dreaming, startDate, endDate,
     ]);
 
     // ── Generate trip ─────────────────────────────────────────────
