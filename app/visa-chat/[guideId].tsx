@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
+  ScrollView,
   ActivityIndicator,
   Pressable,
 } from 'react-native';
@@ -255,13 +256,12 @@ export default function VisaChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      // RNKC's recommended chat-composer pattern: the view translates up in
-      // sync with the keyboard (a transform, not a re-layout) while top
-      // padding keeps the header pinned — same feel as iMessage. Passed
-      // unconditionally: RNKC KAV is a no-op when behavior is undefined,
-      // which silently disabled Android avoidance with the old
-      // Platform.OS ternary.
-      behavior="translate-with-padding"
+      // "padding" resizes the container from the bottom and keeps the
+      // header pinned — "translate-with-padding" pushed the header above
+      // the Dynamic Island on device. See app/chat/[tripId].tsx for the
+      // full note. Passed unconditionally: RNKC KAV is a no-op when
+      // behavior is undefined.
+      behavior="padding"
     >
       {/* ── Editorial header ───────────────────────── */}
       <View
@@ -330,7 +330,15 @@ export default function VisaChatScreen() {
 
       {/* ── Empty state ─────────────────────────────── */}
       {(!messages || messages.length === 0) && !isSending ? (
-        <View style={styles.emptyContainer}>
+        // ScrollView (not View) so drag-down dismisses the keyboard
+        // interactively, matching the populated FlatList below — iMessage
+        // behaves the same on an empty conversation.
+        <ScrollView
+          contentContainerStyle={styles.emptyContainer}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={{ alignItems: 'center', marginBottom: 18 }}>
             <View
               style={{
@@ -453,7 +461,7 @@ export default function VisaChatScreen() {
               </Pressable>
             ))}
           </View>
-        </View>
+        </ScrollView>
       ) : (
         <FlatList
           ref={flatListRef}
@@ -463,6 +471,7 @@ export default function VisaChatScreen() {
           contentContainerStyle={styles.messagesList}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
           ListFooterComponent={isSending ? <ThinkingRow tick={thinkTick} /> : null}
         />
       )}
@@ -677,7 +686,8 @@ const styles = StyleSheet.create({
   },
   headerCenter: { alignItems: 'center', justifyContent: 'center' },
 
-  emptyContainer: { flex: 1, paddingHorizontal: 22, paddingTop: 40 },
+  // flexGrow (not flex): it's a ScrollView contentContainerStyle
+  emptyContainer: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 40 },
   suggestions: { gap: 10 },
   suggestionChip: {
     flexDirection: 'row',

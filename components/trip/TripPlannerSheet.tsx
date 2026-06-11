@@ -8,6 +8,8 @@ import { ChevronRight, Search, X } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedReaction,
+  runOnJS,
   withRepeat,
   withSequence,
   withTiming,
@@ -337,7 +339,29 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // Keyboard progress (0 = closed, 1 = open). Used to collapse the CTA
     // when the keyboard appears so the input ends up just above the
     // keyboard after gorhom's interactive sheet shift. See top-of-file.
-    const { progress: keyboardProgress } = useReanimatedKeyboardAnimation();
+    const { progress: keyboardProgress, height: keyboardHeight } =
+      useReanimatedKeyboardAnimation();
+    const scrollRef = useRef<React.ComponentRef<typeof BottomSheetScrollView>>(null);
+
+    // With topInset clamping the sheet below the Dynamic Island, the
+    // interactive shift alone can't clear the keyboard on tall screens —
+    // the notes field (bottom-most element) would hide behind it. A
+    // keyboard-height spacer at the end of the scroll content creates the
+    // missing scroll slack (dynamic sizing is capped at max, so no resize
+    // loop), and we scroll to the end once the keyboard settles so the
+    // field lands just above it.
+    const keyboardSpacerStyle = useAnimatedStyle(() => ({
+      height: Math.abs(keyboardHeight.value),
+    }));
+    const scrollNotesIntoView = useCallback(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, []);
+    useAnimatedReaction(
+      () => keyboardProgress.value > 0.95,
+      (open, prevOpen) => {
+        if (open && prevOpen === false) runOnJS(scrollNotesIntoView)();
+      },
+    );
     // Natural height of the CTA block, measured at layout (button height +
     // its 18pt marginTop from s.ctaButton). The previous hardcoded 70 was
     // ~5pt shorter than the real button, and the overflow:'hidden' wrapper
@@ -604,6 +628,13 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         ref={bottomSheetRef}
         enableDynamicSizing={true}
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
+        // CRITICAL: maxDynamicContentSize caps the sheet's HEIGHT, but the
+        // interactive keyboard shift moves its POSITION unclamped — on a
+        // real device (taller keyboard + predictive bar) the sheet shot
+        // past the Dynamic Island, and restoring from that overshoot left
+        // it stranded mid-screen with the CTA collapse stuck halfway.
+        // topInset is the prop that clamps position (CLAUDE.md).
+        topInset={insets.top + 10}
         enablePanDownToClose={!isLoading}
         // Cut the default 2.5 over-drag bounce padding (~80pt). The
         // sheet doesn't get over-dragged here, so this just removes a
@@ -633,9 +664,12 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         }}
       >
         <BottomSheetScrollView
+          ref={scrollRef}
           contentContainerStyle={s.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          // iMessage-style interactive drag-to-dismiss for the keyboard.
+          keyboardDismissMode="interactive"
         >
           {/* ── MAIN FORM ──────────────────────────────────────── */}
           {!isLoading && (
@@ -1041,6 +1075,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               </Text>
             </View>
           )}
+          {/* Keyboard spacer — scroll slack while the keyboard is open
+              (see the keyboardSpacerStyle note above). */}
+          <Animated.View style={keyboardSpacerStyle} />
         </BottomSheetScrollView>
       </BottomSheetModal>
 

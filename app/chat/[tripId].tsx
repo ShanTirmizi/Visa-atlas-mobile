@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
+  ScrollView,
   ActivityIndicator,
   Pressable,
 } from 'react-native';
@@ -672,13 +673,13 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      // RNKC's recommended chat-composer pattern: the view translates up in
-      // sync with the keyboard (a transform, not a re-layout) while top
-      // padding keeps the header pinned — same feel as iMessage. Passed
-      // unconditionally: RNKC KAV is a no-op when behavior is undefined,
-      // which silently disabled Android avoidance with the old
-      // Platform.OS ternary.
-      behavior="translate-with-padding"
+      // "padding" resizes the container from the bottom and keeps the
+      // header pinned. "translate-with-padding" (tried first) translated
+      // the WHOLE screen — header included — above the Dynamic Island on
+      // device: a harsh jump with the header gone. RNKC's translate
+      // pattern fits headerless inverted lists, not this screen. Passed
+      // unconditionally: RNKC KAV is a no-op when behavior is undefined.
+      behavior="padding"
     >
       {/* ── Editorial header ───────────────────────── */}
       <View
@@ -751,7 +752,15 @@ export default function ChatScreen() {
 
       {/* ── Messages ───────────────────────────────── */}
       {displayMessages.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        // ScrollView (not View) so drag-down dismisses the keyboard
+        // interactively, matching the populated FlatList below — iMessage
+        // behaves the same on an empty conversation.
+        <ScrollView
+          contentContainerStyle={styles.emptyContainer}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* Big AI orb with flag mini-tile */}
           <View style={{ alignItems: 'center', marginBottom: 18 }}>
             <View
@@ -883,7 +892,7 @@ export default function ChatScreen() {
               </Pressable>
             ))}
           </View>
-        </View>
+        </ScrollView>
       ) : (
         <FlatList
           ref={flatListRef}
@@ -893,6 +902,7 @@ export default function ChatScreen() {
           contentContainerStyle={styles.messagesList}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
           ListFooterComponent={isSending ? <ThinkingRow tick={thinkTick} /> : null}
         />
       )}
@@ -1153,9 +1163,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Empty state
+  // Empty state — flexGrow (not flex): it's a ScrollView contentContainerStyle
   emptyContainer: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 22,
     paddingTop: 40,
   },
