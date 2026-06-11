@@ -4,7 +4,7 @@ import { useMutation } from 'convex/react';
 import { Check } from 'lucide-react-native';
 import Animated, { ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { api } from '@/convex/_generated/api';
-import type { Id, Doc } from '@/convex/_generated/dataModel';
+import type { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily } from '@/constants/theme';
 import { hapticSelect } from '@/utils/haptics';
@@ -45,7 +45,10 @@ export function VisaChecklistCard({ tripId, title, items, checkedItems }: Props)
       localStore.setQuery(
         api.trips.getTrip,
         { id: args.id },
-        { ...trip, checklistProgress: next } as Doc<'trips'>,
+        // No cast: `trip` is getTrip's return shape (Doc + `_role`), and
+        // setQuery expects that same shape — casting to Doc<'trips'> would
+        // strip `_role` type-side and break the optimistic write.
+        { ...trip, checklistProgress: next },
       );
     },
   );

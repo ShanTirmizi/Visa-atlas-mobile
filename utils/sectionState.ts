@@ -4,13 +4,14 @@ import type { Doc } from '@/convex/_generated/dataModel';
 // mutate, so we accept readonly arrays. Using a structural type (rather than
 // `Pick<Doc<'trips'>, …>`) makes the helpers easy to call with literal
 // fixtures (`as const`) and Convex `Doc<'trips'>` values alike.
-type TripLike = {
+export type TripLike = {
   readonly status: Doc<'trips'>['status'];
   readonly itinerary: string;
   readonly highlights: string;
   readonly visaChecklist: string;
   readonly visaNotes?: string;
   readonly budgetBreakdown: string;
+  readonly diningGuide?: string;
   readonly failedSections?: readonly string[];
   readonly retryingSections?: readonly string[];
   readonly duration: number;
@@ -21,7 +22,8 @@ export type SectionName =
   | 'highlights'
   | 'visaChecklist'
   | 'visaNotes'
-  | 'budgetBreakdown';
+  | 'budgetBreakdown'
+  | 'diningGuide';
 
 // Sections that get streamed during trip generation. Country tips are NOT
 // in this list — they're served by `data/localInfo.ts` (handwritten) or
@@ -32,6 +34,7 @@ const STREAMED_SECTIONS: SectionName[] = [
   'visaChecklist',
   'visaNotes',
   'budgetBreakdown',
+  'diningGuide',
 ];
 
 const TOTAL_SECTIONS = STREAMED_SECTIONS.length + 2; // + itinerary + heroImage
@@ -108,6 +111,8 @@ export function getTabDotIndicators(trip: TripLike): Record<string, boolean> {
       // retry affordance on the Itinerary tab stays discoverable —
       // mirrors the Visa failure dot above.
       Itinerary: hasFailed(trip, 'itinerary'),
+      // Failed dining guide keeps its dot after settle — mirrors Visa.
+      Food: hasFailed(trip, 'diningGuide'),
     };
   }
   return {
@@ -119,5 +124,9 @@ export function getTabDotIndicators(trip: TripLike): Record<string, boolean> {
         const idx = getStreamingDayIndex(trip);
         return idx !== null && idx < (trip.duration ?? 0);
       })(),
+    // Dining is generated AFTER the itinerary finishes, so this stays
+    // pending (dot on) for most of the run — that's correct: the Food tab
+    // really is still being written.
+    Food: isSectionPending(trip, 'diningGuide'),
   };
 }

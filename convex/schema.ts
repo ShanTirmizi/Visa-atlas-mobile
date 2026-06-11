@@ -54,6 +54,12 @@ export default defineSchema({
     isMultiCountry: v.optional(v.boolean()),
     routeTitle: v.optional(v.string()),
     legs: v.optional(v.string()),
+    // JSON-stringified DiningGuide (types/itinerary.ts) — the per-trip
+    // restaurant guide. Generated AFTER the itinerary stream settles (it
+    // anchors picks to the day-by-day areas), so it's also the last
+    // section to land. Absent on pre-dining trips until the user runs
+    // the "Curate my food guide" backfill.
+    diningGuide: v.optional(v.string()),
     // User-pinned trip — heart on the trip detail header. Distinct from
     // country-level favorites (which live in client-side AsyncStorage).
     starred: v.optional(v.boolean()),

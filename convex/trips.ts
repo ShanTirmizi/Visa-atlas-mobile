@@ -41,13 +41,16 @@ export const listTrips = query({
 export const getTrip = query({
   args: { id: v.id("trips") },
   handler: async (ctx, args) => {
-    await checkTripPermission(ctx, args.id, "viewer");
+    const { role } = await checkTripPermission(ctx, args.id, "viewer");
     const trip = await ctx.db.get(args.id);
     // Soft-deleted trips read as missing — the trip screen already renders
     // its not-found state for null, which is exactly what a viewer should
     // see during the undo window.
     if (trip === null || trip.deletedAt !== undefined) return null;
-    return trip;
+    // _role mirrors listTrips: the client gates write affordances (Curate
+    // dining, retry cards) on it so viewers never see CTAs that can only
+    // throw "Requires editor role" server-side.
+    return { ...trip, _role: role };
   },
 });
 

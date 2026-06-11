@@ -150,7 +150,9 @@ function DayMapStrip({ day, destination }: DayMapStripProps) {
         ) : null}
 
         {places.map((place, idx) => (
-          <View key={place.slot}>
+          // Structured days can put several stops in one slot, so the slot
+          // alone is no longer a unique key — names are deduped upstream.
+          <View key={`${place.slot}-${place.name}`}>
             {geo || idx > 0 ? (
               <View
                 style={[styles.divider, { backgroundColor: colors.line }]}

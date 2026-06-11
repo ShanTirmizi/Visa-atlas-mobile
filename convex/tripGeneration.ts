@@ -12,6 +12,7 @@ import { SECTION_FIELD_MAP, STREAMING_SECTIONS } from "./lib/sectionFieldMap";
 import {
   buildSystemPrompt,
   buildItineraryUserPrompt,
+  buildDiningUserPrompt,
   buildVisaUserPrompt,
   buildBudgetUserPrompt,
   buildHighlightsUserPrompt,
@@ -20,6 +21,8 @@ import {
   makeWholeSectionBuffer,
   makeItineraryStreamParser,
 } from "./lib/anthropicStream";
+import type { DiningDayContext } from "./lib/anthropicStream";
+import { normalizeDiningGuide, isUsableStop } from "../types/itinerary";
 import { localInfo } from "../data/localInfo";
 import { toAlpha3 } from "../utils/countryCode";
 
@@ -305,13 +308,16 @@ function safeParseArray(raw: string): any[] {
 
 /**
  * Output-token budget for the itinerary stream, scaled to trip length.
- * A generated day runs ~400–700 output tokens; a flat 8192 cap silently
+ * A generated day now runs ~750–1100 output tokens (the prose plus 4-7
+ * structured stops at ~350 extra tokens/day); a flat 8192 cap silently
  * truncated long itineraries, which then completed as 'planned' with
- * missing days. Sonnet supports 64k output tokens, so even the planner's
- * 60-night ceiling fits comfortably.
+ * missing days. Sonnet supports 64k output tokens, so trips up to ~52
+ * days stay fully inside the cap; longer trips can truncate at the
+ * ceiling, where completeGeneration's realDays < duration check marks
+ * 'itinerary' failed so the retry card surfaces.
  */
 const itineraryMaxTokens = (duration: number) =>
-  Math.min(64_000, Math.max(8_192, 2_048 + duration * 800));
+  Math.min(64_000, Math.max(8_192, 2_048 + duration * 1150));
 
 /**
  * Stream the itinerary (day-by-day) into the trip doc. Shared by the main
@@ -339,22 +345,32 @@ function streamItineraryIntoTrip(
       resolve();
     };
     const userPrompt = buildItineraryUserPrompt(input);
+    // The parser fire-and-forgets the day callback, so collect each
+    // patch's promise and await them all in onComplete — otherwise the
+    // final day's patchTripSection may not have committed when the stream
+    // settles, and downstream readers (the dining day-context read, the
+    // itinerary-retry after-check) miss the last day.
+    const pending: Promise<void>[] = [];
     const itineraryParser = makeItineraryStreamParser(
-      async (dayIndex, dayJson) => {
-        try {
-          await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-            tripId,
-            section: `itinerary-day:${dayIndex}`,
-            content: dayJson,
-          });
-          if (dayIndex === 0) {
-            await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
-          }
-        } catch (err) {
-          // The parser fire-and-forgets this callback — never let a
-          // rejection escape as unhandled.
-          console.error(`Itinerary day ${dayIndex} patch failed:`, err);
-        }
+      (dayIndex, dayJson) => {
+        pending.push(
+          (async () => {
+            try {
+              await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                tripId,
+                section: `itinerary-day:${dayIndex}`,
+                content: dayJson,
+              });
+              if (dayIndex === 0) {
+                await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
+              }
+            } catch (err) {
+              // Never let a rejection escape as unhandled — each pushed
+              // promise resolves even when the patch fails.
+              console.error(`Itinerary day ${dayIndex} patch failed:`, err);
+            }
+          })(),
+        );
       },
       (err) => console.error("Itinerary parse error:", err),
     );
@@ -370,6 +386,10 @@ function streamItineraryIntoTrip(
         onComplete: async () => {
           try {
             itineraryParser.onComplete();
+            // Wait for every per-day patch to commit before settling.
+            // allSettled never rejects, and each pushed promise already
+            // catches its own errors — never-throw discipline holds.
+            await Promise.allSettled(pending);
             await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
           } catch (err) {
             console.error("Itinerary completion hook failed:", err);
@@ -393,6 +413,155 @@ function streamItineraryIntoTrip(
           }
         },
       },
+    );
+  });
+}
+
+/** True when a parsed itinerary day carries ≥1 usable structured stop.
+ * Built on the shared isUsableStop from types/itinerary — the single
+ * definition of "renderable stop" — so server and client never disagree
+ * on which days need backfilling. Walks untyped parsed JSON, hence any. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const hasUsableStops = (day: any): boolean =>
+  Array.isArray(day?.stops) && day.stops.some(isUsableStop);
+
+/**
+ * Generate the dining guide and patch it into `trips.diningGuide`. Runs
+ * inside runRetrySection's diningGuide branch — both the main generation
+ * run (via _beginDiningRun, scheduled after the itinerary settles) and
+ * the retry/backfill path land here. The prompt is anchored to the
+ * FINAL streamed days — one compact line per day listing where the
+ * traveler actually is — so restaurant picks land near the plan.
+ *
+ * Same settle discipline as streamItineraryIntoTrip: resolves when the
+ * stream settles — success or failure — and marks 'diningGuide' failed on
+ * any unusable outcome. Every path ends in settle(); an escaped rejection
+ * here would hang the caller's Promise chain and wedge the run.
+ */
+async function streamDiningIntoTrip(
+  ctx: ActionCtx,
+  tripId: Id<"trips">,
+  // Parsed originalInputs / generateTrip args — duration feeds the
+  // normalizer's day-range clamp; the prompt builders consume the rest.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  input: any,
+  apiKey: string,
+  systemPrompt: string,
+): Promise<void> {
+  // Mark the section failed without ever letting the marker's own failure
+  // escape — same shape as runSection's markFailed.
+  const markFailed = async () => {
+    try {
+      await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+        tripId,
+        section: "diningGuide",
+        content: "",
+        failed: true,
+      });
+    } catch (patchErr) {
+      console.error("Dining guide failure marker also failed:", patchErr);
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let days: any[] = [];
+  try {
+    const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
+    if (!trip) return; // deleted mid-run — nothing to anchor or mark
+    days = safeParseArray(trip.itinerary ?? "").filter(Boolean);
+  } catch (err) {
+    console.error("Dining guide trip read failed:", err);
+    await markFailed();
+    return;
+  }
+  if (days.length === 0) {
+    // Dining without an itinerary to anchor to is meaningless — surface
+    // the retry card instead of generating un-anchored picks.
+    await markFailed();
+    return;
+  }
+
+  const dayContexts: DiningDayContext[] = days.map((day, idx) => {
+    // Prefer the structured stops' names; fall back to the legacy
+    // per-slot place fields for pre-stops trips.
+    const fromStops: string[] = Array.isArray(day.stops)
+      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (day.stops as any[]).filter(isUsableStop).map((s) => String(s.name))
+      : [];
+    const places =
+      fromStops.length > 0
+        ? fromStops
+        : [day.morningPlace, day.afternoonPlace, day.eveningPlace]
+            .filter(Boolean)
+            .map(String);
+    return {
+      day: day.day ?? idx + 1,
+      title: day.title ?? "",
+      places: [...new Set(places)].slice(0, 6),
+    };
+  });
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    streamAnthropic(
+      {
+        apiKey,
+        systemPrompt,
+        userPrompt: buildDiningUserPrompt(input, dayContexts),
+        // 8192: the prompt targets up to 22 spots (~3.2-3.9k tokens typical,
+        // more with long `days` arrays) — 4096 truncated long guides into
+        // unbalanced JSON, and every retry rebuilt the identical
+        // prompt+budget, failing forever.
+        maxTokens: 8192,
+      },
+      makeWholeSectionBuffer(
+        async (full) => {
+          try {
+            // Tolerate prose around the JSON; null means truncated or no
+            // object at all. normalizeDiningGuide returns null when nothing
+            // usable survives validation — mark failed rather than store
+            // an empty guide.
+            const cleaned = extractFirstJsonObject(full);
+            const normalized = cleaned
+              ? normalizeDiningGuide(
+                  JSON.parse(cleaned),
+                  Number(input?.duration) || days.length,
+                )
+              : null;
+            if (!normalized) {
+              console.error(
+                "Dining guide output unusable:",
+                full.slice(0, 200),
+              );
+              await markFailed();
+              return;
+            }
+            await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+              tripId,
+              section: "diningGuide",
+              content: JSON.stringify(normalized),
+            });
+          } catch (err) {
+            console.error("Dining guide parse/patch failed:", err);
+            await markFailed();
+          } finally {
+            settle();
+          }
+        },
+        async (err) => {
+          console.error("Dining guide stream errored:", err);
+          try {
+            await markFailed();
+          } finally {
+            settle();
+          }
+        },
+      ),
     );
   });
 }
@@ -427,10 +596,21 @@ export const completeGeneration = internalMutation({
     const trip = await ctx.db.get(tripId);
     if (!trip || trip.status !== "generating") return;
     const days = trip.itinerary ? safeParseArray(trip.itinerary) : [];
+    // filter(Boolean): out-of-order day patches leave null holes — a hole
+    // is not a delivered day.
+    const realDays = days.filter(Boolean).length;
     const hasAnyContent =
-      days.length > 0 || STREAMING_SECTIONS.some((s) => !!trip[s]);
+      realDays > 0 || STREAMING_SECTIONS.some((s) => !!trip[s]);
+    // max_tokens truncation ends a stream "successfully", so a short
+    // itinerary would otherwise complete silently with no retry card —
+    // surface under-delivery as a failed section in the SAME patch that
+    // settles the status (deduped against entries already recorded).
+    const failed = trip.failedSections ?? [];
+    const underDelivered =
+      realDays < trip.duration && !failed.includes("itinerary");
     await ctx.db.patch(tripId, {
       status: hasAnyContent ? "planned" : "failed",
+      ...(underDelivered ? { failedSections: [...failed, "itinerary"] } : {}),
     });
     if (hasAnyContent) {
       // Trip-ready push for users who left the app mid-generation.
@@ -482,9 +662,11 @@ export const finalizeStuckGeneration = internalMutation({
       if (!trip[section]) failed.add(section);
     }
     const days = trip.itinerary ? safeParseArray(trip.itinerary) : [];
-    if (days.length < trip.duration) failed.add("itinerary");
+    // filter(Boolean): null holes from dropped days are not days.
+    const realDays = days.filter(Boolean).length;
+    if (realDays < trip.duration) failed.add("itinerary");
     const hasAnyContent =
-      days.length > 0 || STREAMING_SECTIONS.some((s) => !!trip[s]);
+      realDays > 0 || STREAMING_SECTIONS.some((s) => !!trip[s]);
     await ctx.db.patch(tripId, {
       failedSections: [...failed],
       retryingSections: [],
@@ -796,7 +978,23 @@ export const runGenerationStream = internalAction({
 
     try {
       const promises: Array<Promise<void>> = [
-        runItinerary(),
+        // Dining is sequential-after-itinerary by design — it anchors its
+        // restaurant picks to the streamed day areas, so it needs the final
+        // days as prompt context. But it runs as its OWN scheduled action
+        // (via _beginDiningRun → runRetrySection), not chained inside this
+        // action: a long itinerary plus dining would overrun the 10-minute
+        // action budget. The Food tab shows the reactive 'retrying' state
+        // via the retryingSections marker while it runs, and the trip can
+        // flip 'planned' before dining lands — by design (the trip is
+        // usable immediately; dining trickles in). The .catch ensures a
+        // kickoff failure can never reject the Promise.all.
+        runItinerary()
+          .then(async () => {
+            await ctx.runMutation(internal.tripGeneration._beginDiningRun, { tripId });
+          })
+          .catch((err) => {
+            console.error("Dining kickoff failed:", err);
+          }),
         runSection("__visa-bundle__", buildVisaUserPrompt(input), 1024, visaTransform),
         runSection("__budget-bundle__", buildBudgetUserPrompt(input), 1024, budgetTransform),
         runSection("highlights", buildHighlightsUserPrompt(input), 512),
@@ -820,6 +1018,40 @@ export const runGenerationStream = internalAction({
   },
 });
 
+/**
+ * Kick off the dining-guide generation as its OWN scheduled action run.
+ * Dining used to be chained after the itinerary inside runGenerationStream,
+ * which spent the main action's 10-minute budget twice over on long trips.
+ * Scheduling runRetrySection gives dining a fresh action budget; the Food
+ * tab shows the reactive 'retrying' state via the retryingSections marker
+ * while it runs; the trip can flip 'planned' before dining lands — by
+ * design (the trip is usable immediately, dining trickles in).
+ */
+export const _beginDiningRun = internalMutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip || trip.deletedAt !== undefined) return; // deleted mid-generation
+    const retrying = trip.retryingSections ?? [];
+    if (retrying.includes("diningGuide")) return; // a run is already in flight
+    await ctx.db.patch(tripId, {
+      retryingSections: [...retrying, "diningGuide"],
+    });
+    await ctx.scheduler.runAfter(0, internal.tripGeneration.runRetrySection, {
+      tripId,
+      section: "diningGuide",
+    });
+    // Watchdog mirrors finalizeStuckGeneration: actions are at-most-once,
+    // so a crash/redeploy/10-min-kill mid-run would strand the marker.
+    // _clearRetryingSection is an idempotent filter — a normal completion
+    // makes this a no-op.
+    await ctx.scheduler.runAfter(12 * 60_000, internal.tripGeneration._clearRetryingSection, {
+      tripId,
+      section: "diningGuide",
+    });
+  },
+});
+
 /** Sections the retry flow knows how to re-run. packingSuggestions /
  * accommodationTips / localEssentials are no longer generated by the
  * streaming flow — country-level tips come from data/localInfo.ts or the
@@ -831,6 +1063,7 @@ const RETRYABLE_SECTIONS = new Set([
   "budgetBreakdown",
   "dailyBudget",
   "itinerary",
+  "diningGuide",
 ]);
 
 /**
@@ -847,7 +1080,13 @@ export const retrySection = mutation({
     section: v.string(),
   },
   handler: async (ctx, { tripId, section }) => {
-    await checkTripPermission(ctx, tripId, "owner");
+    // Dining regeneration is deliberately editor-level, matching tweakDay
+    // and generateDiningGuide; everything else stays owner-only.
+    await checkTripPermission(
+      ctx,
+      tripId,
+      section === "diningGuide" ? "editor" : "owner",
+    );
 
     const trip = await ctx.db.get(tripId);
     if (!trip) throw new Error("Trip not found");
@@ -864,6 +1103,54 @@ export const retrySection = mutation({
       tripId,
       section,
     });
+    // Watchdog mirrors finalizeStuckGeneration: actions are at-most-once, so
+    // a crash mid-run would strand the marker. _clearRetryingSection is an
+    // idempotent filter — a normal completion makes this a no-op.
+    await ctx.scheduler.runAfter(12 * 60_000, internal.tripGeneration._clearRetryingSection, {
+      tripId,
+      section,
+    });
+  },
+});
+
+/**
+ * Generate (or regenerate) the dining guide for an existing trip — the
+ * back-fill path for trips created before dining existed, surfaced as the
+ * "Curate my food guide" CTA on the Food tab. New trips get their guide
+ * automatically at the end of the main generation run.
+ *
+ * Editor permission (not owner): collaborators who can tweak days can
+ * curate dining too. Mutation→scheduler→action shape per project rule;
+ * progress is reactive via retryingSections('diningGuide').
+ */
+export const generateDiningGuide = mutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    await checkTripPermission(ctx, tripId, "editor");
+    const trip = await ctx.db.get(tripId);
+    if (!trip || trip.deletedAt !== undefined) throw new Error("Trip not found");
+    if (trip.status === "generating") return; // the main run will produce it
+    if (!trip.originalInputs) throw new Error("No original inputs stored");
+    const days = trip.itinerary ? safeParseArray(trip.itinerary) : [];
+    if (days.filter(Boolean).length === 0) {
+      throw new Error("Itinerary not ready yet");
+    }
+    const retrying = trip.retryingSections ?? [];
+    if (retrying.includes("diningGuide")) return; // already in flight
+    await ctx.db.patch(tripId, {
+      retryingSections: [...retrying, "diningGuide"],
+    });
+    await ctx.scheduler.runAfter(0, internal.tripGeneration.runRetrySection, {
+      tripId,
+      section: "diningGuide",
+    });
+    // Watchdog mirrors finalizeStuckGeneration: actions are at-most-once, so
+    // a crash mid-run would strand the marker. _clearRetryingSection is an
+    // idempotent filter — a normal completion makes this a no-op.
+    await ctx.scheduler.runAfter(12 * 60_000, internal.tripGeneration._clearRetryingSection, {
+      tripId,
+      section: "diningGuide",
+    });
   },
 });
 
@@ -879,7 +1166,7 @@ const DAY_TWEAK_PROMPTS: Record<string, string> = {
   rainy:
     "Rewrite this single day as a rainy-day version: indoor alternatives (museums, markets, food halls, cafés, galleries) that keep the day's spirit and neighborhood where possible.",
   "swap-evening":
-    "Keep the morning and afternoon EXACTLY as they are (same text). Replace ONLY the evening with a different, equally specific plan — a different venue, ideally a different neighborhood.",
+    "Keep the morning and afternoon EXACTLY as they are (same text). Replace ONLY the evening with a different, equally specific plan — a different venue, ideally a different neighborhood. If the day has a \"stops\" array, the morning- and afternoon-slot stops must stay identical (same entries, same order) and only the evening-slot stops change.",
 };
 
 export const tweakDay = mutation({
@@ -910,6 +1197,13 @@ export const tweakDay = mutation({
       dayIndex,
       instruction,
     });
+    // Watchdog mirrors finalizeStuckGeneration: actions are at-most-once, so
+    // a crash mid-run would strand the marker. _clearRetryingSection is an
+    // idempotent filter — a normal completion makes this a no-op.
+    await ctx.scheduler.runAfter(12 * 60_000, internal.tripGeneration._clearRetryingSection, {
+      tripId,
+      section: key,
+    });
   },
 });
 
@@ -938,7 +1232,7 @@ ${JSON.stringify(day)}
 
 ${guidance}
 
-Keep the exact same JSON shape (same keys), keep "day": ${dayIndex + 1}, recommend real places by name. Output ONLY the JSON object — no fences, no commentary.`;
+Keep the exact same JSON shape (same keys), keep "day": ${dayIndex + 1}, recommend real places by name. When the day object contains a "stops" array, rewrite it to match the new plan — 4-7 stops across morning/afternoon/evening with the same per-stop keys (slot, time, name, note, kind, duration) — keeping the prose and the stops telling the same story. Output ONLY the JSON object — no fences, no commentary.`;
 
       await new Promise<void>((resolve) => {
         streamAnthropic(
@@ -956,11 +1250,60 @@ Keep the exact same JSON shape (same keys), keep "day": ${dayIndex + 1}, recomme
                   );
                   return;
                 }
-                JSON.parse(cleaned); // validate — a bad payload keeps the old day
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const parsed: any = JSON.parse(cleaned); // a bad payload keeps the old day
+                // The 'same keys' / 'swap-evening keeps morning+afternoon'
+                // contracts were prompt-only — enforce them server-side so
+                // a tweak can never silently destroy a day's stops.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const originalStops: any[] = Array.isArray(day?.stops)
+                  ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (day.stops as any[]).filter(isUsableStop)
+                  : [];
+                let contentToPatch = cleaned;
+                if (originalStops.length > 0) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const parsedStops: any[] = Array.isArray(parsed?.stops)
+                    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      (parsed.stops as any[]).filter(isUsableStop)
+                    : [];
+                  if (instruction === "swap-evening") {
+                    // Force-preserve the contract: morning/afternoon stops
+                    // are the ORIGINAL ones verbatim; only evening changes.
+                    const newEvening = parsedStops.filter((s) => s.slot === "evening");
+                    const hadEvening = originalStops.some((s) => s.slot === "evening");
+                    if (hadEvening && newEvening.length === 0) {
+                      console.error(
+                        `Day tweak ${dayIndex}: swap-evening returned no usable evening stops; keeping the old day`,
+                      );
+                      return;
+                    }
+                    contentToPatch = JSON.stringify({
+                      ...parsed,
+                      stops: [
+                        ...originalStops.filter((s) => s.slot === "morning"),
+                        ...originalStops.filter((s) => s.slot === "afternoon"),
+                        ...newEvening,
+                      ],
+                    });
+                  } else {
+                    // relaxed / rainy (and any future instruction): a rewrite
+                    // that loses every stop is a destroyed day, not a tweak.
+                    if (parsedStops.length === 0) {
+                      console.error(
+                        `Day tweak ${dayIndex}: rewrite returned no usable stops; keeping the old day`,
+                      );
+                      return;
+                    }
+                    contentToPatch = JSON.stringify({ ...parsed, stops: parsedStops });
+                  }
+                }
+                // Original day had no usable stops → legacy day, stops
+                // optional — accept the parsed day as-is.
                 await ctx.runMutation(internal.tripGeneration.patchTripSection, {
                   tripId,
                   section: `itinerary-day:${dayIndex}`,
-                  content: cleaned,
+                  content: contentToPatch,
                 });
               } catch (err) {
                 console.error(`Day tweak ${dayIndex} patch failed:`, err);
@@ -1048,6 +1391,22 @@ async function runRetrySectionInner(
       return;
     }
 
+    if (section === "diningGuide") {
+      // Also the backfill path for trips created before dining existed —
+      // generateDiningGuide schedules this even when the section was never
+      // marked failed, and _clearFailedSection no-ops harmlessly then.
+      await streamDiningIntoTrip(ctx, tripId, input, apiKey, systemPrompt);
+      // Only clear the failure marker if the run actually produced a guide.
+      const after = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
+      if (after?.diningGuide) {
+        await ctx.runMutation(internal.tripGeneration._clearFailedSection, {
+          tripId,
+          section: "diningGuide",
+        });
+      }
+      return;
+    }
+
     let userPrompt: string;
     let maxTokens = 1024;
     switch (section) {
@@ -1114,6 +1473,241 @@ async function runRetrySectionInner(
     });
   }
 }
+
+/**
+ * Backfill structured `stops` arrays onto legacy itinerary days created
+ * before the structured-stops release. The model structures (not
+ * reinvents) what each day's prose already describes; results merge into
+ * the stored itinerary via _mergeBackfilledStops — a single mutation
+ * transaction, so a concurrent itinerary write (EditDaySheet save,
+ * tweakDay patch) can't be clobbered by a stale whole-array overwrite.
+ * Never throws — every failure logs and leaves the itinerary untouched.
+ *
+ * Invoked manually via CLI for now:
+ *   npx convex run tripGeneration:backfillDayStops '{"tripId":"..."}'
+ */
+export const backfillDayStops = internalAction({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    try {
+      const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
+      if (!trip?.originalInputs || !trip.itinerary) return;
+      const days = safeParseArray(trip.itinerary);
+      const missing = days
+        .map((day, idx) => ({ day, idx }))
+        .filter(({ day }) => day && !hasUsableStops(day));
+      if (missing.length === 0) return;
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        console.error("backfillDayStops: ANTHROPIC_API_KEY not set");
+        return;
+      }
+      let input: Parameters<typeof buildSystemPrompt>[0];
+      try {
+        input = JSON.parse(trip.originalInputs);
+      } catch {
+        console.error(`backfillDayStops: corrupted originalInputs on ${tripId}`);
+        return;
+      }
+      const systemPrompt = buildSystemPrompt(input);
+
+      const dayNumberFor = ({ day, idx }: { day: (typeof days)[number]; idx: number }): number =>
+        Number.isInteger(day.day) ? day.day : idx + 1;
+      const missingDayNumbers = new Set(missing.map(dayNumberFor));
+
+      const dayBlocks = missing
+        .map((entry) => {
+          const { day } = entry;
+          const n = dayNumberFor(entry);
+          return `Day ${n} — ${day.title ?? ""}
+morning: ${day.morning ?? ""}${day.morningPlace ? ` (place: ${day.morningPlace})` : ""}
+afternoon: ${day.afternoon ?? ""}${day.afternoonPlace ? ` (place: ${day.afternoonPlace})` : ""}
+evening: ${day.evening ?? ""}${day.eveningPlace ? ` (place: ${day.eveningPlace})` : ""}`;
+        })
+        .join("\n\n");
+
+      // Same stop schema as buildItineraryUserPrompt — the backfilled days
+      // must be indistinguishable from natively-generated ones.
+      const userPrompt = `Here are the days of an existing itinerary that lack structured stops. Each day's prose already describes the plan:
+
+${dayBlocks}
+
+Output a JSON object with this exact shape:
+
+{
+  "days": [
+    {
+      "day": N,
+      "stops": [
+        {
+          "slot": "morning" | "afternoon" | "evening",
+          "time": "09:00",
+          "name": "Real place name — exact enough to find in Apple Maps",
+          "note": "ONE editorial sentence: what you do there and why it earns its slot.",
+          "kind": "landmark" | "museum" | "gallery" | "market" | "nature" | "walk" | "neighborhood" | "experience" | "cafe" | "viewpoint" | "beach" | "shopping",
+          "duration": "1½ hrs"
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Cover EXACTLY the days listed above — no more, no fewer.
+- 4-7 stops per day, spread across the three slots (each slot gets at least one). Times are plausible 24h local starts in chronological order.
+- Every stop is a real, currently-operating place CONSISTENT WITH THE EXISTING PROSE — extract and structure what the prose already describes; only invent a stop when a slot's prose names no place.
+
+Output ONLY the JSON object. No preamble, no markdown fences.`;
+
+      const maxTokens = Math.min(16_384, 1_024 + missing.length * 550);
+
+      await new Promise<void>((resolve) => {
+        streamAnthropic(
+          { apiKey, systemPrompt, userPrompt, maxTokens },
+          makeWholeSectionBuffer(
+            async (full) => {
+              try {
+                const cleaned = extractFirstJsonObject(full);
+                if (!cleaned) {
+                  console.error(
+                    "backfillDayStops: no parseable JSON in output:",
+                    full.slice(0, 200),
+                  );
+                  return;
+                }
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const parsed: any = JSON.parse(cleaned);
+                if (!Array.isArray(parsed?.days)) {
+                  console.error("backfillDayStops: output missing days array");
+                  return;
+                }
+                // Validate LLM output into the mutation payload here; the
+                // read-merge-write happens inside _mergeBackfilledStops as
+                // ONE transaction, so a concurrent itinerary write can't be
+                // reverted by a stale overwrite from this action.
+                const payload: Array<{
+                  day: number;
+                  stops: Array<{
+                    slot: string;
+                    name: string;
+                    note: string;
+                    kind?: string;
+                    time?: string;
+                    duration?: string;
+                  }>;
+                }> = [];
+                for (const entry of parsed.days) {
+                  const n = entry?.day;
+                  if (!Number.isInteger(n) || !missingDayNumbers.has(n)) {
+                    console.error(`backfillDayStops: skipping unrequested/invalid day:`, n);
+                    continue;
+                  }
+                  const stops = Array.isArray(entry.stops)
+                    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      (entry.stops as any[]).filter(isUsableStop)
+                    : [];
+                  if (stops.length === 0) {
+                    console.error(`backfillDayStops: day ${n} returned no usable stops; skipping`);
+                    continue;
+                  }
+                  payload.push({
+                    day: n,
+                    // Map to exactly the keys the args validator allows —
+                    // stray LLM fields would fail v.object validation.
+                    stops: stops.map((s) => ({
+                      slot: String(s.slot),
+                      name: String(s.name),
+                      note: String(s.note),
+                      ...(typeof s.kind === "string" ? { kind: s.kind } : {}),
+                      ...(typeof s.time === "string" ? { time: s.time } : {}),
+                      ...(typeof s.duration === "string" ? { duration: s.duration } : {}),
+                    })),
+                  });
+                }
+                if (payload.length > 0) {
+                  await ctx.runMutation(internal.tripGeneration._mergeBackfilledStops, {
+                    tripId,
+                    days: payload,
+                  });
+                }
+              } catch (err) {
+                console.error("backfillDayStops merge failed:", err);
+              } finally {
+                resolve();
+              }
+            },
+            (err) => {
+              console.error("backfillDayStops stream errored:", err);
+              resolve();
+            },
+          ),
+        );
+      });
+    } catch (err) {
+      console.error("backfillDayStops failed:", err);
+    }
+  },
+});
+
+/**
+ * Merge backfilled stops into the stored itinerary in ONE transaction.
+ * backfillDayStops used to re-read via a query and write via a generic
+ * field patch from the action — any itinerary write committing between the
+ * two (EditDaySheet whole-array save, tweakDay patch) was silently reverted
+ * by the stale whole-array overwrite. Doing the read-merge-write inside a
+ * single mutation makes the merge transactional: per-day, a target that has
+ * grown usable stops since the action read it (a concurrent tweak is
+ * fresher) or no longer exists is skipped.
+ */
+export const _mergeBackfilledStops = internalMutation({
+  args: {
+    tripId: v.id("trips"),
+    days: v.array(
+      v.object({
+        day: v.number(),
+        stops: v.array(
+          v.object({
+            slot: v.string(),
+            name: v.string(),
+            note: v.string(),
+            kind: v.optional(v.string()),
+            time: v.optional(v.string()),
+            duration: v.optional(v.string()),
+          }),
+        ),
+      }),
+    ),
+  },
+  handler: async (ctx, { tripId, days }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip?.itinerary) return;
+    const stored = safeParseArray(trip.itinerary);
+    let merged = 0;
+    for (const entry of days) {
+      const n = entry.day;
+      // Match by day.day; fall back to the 1-indexed position.
+      let targetIdx = stored.findIndex((d) => d && d.day === n);
+      if (targetIdx === -1 && stored[n - 1]) targetIdx = n - 1;
+      if (targetIdx === -1) {
+        console.error(`_mergeBackfilledStops: day ${n} not found in itinerary; skipping`);
+        continue;
+      }
+      if (hasUsableStops(stored[targetIdx])) {
+        // A concurrent tweak already structured this day — its stops are
+        // fresher than ours.
+        continue;
+      }
+      const stops = entry.stops.filter(isUsableStop);
+      if (stops.length === 0) continue;
+      stored[targetIdx] = { ...stored[targetIdx], stops };
+      merged++;
+    }
+    if (merged > 0) {
+      await ctx.db.patch(tripId, { itinerary: JSON.stringify(stored) });
+    }
+  },
+});
 
 /** Internal query for retrySection to read the trip — keeps the action stateless. */
 export const _getTripForRetry = internalQuery({

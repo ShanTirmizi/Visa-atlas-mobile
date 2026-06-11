@@ -45,6 +45,11 @@ import { Flag } from '@/components/ui/Flag';
 import { toAlpha2 } from '@/utils/countryCode';
 import { endpoints } from '@/constants/api';
 import {
+  mergeStopsIntoProposal,
+  parseItineraryDays,
+  type ItineraryDay,
+} from '@/types/itinerary';
+import {
   FontFamily,
   Spacing,
 } from '@/constants/theme';
@@ -107,14 +112,6 @@ async function regenerateImagesForItinerary(
     value: string;
   }) => Promise<unknown>,
 ): Promise<void> {
-  type ItineraryDay = {
-    morningPlace?: string;
-    afternoonPlace?: string;
-    eveningPlace?: string;
-    title?: string;
-    heroSubject?: string;
-  };
-
   let itineraryDays: ItineraryDay[] = [];
   try {
     itineraryDays = JSON.parse(itineraryJson) as ItineraryDay[];
@@ -253,7 +250,6 @@ export default function ChatScreen() {
   const countryName = trip?.countryName ?? 'your trip';
   const alpha2 = toAlpha2(trip?.countryCode ?? '');
 
-  type ItineraryDay = { day: number; title: string; morning: string; afternoon: string; evening: string };
   const currentDay = useMemo<ItineraryDay | null>(() => {
     if (dayIndex === null || !trip?.itinerary) return null;
     try {
@@ -279,11 +275,32 @@ export default function ChatScreen() {
   // and fires the photo regeneration exactly like the legacy auto-apply flow.
   const applyItineraryUpdate = useCallback(
     async (itinerary: string, stampId: string | null) => {
+      // The /api/trip-chat endpoint emits the LEGACY day shape (no `stops`)
+      // — writing its proposal verbatim would wipe every day's structured
+      // stops on ANY accepted edit, including the zero-diff silent-apply
+      // path. Merge the live trip's stops into the proposal first; the
+      // per-slot prose-staleness rule lives in mergeStopsIntoProposal.
+      // Proposals that aren't a parseable day array keep the verbatim
+      // write so the legacy path stays intact.
+      let value = itinerary;
+      try {
+        const raw: unknown =
+          typeof itinerary === 'string' ? JSON.parse(itinerary) : itinerary;
+        if (Array.isArray(raw)) {
+          const proposalDays = raw.filter(
+            (d): d is ItineraryDay => !!d && typeof d === 'object',
+          );
+          const currentDays = parseItineraryDays(trip?.itinerary);
+          value = JSON.stringify(mergeStopsIntoProposal(currentDays, proposalDays));
+        }
+      } catch {
+        // Unparseable proposal — fall through to the verbatim write.
+      }
       try {
         await updateTripField({
           id: tripId as Id<'trips'>,
           field: 'itinerary',
-          value: itinerary,
+          value,
         });
         if (stampId) {
           setUpdatedMsgIds((prev) => {
@@ -304,9 +321,10 @@ export default function ChatScreen() {
         // Fire-and-forget: regenerate per-day + per-activity images so the
         // user sees fresh photography for the new itinerary the next time
         // they open the trip detail. The text update is done; this just
-        // catches the visuals up.
+        // catches the visuals up. Uses the merged value — same days/places,
+        // and it's what actually got written.
         void regenerateImagesForItinerary(
-          itinerary,
+          value,
           {
             countryName: trip?.countryName,
             capital: trip?.capital,
@@ -326,7 +344,7 @@ export default function ChatScreen() {
         console.warn('itinerary patch failed', err);
       }
     },
-    [tripId, trip?.countryName, trip?.capital, updateTripField],
+    [tripId, trip?.itinerary, trip?.countryName, trip?.capital, updateTripField],
   );
 
   const sendChat = useCallback(

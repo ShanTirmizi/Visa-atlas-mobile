@@ -4,8 +4,9 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
-import DayDetailScreen, { type DayDetailDay } from '@/components/trip/DayDetailScreen';
+import DayDetailScreen from '@/components/trip/DayDetailScreen';
 import EditDaySheet, { type EditDaySheetRef } from '@/components/trip/EditDaySheet';
+import { parseDiningGuide, parseItineraryDays } from '@/types/itinerary';
 import { useTheme } from '@/contexts/theme-context';
 
 type DayImage = { url: string; thumb?: string; credit?: string; creditUrl?: string } | null;
@@ -39,12 +40,18 @@ export default function DayDetailRoute() {
     isAuthenticated && tripId ? { tripId } : 'skip',
   );
 
-  const itinerary = useMemo<DayDetailDay[]>(
-    // filter(Boolean): out-of-order per-day stream patches can leave
-    // transient null holes in the stored array — same guard as DayDeck,
-    // which also routes here by filtered-array position.
-    () => safeParse<DayDetailDay[]>(trip?.itinerary, []).filter(Boolean),
+  // parseItineraryDays drops the transient null holes out-of-order per-day
+  // stream patches can leave in the stored array — same guard DayDeck
+  // applies, which also routes here by filtered-array position.
+  const itinerary = useMemo(
+    () => parseItineraryDays(trip?.itinerary),
     [trip?.itinerary],
+  );
+  // Per-trip dining guide — lunch/dinner suggestions woven into the day
+  // timeline. Older trips have no guide; the screen hides the inserts.
+  const diningGuide = useMemo(
+    () => parseDiningGuide(trip?.diningGuide),
+    [trip?.diningGuide],
   );
   const dayImages = useMemo<DayImage[]>(
     () => safeParse<DayImage[]>(trip?.dayImages, []),
@@ -55,6 +62,25 @@ export default function DayDetailRoute() {
     [trip?.activityImages],
   );
 
+  // ── Two index domains live on this screen — never mix them. ──
+  //
+  // clampedIndex — position in the FILTERED parseItineraryDays array.
+  //   Used ONLY for prev/next paging and the EditDaySheet (which edits the
+  //   filtered array and writes it back whole).
+  //
+  // storedIndex — position in the STORED trips.itinerary array, derived
+  //   from the authoritative 1-based `day.day`. Used for everything
+  //   server-addressed or per-stored-day: tweakDay, the
+  //   `itinerary-day:` retrying key, dayImages/activityImages lookups
+  //   (base = storedIndex * 3 + slot) and the trip-start-date offset.
+  //   Identical to clampedIndex until a null hole is filtered out.
+  const clampedIndex = Math.max(
+    0,
+    Math.min(dayIndex, Math.max(0, itinerary.length - 1)),
+  );
+  const day = itinerary[clampedIndex];
+  const storedIndex = (day?.day ?? clampedIndex + 1) - 1;
+
   const onBack = useCallback(() => {
     router.back();
   }, []);
@@ -64,12 +90,11 @@ export default function DayDetailRoute() {
   }, []);
 
   const onShare = useCallback(async () => {
-    const day = itinerary[dayIndex];
     if (!day) return;
     await Share.share({
       message: `Day ${day.day}: ${day.title}`,
     }).catch(() => {});
-  }, [itinerary, dayIndex]);
+  }, [day]);
 
   const editSheetRef = useRef<EditDaySheetRef>(null);
   const onEdit = useCallback(() => {
@@ -77,12 +102,12 @@ export default function DayDetailRoute() {
   }, []);
 
   const onTweakWithAI = useCallback(() => {
-    // Pass the day index as a query param so the chat screen can scope the
-    // conversation to this specific day instead of the whole trip.
-    router.push(`/chat/${tripId}?day=${dayIndex}` as never);
-  }, [tripId, dayIndex]);
+    // Pass the STORED day index — the chat screen scopes the conversation
+    // by indexing the raw (unfiltered) trips.itinerary array.
+    router.push(`/chat/${tripId}?day=${storedIndex}` as never);
+  }, [tripId, storedIndex]);
 
-  if (!trip || itinerary.length === 0) {
+  if (!trip || itinerary.length === 0 || !day) {
     return (
       <View style={[styles.loading, { backgroundColor: colors.background }]}>
         <ActivityIndicator color={colors.foreground} />
@@ -90,21 +115,20 @@ export default function DayDetailRoute() {
     );
   }
 
-  const clampedIndex = Math.max(0, Math.min(dayIndex, itinerary.length - 1));
-  const day = itinerary[clampedIndex];
-
   return (
     <>
       <DayDetailScreen
         day={day}
         dayIndex={clampedIndex}
+        storedDayIndex={storedIndex}
         numDays={itinerary.length}
-        heroImage={dayImages[clampedIndex] ?? null}
-        morningImage={activityImages[clampedIndex * 3] ?? null}
-        afternoonImage={activityImages[clampedIndex * 3 + 1] ?? null}
-        eveningImage={activityImages[clampedIndex * 3 + 2] ?? null}
+        heroImage={dayImages[storedIndex] ?? null}
+        morningImage={activityImages[storedIndex * 3] ?? null}
+        afternoonImage={activityImages[storedIndex * 3 + 1] ?? null}
+        eveningImage={activityImages[storedIndex * 3 + 2] ?? null}
         destination={trip.countryName}
         tripStartDate={trip.startDate}
+        diningGuide={diningGuide}
         onBack={onBack}
         onShare={onShare}
         onEdit={onEdit}
@@ -112,7 +136,7 @@ export default function DayDetailRoute() {
         onNavigateDay={onNavigateDay}
         tripId={tripId}
         isDayRewriting={(trip.retryingSections ?? []).includes(
-          `itinerary-day:${clampedIndex}`,
+          `itinerary-day:${storedIndex}`,
         )}
         bookings={bookings}
       />

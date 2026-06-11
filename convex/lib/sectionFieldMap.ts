@@ -19,6 +19,7 @@ export const SECTION_FIELD_MAP = {
   visaCategory: "visaCategory",
   budgetBreakdown: "budgetBreakdown",
   dailyBudget: "dailyBudget",
+  diningGuide: "diningGuide",
   packingSuggestions: "packingSuggestions",
   accommodationTips: "accommodationTips",
   localEssentials: "localEssentials",
@@ -47,4 +48,9 @@ export const STREAMING_SECTIONS = [
   "visaNotes",
   "budgetBreakdown",
   "dailyBudget",
+  // Dining runs AFTER the itinerary stream settles (it needs the final
+  // day-by-day areas as prompt context), so it's the last section to
+  // land. Including it here means the stuck-generation finalizer marks
+  // it failed (→ retry card on the Food tab) when a run dies early.
+  "diningGuide",
 ] as const satisfies readonly (keyof typeof SECTION_FIELD_MAP)[];

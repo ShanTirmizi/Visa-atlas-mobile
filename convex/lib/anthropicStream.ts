@@ -78,16 +78,87 @@ export function buildItineraryUserPrompt(input: GenerateInput): string {
   "title": "Editorial title — short, evocative, specific to the day's character",
   "subtitle": "ALL CAPS · KICKER · UNDER 5 WORDS",
   "heroSubject": "The single most photogenic place/landmark for this day, used to fetch the hero image",
-  "morning": "2-4 sentences. Specific recommendations with named places. Editorial tone.",
+  "morning": "1-2 sentences. The connective narrative for the morning — how the stops hang together, what the slot feels like. Do NOT repeat the stop notes verbatim.",
   "morningPlace": "The primary place name for morning",
-  "afternoon": "2-4 sentences.",
+  "afternoon": "1-2 sentences.",
   "afternoonPlace": "...",
-  "evening": "2-4 sentences.",
+  "evening": "1-2 sentences.",
   "eveningPlace": "...",
-  "tip": "Optional one-sentence local tip. May be omitted."
+  "tip": "Optional one-sentence local tip. May be omitted.",
+  "stops": [
+    {
+      "slot": "morning" | "afternoon" | "evening",
+      "time": "09:00",
+      "name": "Real place name — exact enough to find in Apple Maps",
+      "note": "ONE editorial sentence: what you do there and why it earns its slot.",
+      "kind": "landmark" | "museum" | "gallery" | "market" | "nature" | "walk" | "neighborhood" | "experience" | "cafe" | "viewpoint" | "beach" | "shopping",
+      "duration": "1½ hrs"
+    }
+  ]
 }
 
+Rules for "stops": 4-7 per day spread across the three slots (each slot gets at least one). Times are plausible 24h local starts in chronological order. Every stop is a real, currently-operating place. The morning/afternoon/evening prose must narrate the same plan the stops describe.
+
 Emit ONLY the JSON array. No surrounding object, no preamble.${userNotesReminder}`;
+}
+
+/**
+ * One compact line per day, fed into the dining prompt so restaurant
+ * picks anchor to where the traveler actually is each day. Built from
+ * the FINAL streamed itinerary (dining generation runs after the
+ * itinerary settles).
+ */
+export interface DiningDayContext {
+  day: number;
+  title: string;
+  places: string[];
+}
+
+export function buildDiningUserPrompt(
+  input: GenerateInput,
+  dayContexts: DiningDayContext[],
+): string {
+  const spotTarget = Math.min(Math.max(input.duration * 2, 8), 22);
+  const dayLines = dayContexts
+    .map((d) => `Day ${d.day} — ${d.title}: ${d.places.join(", ") || "city centre"}`)
+    .join("\n");
+
+  return `Curate the dining guide for this trip. Here is the traveler's day-by-day plan (the areas they'll actually be in):
+
+${dayLines}
+
+Output a JSON object with this exact shape:
+
+{
+  "intro": "2-3 editorial sentences on ${input.countryName}'s food scene, tuned to this traveler.",
+  "mustTry": [
+    { "dish": "Dish name", "note": "One sentence — what it is and where it shines." }
+  ],
+  "spots": [
+    {
+      "name": "Real restaurant name — exact enough to find in Apple Maps",
+      "cuisine": "Short cuisine label, e.g. 'Roman trattoria'",
+      "price": "$" | "$$" | "$$$" | "$$$$",
+      "area": "Neighborhood / area name",
+      "knownFor": "The signature order — 'Order the X.' One sentence.",
+      "why": "One sentence tying it to THIS trip's vibe, party and budget.",
+      "crowd": "local-favorite" | "institution" | "tourist-classic" | "new-wave",
+      "meals": ["breakfast" | "lunch" | "dinner" | "snack", ...],
+      "days": [2, 5],
+      "reserveAhead": true,
+      "walkNote": "Optional: '5-min walk from the Alcázar' — only when genuinely near a listed stop."
+    }
+  ]
+}
+
+Rules:
+- "mustTry": 4-6 dishes.
+- "spots": about ${spotTarget} entries. Real, well-established, currently-operating restaurants ONLY — when unsure a place still exists, pick a safer well-known one. NEVER invent ratings, review counts, or scores.
+- "days" holds the 1-based day numbers (1-${input.duration}) whose plan puts the traveler near that spot. Every day of the trip must be covered by at least one lunch option and one dinner option. A spot may serve several days.
+- Spread across price points around the ${input.budget} tier, mix crowd types, include at least one breakfast/cafe pick.
+- "reserveAhead" only where booking genuinely matters; omit otherwise.
+
+Output ONLY the JSON object. No preamble, no markdown fences.`;
 }
 
 export function buildVisaUserPrompt(input: GenerateInput): string {

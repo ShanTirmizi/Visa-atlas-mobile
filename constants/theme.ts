@@ -62,6 +62,13 @@ export const LightColors = {
   gold: '#8A6B1E',
   goldSoft: 'rgba(138,107,30,0.12)',
 
+  // Dining — roasted russet. Food-tab accents, crowd pills, LUNCH/DINNER
+  // kickers on the day timeline. Deliberately earthier than coral and
+  // deeper than evisa so the three never read as the same orange.
+  dining: '#8C4A2F',
+  diningBg: 'rgba(140,74,47,0.10)',
+  diningDeep: '#6F3A25',
+
   // Semantic
   danger: '#A83A5E',
   dangerDim: '#8A2E4C',

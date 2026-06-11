@@ -17,16 +17,11 @@ import { useTheme } from '@/contexts/theme-context';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { hapticImpact, hapticSelect } from '@/utils/haptics';
 import { FontFamily } from '@/constants/theme';
+import type { ItineraryDay } from '@/types/itinerary';
 
-// Matches the day shape produced by the trip planner and consumed by the
-// trip detail screen (see ItineraryDay in app/chat/[tripId].tsx).
-interface ItineraryDay {
-  day: number;
-  title?: string;
-  morning?: string;
-  afternoon?: string;
-  evening?: string;
-}
+// Diff-tolerant view of the shared day contract — AI proposals may carry
+// partial days, so everything except the matching key is optional.
+type DiffDay = Partial<ItineraryDay> & Pick<ItineraryDay, 'day'>;
 
 export interface SlotChange {
   slot: 'Title' | 'Morning' | 'Afternoon' | 'Evening';
@@ -42,12 +37,12 @@ export interface DayDiff {
   changes: SlotChange[];
 }
 
-function parseDays(json: string): ItineraryDay[] | null {
+function parseDays(json: string): DiffDay[] | null {
   try {
     const parsed = JSON.parse(json) as unknown;
     if (!Array.isArray(parsed)) return null;
     return parsed.filter(
-      (d): d is ItineraryDay =>
+      (d): d is DiffDay =>
         typeof d === 'object' &&
         d !== null &&
         typeof (d as { day?: unknown }).day === 'number',
@@ -76,7 +71,7 @@ export function diffItineraries(
   const proposedDayNumbers = new Set(proposed.map((d) => d.day));
   const diffs: DayDiff[] = [];
 
-  const slots: { slot: SlotChange['slot']; key: keyof ItineraryDay & ('title' | 'morning' | 'afternoon' | 'evening') }[] = [
+  const slots: { slot: SlotChange['slot']; key: keyof DiffDay & ('title' | 'morning' | 'afternoon' | 'evening') }[] = [
     { slot: 'Title', key: 'title' },
     { slot: 'Morning', key: 'morning' },
     { slot: 'Afternoon', key: 'afternoon' },

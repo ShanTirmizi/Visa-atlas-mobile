@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -74,14 +74,28 @@ export function SegmentedControl({
   };
 
   if (variant === 'squiggle') {
-    // Trip-tabs style: text-only with coral squiggle underline on the active tab.
+    // Trip-tabs style: text-only with coral squiggle underline on the active
+    // tab. Horizontal ScrollView so six-plus tabs overflow gracefully on
+    // small iPhones (App Store / Linear scrollable-tabs pattern) — when the
+    // row fits, it renders identically to the old fixed row.
     return (
-      <View
-        style={{
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        // RN defaults alwaysBounceHorizontal=true on horizontal ScrollViews
+        // — when the tabs fit, the row must read as static, not rubber-band.
+        alwaysBounceHorizontal={false}
+        // The 8px content padding below buys PulsingDot clip headroom; the
+        // -4 margin nets the labels back to the original 4px optical inset
+        // every squiggle screen was aligned against.
+        style={{ marginHorizontal: -4 }}
+        contentContainerStyle={{
           flexDirection: 'row',
           gap: 22,
           alignItems: 'center',
-          paddingHorizontal: 4,
+          // 8 (not 4): the PulsingDot overhangs labels by 7px and would
+          // otherwise clip against the ScrollView's content edge.
+          paddingHorizontal: 8,
           paddingTop: 6,
           paddingBottom: 10,
         }}
@@ -123,7 +137,7 @@ export function SegmentedControl({
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
     );
   }
 

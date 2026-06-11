@@ -19,19 +19,11 @@ import { FontFamily } from '@/constants/theme';
 import { PillButton } from '@/components/ui/PillButton';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { TypingDots } from '@/components/ui/TypingDots';
+import type { ItineraryDay } from '@/types/itinerary';
 
-export interface DayDeckDay {
-  day: number;
-  title: string;
-  morning: string;
-  morningPlace?: string;
-  afternoon: string;
-  afternoonPlace?: string;
-  evening: string;
-  eveningPlace?: string;
-  tip: string;
-  heroSubject?: string;
-}
+/** The deck consumes the shared itinerary-day contract (types/itinerary.ts)
+ *  — alias retained for existing import sites. */
+export type DayDeckDay = ItineraryDay;
 
 interface DayDeckProps {
   tripId: string;

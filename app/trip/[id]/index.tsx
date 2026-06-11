@@ -50,6 +50,10 @@ import BookingDetailSheet, {
 // ── DayDeck (for Itinerary tab) ────────────────────────────
 import DayDeck from '@/components/trip/DayDeck';
 
+// ── Food tab — per-trip dining guide ───────────────────────
+import { FoodTab } from '@/components/trip/food/FoodTab';
+import { parseDiningGuide, type ItineraryDay } from '@/types/itinerary';
+
 // ── Collaboration — overlapping avatars in the header ──────
 import { CollabStack } from '@/components/trip/CollabStack';
 
@@ -87,18 +91,6 @@ import {
 // Types
 // ──────────────────────────────────────────────────────────
 
-interface ItineraryDay {
-  day: number;
-  title: string;
-  morning: string;
-  morningPlace?: string;
-  afternoon: string;
-  afternoonPlace?: string;
-  evening: string;
-  eveningPlace?: string;
-  tip: string;
-  heroSubject?: string;
-}
 
 // ──────────────────────────────────────────────────────────
 // Helpers
@@ -161,8 +153,8 @@ function normalizeStreamedVisaCategory(
 // Tab options
 // ──────────────────────────────────────────────────────────
 
-type TabKey = 'Overview' | 'Itinerary' | 'Bookings' | 'Visa' | 'Tips';
-const TABS: TabKey[] = ['Overview', 'Itinerary', 'Bookings', 'Visa', 'Tips'];
+type TabKey = 'Overview' | 'Itinerary' | 'Food' | 'Bookings' | 'Visa' | 'Tips';
+const TABS: TabKey[] = ['Overview', 'Itinerary', 'Food', 'Bookings', 'Visa', 'Tips'];
 
 // `tabSlideIn` lives in @/utils/tabAnimation — shared with country detail
 // and any other tabbed surface that needs the same premium swap feel.
@@ -345,6 +337,23 @@ export default function TripDetailScreen() {
       >(trip?.activityImages, []),
     [trip?.activityImages],
   );
+
+  const diningGuide = useMemo(
+    () => parseDiningGuide(trip?.diningGuide),
+    [trip?.diningGuide],
+  );
+
+  // Day number → position in the FILTERED itinerary array. The day route
+  // resolves its `idx` param against this same filtered array, so chips and
+  // links must navigate by filtered position — `day.day - 1` is wrong the
+  // moment a null hole was filtered out mid-stream.
+  const dayIndexByNumber = useMemo<Record<number, number>>(() => {
+    const map: Record<number, number> = {};
+    itinerary.forEach((d, idx) => {
+      map[d.day ?? idx + 1] = idx;
+    });
+    return map;
+  }, [itinerary]);
 
   // ── Derived: NextUpCard data ─────────────────────────────
   const firstActivity = useMemo(() => {
@@ -652,6 +661,25 @@ export default function TripDetailScreen() {
             </Animated.View>
           );
         })()}
+
+        {/* ── Food tab — per-trip dining guide. FoodTab derives its own
+            pending / failed / retrying / absent / loaded state from the
+            live trip doc via the sectionState helpers. ── */}
+        {activeTab === 'Food' && (
+          <Animated.View
+            entering={tabSlideIn(tabDirection * 18)}
+            style={{ paddingHorizontal: 16, paddingTop: 8 }}
+          >
+            <FoodTab
+              tripId={trip._id}
+              guide={diningGuide}
+              trip={trip}
+              countryName={trip.countryName}
+              dayIndexByNumber={dayIndexByNumber}
+              role={trip._role}
+            />
+          </Animated.View>
+        )}
 
         {/* ── Bookings tab ── */}
         {activeTab === 'Bookings' && (

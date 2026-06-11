@@ -15,7 +15,7 @@ import { FontFamily } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CircleBtn } from '@/components/ui/CircleBtn';
 import { Photo, type PhotoTone } from '@/components/ui/Photo';
-import { StopList, type Stop } from '@/components/trip/day/StopList';
+import { DayTimeline, type SlotImage } from '@/components/trip/day/DayTimeline';
 import { PullQuote } from '@/components/trip/day/PullQuote';
 import { DayTweakChips } from '@/components/trip/day/DayTweakChips';
 import { DayBookingsStrip, type DayStripBooking } from '@/components/trip/day/DayBookingsStrip';
@@ -26,27 +26,31 @@ import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { tabSlideIn } from '@/utils/tabAnimation';
 import { hapticSelect } from '@/utils/haptics';
+import {
+  type ItineraryDay,
+  type DiningGuide,
+  type StopSlot,
+  hasStructuredStops,
+  stopsForSlot,
+} from '@/types/itinerary';
 
-export interface DayDetailDay {
-  day: number;
-  title: string;
-  morning: string;
-  morningPlace?: string;
-  afternoon: string;
-  afternoonPlace?: string;
-  evening: string;
-  eveningPlace?: string;
-  tip: string;
-  /** Optional: explicit local tip for PullQuote (falls back to `tip`) */
-  localTip?: string;
-}
+/** The day screen consumes the shared itinerary contract (types/itinerary.ts)
+ *  — alias retained for existing import sites. */
+export type DayDetailDay = ItineraryDay;
 
 type DayImage = { url: string; credit?: string; creditUrl?: string } | null;
-type ActivityImage = { url: string; thumb: string; credit: string; source: string } | null;
+type ActivityImage = SlotImage;
 
 interface DayDetailScreenProps {
   day: DayDetailDay;
+  /** Position in the FILTERED parseItineraryDays array — drives prev/next
+   *  paging and the swipe animation keys ONLY. */
   dayIndex: number;
+  /** Position in the STORED trips.itinerary array (`day.day - 1`) —
+   *  drives everything server-addressed or calendar-based: tweakDay,
+   *  the bookings strip and the start-date offset. Diverges from
+   *  `dayIndex` when a null hole was filtered out of the stored array. */
+  storedDayIndex: number;
   numDays: number;
   heroImage: DayImage;
   morningImage: ActivityImage;
@@ -54,6 +58,9 @@ interface DayDetailScreenProps {
   eveningImage: ActivityImage;
   destination?: string;
   tripStartDate?: string;
+  /** Parsed `trips.diningGuide` — lunch/dinner suggestions woven into the
+   *  timeline. null hides the dining inserts entirely. */
+  diningGuide: DiningGuide | null;
   onBack: () => void;
   onShare: () => void;
   onEdit?: () => void;
@@ -63,8 +70,9 @@ interface DayDetailScreenProps {
   /** Convex trip id — enables the one-tap tweak chips (DayTweakChips owns
    *  the mutation). Absent → the chip row doesn't render. */
   tripId?: Id<'trips'>;
-  /** True while `trip.retryingSections` contains `itinerary-day:${dayIndex}`
-   *  — a server-side tweakDay rewrite for THIS day is in flight. */
+  /** True while `trip.retryingSections` contains
+   *  `itinerary-day:${storedDayIndex}` — a server-side tweakDay rewrite
+   *  for THIS day is in flight. */
   isDayRewriting?: boolean;
   /** Trip bookings — rows whose dates cover this day render at the top of
    *  the timeline. */
@@ -125,48 +133,16 @@ function deriveDayTitle(day: DayDetailDay): string {
   return `Day ${day.day}`;
 }
 
-function buildStops(day: DayDetailDay, morningImg: ActivityImage, afternoonImg: ActivityImage, eveningImg: ActivityImage): Stop[] {
-  const stops: Stop[] = [];
-
-  // Pass the FULL activity text as `detail`. The previous version sliced
-  // off everything after the first sentence (`split('.')[0]`), so a 4-
-  // sentence morning was silently truncated to one — and StopList then
-  // clipped that one sentence to 2 lines for good measure. Now we pass
-  // everything; StopList renders it fully (no clamp on the day detail
-  // page — the user has already committed to reading this day).
-  const buildStop = (
-    text: string,
-    place: string | undefined,
-    meta: 'Morning' | 'Afternoon' | 'Evening',
-    timeLabel: string,
-    img: ActivityImage,
-  ): Stop | null => {
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return null;
-    // Title prefers the place name; otherwise fall back to a clipped first
-    // sentence (titles need to stay short).
-    const fallbackTitle = trimmed.split('.')[0].trim().slice(0, 50);
-    const title = place ?? fallbackTitle;
-    // Detail = the full activity text, unless it'd duplicate the title
-    // (when the place name *is* the only thing the LLM said for this slot).
-    const detail = trimmed === (place ?? '') ? undefined : trimmed;
-    return {
-      title,
-      meta,
-      timeLabel,
-      detail,
-      thumbUri: img?.thumb || img?.url,
-    };
-  };
-
-  const morning = buildStop(day.morning, day.morningPlace, 'Morning', '09:30', morningImg);
-  if (morning) stops.push(morning);
-  const afternoon = buildStop(day.afternoon, day.afternoonPlace, 'Afternoon', '13:00', afternoonImg);
-  if (afternoon) stops.push(afternoon);
-  const evening = buildStop(day.evening, day.eveningPlace, 'Evening', '18:30', eveningImg);
-  if (evening) stops.push(evening);
-
-  return stops;
+/** Stops shown in the subtitle: valid structured stops when the day has
+ *  them, otherwise the count of non-empty prose slots (legacy days). */
+function countDayStops(day: DayDetailDay): number {
+  if (hasStructuredStops(day)) {
+    const slots: StopSlot[] = ['morning', 'afternoon', 'evening'];
+    return slots.reduce((n, slot) => n + stopsForSlot(day, slot).length, 0);
+  }
+  return [day.morning, day.afternoon, day.evening].filter(
+    (t) => (t ?? '').trim().length > 0,
+  ).length;
 }
 
 function deriveTip(day: DayDetailDay): string {
@@ -198,6 +174,7 @@ function heroToneFromDestination(destination: string | undefined): PhotoTone {
 function DayDetailScreen({
   day,
   dayIndex,
+  storedDayIndex,
   numDays,
   heroImage,
   morningImage,
@@ -205,6 +182,7 @@ function DayDetailScreen({
   eveningImage,
   destination,
   tripStartDate,
+  diningGuide,
   onBack,
   onEdit,
   onNavigateDay,
@@ -267,15 +245,13 @@ function DayDetailScreen({
     [goToDay, dayIndex],
   );
 
-  const stops = useMemo(
-    () => buildStops(day, morningImage, afternoonImage, eveningImage),
-    [day, morningImage, afternoonImage, eveningImage],
-  );
+  const stopCount = useMemo(() => countDayStops(day), [day]);
 
   const dayTitle = useMemo(() => deriveDayTitle(day), [day]);
+  // Calendar offset is stored-domain: startDate + (day.day - 1) days.
   const subtitle = useMemo(
-    () => formatDaySubtitle(tripStartDate, dayIndex, stops.length),
-    [tripStartDate, dayIndex, stops.length],
+    () => formatDaySubtitle(tripStartDate, storedDayIndex, stopCount),
+    [tripStartDate, storedDayIndex, stopCount],
   );
   const tip = useMemo(() => deriveTip(day), [day]);
   const heroTone = useMemo(() => heroToneFromDestination(destination), [destination]);
@@ -410,7 +386,9 @@ function DayDetailScreen({
               <ChevronLeft size={16} color="#FFFFFF" strokeWidth={2.4} />
             </Pressable>
             <View style={styles.dayNavLabel}>
-              <Text style={styles.dayNavText}>{`Day ${dayIndex + 1} of ${numDays}`}</Text>
+              {/* day.day (authoritative day number) drives the label, not
+                  the filtered-array position. */}
+              <Text style={styles.dayNavText}>{`Day ${day.day ?? dayIndex + 1} of ${numDays}`}</Text>
             </View>
             <Pressable
               onPress={() => goToDay(dayIndex + 1)}
@@ -477,11 +455,20 @@ function DayDetailScreen({
           <DayBookingsStrip
             bookings={bookings}
             tripStartDate={tripStartDate}
-            dayIndex={dayIndex}
+            dayIndex={storedDayIndex}
           />
 
-          {/* Stop list */}
-          {stops.length > 0 ? <StopList stops={stops} /> : null}
+          {/* Slot-grouped timeline — structured stops with dining woven in;
+              legacy days fall back to chunked-prose slot rows inside. */}
+          <DayTimeline
+            day={day}
+            diningGuide={diningGuide}
+            destination={destination}
+            morningImage={morningImage}
+            afternoonImage={afternoonImage}
+            eveningImage={eveningImage}
+          />
+
 
           {/* Destination mini-map + open-in-Maps rows (renders nothing
               when the day has no named places) */}
@@ -495,7 +482,8 @@ function DayDetailScreen({
           {tripId ? (
             <DayTweakChips
               tripId={tripId}
-              dayIndex={dayIndex}
+              // tweakDay addresses the STORED itinerary array server-side.
+              dayIndex={storedDayIndex}
               isRewriting={isDayRewriting ?? false}
             />
           ) : null}

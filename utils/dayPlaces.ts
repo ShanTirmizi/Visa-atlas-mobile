@@ -10,12 +10,20 @@
 import { visaData } from '@/data/visaData';
 import { countryCoordinates } from '@/data/countryCoordinates';
 import { countryMeta } from '@/data/countryMeta';
+import {
+  stopsForSlot,
+  type ItineraryStop,
+  type StopSlot,
+} from '@/types/itinerary';
 
-/** The three optional named-place slots on an itinerary day. */
+/** The place-bearing fields of an itinerary day — the three legacy
+ *  `*Place` slots plus the structured `stops` (post-2026-06 trips).
+ *  A full ItineraryDay is structurally assignable. */
 export interface DayPlaceSlots {
   morningPlace?: string;
   afternoonPlace?: string;
   eveningPlace?: string;
+  stops?: ItineraryStop[];
 }
 
 export type DaySlot = 'Morning' | 'Afternoon' | 'Evening';
@@ -25,9 +33,38 @@ export interface DayPlace {
   name: string;
 }
 
-/** Extracts the day's non-empty named places in chronological order. */
+const SLOT_LABEL: Record<StopSlot, DaySlot> = {
+  morning: 'Morning',
+  afternoon: 'Afternoon',
+  evening: 'Evening',
+};
+
+// A structured day can carry many stops; cap the Maps rows so the strip
+// stays a strip (the timeline above already lists every stop).
+const MAX_PLACES = 6;
+
+/**
+ * Extracts the day's named places in chronological order for the Maps
+ * rows. Days with structured stops contribute every unique stop name
+ * (slot-labeled, in slot order, capped at MAX_PLACES); legacy days fall
+ * back to the three `*Place` fields.
+ */
 export function getDayPlaces(day: DayPlaceSlots): DayPlace[] {
-  const slots: Array<[DaySlot, string | undefined]> = [
+  const structured: DayPlace[] = [];
+  const seen = new Set<string>();
+  for (const slot of ['morning', 'afternoon', 'evening'] as const) {
+    for (const stop of stopsForSlot(day, slot)) {
+      const name = stop.name.trim();
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      structured.push({ slot: SLOT_LABEL[slot], name });
+    }
+  }
+  if (structured.length > 0) return structured.slice(0, MAX_PLACES);
+
+  // Legacy fallback — the three named-place fields.
+  const slots: [DaySlot, string | undefined][] = [
     ['Morning', day.morningPlace],
     ['Afternoon', day.afternoonPlace],
     ['Evening', day.eveningPlace],

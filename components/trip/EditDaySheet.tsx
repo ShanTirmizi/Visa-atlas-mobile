@@ -19,6 +19,7 @@ import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
+import type { ItineraryDay, StopSlot } from '@/types/itinerary';
 import { FontFamily, type ThemeColors } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
@@ -36,18 +37,9 @@ import { PillButton } from '@/components/ui/PillButton';
 // moves — RNKC's KAW is the effective owner and scrolls the focused input
 // the remaining distance. We set "interactive" explicitly to document that.
 
-export interface EditableDay {
-  day: number;
-  title: string;
-  morning: string;
-  morningPlace?: string;
-  afternoon: string;
-  afternoonPlace?: string;
-  evening: string;
-  eveningPlace?: string;
-  tip: string;
-  heroSubject?: string;
-}
+/** The sheet edits the shared itinerary-day contract (types/itinerary.ts)
+ *  — alias retained for existing import sites. */
+export type EditableDay = ItineraryDay;
 
 export interface EditDaySheetProps {
   tripId: string;
@@ -81,6 +73,17 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
     const [tip, setTip] = useState(initial?.tip ?? '');
     const [saving, setSaving] = useState(false);
 
+    // Slot prose as LOADED into the form — the baseline for the
+    // "did the user edit this slot?" check in handleSave. Comparing
+    // against the live `itinerary` prop instead would mark every slot
+    // edited if a tweakDay/collaborator rewrite lands while the sheet is
+    // open, reverting the rewrite's prose and destroying its stops.
+    const loadedProseRef = useRef({
+      morning: initial?.morning ?? '',
+      afternoon: initial?.afternoon ?? '',
+      evening: initial?.evening ?? '',
+    });
+
     // Reset local state to current itinerary every time the sheet opens, so
     // the user always sees the latest server state on re-entry.
     const resetState = useCallback(() => {
@@ -93,6 +96,11 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
       setEveningPlace(d?.eveningPlace ?? '');
       setEvening(d?.evening ?? '');
       setTip(d?.tip ?? '');
+      loadedProseRef.current = {
+        morning: d?.morning ?? '',
+        afternoon: d?.afternoon ?? '',
+        evening: d?.evening ?? '',
+      };
       setSaving(false);
     }, [itinerary, dayIndex]);
 
@@ -121,21 +129,50 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
     const handleSave = async () => {
       setSaving(true);
       try {
-        const updated: EditableDay[] = itinerary.map((d, i) =>
-          i === dayIndex
-            ? {
-                ...d,
-                title: title.trim() || d.title,
-                morningPlace: morningPlace.trim() || undefined,
-                morning: morning.trim(),
-                afternoonPlace: afternoonPlace.trim() || undefined,
-                afternoon: afternoon.trim(),
-                eveningPlace: eveningPlace.trim() || undefined,
-                evening: evening.trim(),
-                tip: tip.trim(),
-              }
-            : d,
-        );
+        const updated: EditableDay[] = itinerary.map((d, i) => {
+          if (i !== dayIndex) return d;
+
+          const nextMorning = morning.trim();
+          const nextAfternoon = afternoon.trim();
+          const nextEvening = evening.trim();
+
+          // A manual prose edit makes that slot's structured stops stale —
+          // the user rewrote the slot's narrative, so the LLM-emitted stops
+          // no longer describe it. Drop ONLY the edited slots' stops (the
+          // day screen then falls back to prose rendering for that slot);
+          // untouched slots keep theirs. LLM tweak paths (tweakDay / chat
+          // apply) rewrite stops together with the prose instead, so they
+          // never go stale that way.
+          //
+          // Compare against the prose AS LOADED (loadedProseRef), not the
+          // live `d` — if a rewrite landed while the sheet was open, the
+          // live prose differs from what the user saw and every slot would
+          // wrongly read as "edited".
+          const loaded = loadedProseRef.current;
+          const editedSlots = new Set<StopSlot>();
+          if (nextMorning !== loaded.morning.trim()) editedSlots.add('morning');
+          if (nextAfternoon !== loaded.afternoon.trim()) editedSlots.add('afternoon');
+          if (nextEvening !== loaded.evening.trim()) editedSlots.add('evening');
+          const stops =
+            Array.isArray(d.stops) && editedSlots.size > 0
+              ? d.stops.filter((s) => !editedSlots.has(s.slot))
+              : d.stops;
+
+          return {
+            ...d,
+            title: title.trim() || d.title,
+            morningPlace: morningPlace.trim() || undefined,
+            morning: nextMorning,
+            afternoonPlace: afternoonPlace.trim() || undefined,
+            afternoon: nextAfternoon,
+            eveningPlace: eveningPlace.trim() || undefined,
+            evening: nextEvening,
+            tip: tip.trim(),
+            // Days without stops keep no key (undefined is dropped by
+            // JSON.stringify, matching the stored shape).
+            stops,
+          };
+        });
 
         await updateField({
           id: tripId as Id<'trips'>,

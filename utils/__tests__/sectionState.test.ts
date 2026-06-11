@@ -107,9 +107,29 @@ describe('sectionState helpers', () => {
   });
 
   it('getTotalSectionCount is the same constant', () => {
-    // 4 streamed sections (highlights, visaChecklist, visaNotes,
-    // budgetBreakdown) + itinerary + heroImage = 6
-    expect(getTotalSectionCount()).toBe(6);
+    // 5 streamed sections (highlights, visaChecklist, visaNotes,
+    // budgetBreakdown, diningGuide) + itinerary + heroImage = 7
+    expect(getTotalSectionCount()).toBe(7);
+  });
+
+  it('getTabDotIndicators flags Food while dining is pending mid-generation', () => {
+    expect(
+      getTabDotIndicators({ ...baseTrip, status: 'generating' }).Food,
+    ).toBe(true);
+    expect(
+      getTabDotIndicators({
+        ...baseTrip,
+        status: 'generating',
+        diningGuide: '{"intro":"x","mustTry":[],"spots":[]}',
+      }).Food,
+    ).toBe(false);
+  });
+
+  it('getTabDotIndicators flags Food on failure after generation settles', () => {
+    expect(
+      getTabDotIndicators({ ...baseTrip, failedSections: ['diningGuide'] }).Food,
+    ).toBe(true);
+    expect(getTabDotIndicators(baseTrip).Food).toBe(false);
   });
 
   it('getTabDotIndicators flags Itinerary on failure, settled or generating', () => {
