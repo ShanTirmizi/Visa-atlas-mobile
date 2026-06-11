@@ -556,6 +556,10 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         // back when the keyboard dismisses. The CTA collapse below
         // shrinks the form so the input ends up just above the keyboard.
         keyboardBlurBehavior="restore"
+        // gorhom's documented Android requirement for interactive keyboard
+        // handling — the inherited adjustPan default pans the whole window
+        // and is jumpy with edge-to-edge. Matches EditDaySheet/VisaChatSheet.
+        android_keyboardInputMode="adjustResize"
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
         // Use onDismiss (not onChange === -1). The default stackBehavior is

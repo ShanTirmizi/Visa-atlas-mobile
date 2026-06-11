@@ -75,6 +75,15 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
           setError("We don't have an email on file for your account.");
           return;
         }
+        if (result.status === 'cooldown') {
+          // A code was sent moments ago — move to the verify step so the
+          // user can type it, rather than dead-ending on an error.
+          setStep('verify');
+          setNotice(
+            `A code was just sent to ${email ?? 'your email'}. You can request another in ${result.retryInSeconds}s.`,
+          );
+          return;
+        }
         setStep('verify');
         setNotice(`Code sent to ${email ?? 'your email'}.`);
       } catch (err) {
@@ -94,7 +103,28 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
       setError(null);
       setVerifying(true);
       try {
-        await verifyCode({ code: cleanCode });
+        const result = await verifyCode({ code: cleanCode });
+        if (!result.verified) {
+          switch (result.reason) {
+            case 'noCode':
+              setError('Send a code first.');
+              break;
+            case 'expired':
+              setError('Code expired. Send a new one.');
+              break;
+            case 'tooManyAttempts':
+              setError('Too many incorrect attempts. Send a new code.');
+              break;
+            case 'invalid':
+              setError(
+                result.attemptsLeft === 1
+                  ? 'Invalid code. 1 attempt left.'
+                  : `Invalid code. ${result.attemptsLeft} attempts left.`,
+              );
+              break;
+          }
+          return;
+        }
         setNotice('Email verified.');
         onVerified?.();
         setTimeout(() => sheetRef.current?.dismiss(), 600);

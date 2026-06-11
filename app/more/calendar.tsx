@@ -8,11 +8,12 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Calendar as CalendarIcon, RefreshCw, Unlink, ChevronRight } from 'lucide-react-native';
+import { Calendar as CalendarIcon, RefreshCw, Unlink } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useCalendar } from '@/contexts/calendar-context';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing } from '@/constants/theme';
+import { BackButton } from '@/components/ui/BackButton';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
@@ -28,25 +29,22 @@ function formatRelativeTime(isoString: string): string {
 export default function CalendarScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { isConnected, lastSyncTime, isSyncing, sync, connect, disconnect } = useCalendar();
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{
-        paddingTop: insets.top + Spacing.md,
-        paddingBottom: insets.bottom + 100,
-      }}
-      showsVerticalScrollIndicator={false}
-    >
-      <TouchableOpacity
-        style={[styles.backBtn, { backgroundColor: colors.surface }]}
-        onPress={() => router.back()}
-        hitSlop={12}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{
+          paddingTop: insets.top + Spacing.md,
+          paddingBottom: insets.bottom + 100,
+          paddingHorizontal: Spacing.lg,
+        }}
+        showsVerticalScrollIndicator={false}
       >
-        <ArrowLeft color={colors.foreground} size={20} />
-      </TouchableOpacity>
+      <View style={styles.backBtnWrap}>
+        <BackButton />
+      </View>
 
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
         Calendar Sync
@@ -79,7 +77,6 @@ export default function CalendarScreen() {
               Connect Calendar
             </Text>
           </View>
-          <ChevronRight color="#FFFFFF" size={18} />
         </TouchableOpacity>
       ) : (
         <>
@@ -108,7 +105,6 @@ export default function CalendarScreen() {
                 )}
               </View>
             </View>
-            <ChevronRight color="#FFFFFF" size={18} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -137,25 +133,25 @@ export default function CalendarScreen() {
                 Disconnect Calendar
               </Text>
             </View>
-            <ChevronRight color="#FFFFFF" size={18} />
           </TouchableOpacity>
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+
+      <TopSafeAreaBlur />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+  scroll: {
+    flex: 1,
+  },
+  backBtnWrap: {
+    alignSelf: 'flex-start',
     marginBottom: Spacing.md,
   },
   sectionTitle: {

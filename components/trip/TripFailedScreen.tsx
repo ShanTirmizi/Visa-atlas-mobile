@@ -82,7 +82,7 @@ export function TripFailedScreen({ trip }: TripFailedScreenProps) {
           },
         ]}
       >
-        Couldn't create your trip<Text style={{ color: colors.coral }}>.</Text>
+        Couldn’t create your trip<Text style={{ color: colors.coral }}>.</Text>
       </Text>
       <Text style={[Type.body13, { color: colors.inkMute, textAlign: 'center', marginBottom: 28 }]}>
         Something went wrong while generating. Your inputs are saved — try again.

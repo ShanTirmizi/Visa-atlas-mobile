@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  Platform,
+  ScrollView,
   ActivityIndicator,
   Pressable,
   TextInput,
@@ -252,11 +252,20 @@ export default function ForgotPasswordScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // RNKC's KeyboardAvoidingView is a no-op when behavior is undefined,
+        // and edge-to-edge Android has no OS adjustResize fallback — pass
+        // "padding" unconditionally (same fix as sign-in).
+        behavior="padding"
       >
-        <View
-          style={{
-            flex: 1,
+        {/* ScrollView (not a plain flex View) so that on small devices the
+            keyboard-compressed content scrolls instead of squashing the
+            code/password fields — mirrors sign-in. */}
+        <ScrollView
+          style={{ flex: 1 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            flexGrow: 1,
             paddingTop: insets.top + 24,
             paddingBottom: insets.bottom + 24,
             paddingHorizontal: 22,
@@ -316,7 +325,7 @@ export default function ForgotPasswordScreen() {
                 </Text>
 
                 <Text style={sublineStyle(colors)}>
-                  Enter your email and we'll send you a code to reset it.
+                  Enter your email and we’ll send you a code to reset it.
                 </Text>
 
                 {error ? <ErrorBanner text={error} colors={colors} /> : null}
@@ -520,7 +529,7 @@ export default function ForgotPasswordScreen() {
               </>
             )}
           </Animated.View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Glass header overlay — always on top */}

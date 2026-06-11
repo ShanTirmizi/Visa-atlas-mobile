@@ -30,12 +30,14 @@ async function executeMutationIntent(
   switch (action) {
     case 'updateTripStatus': {
       const status = payload.status;
-      if (typeof status !== 'string') {
-        throw new Error(`updateTripStatus: expected string status, got ${typeof status}`);
+      // Only user-facing statuses are client-settable — 'generating'/'failed'
+      // are owned by the server-side generation pipeline (convex/trips.ts).
+      if (status !== 'planned' && status !== 'completed') {
+        throw new Error(`updateTripStatus: unsupported status ${String(status)}`);
       }
       await client.mutation(api.trips.updateTripStatus, {
         id: documentId as Id<'trips'>,
-        status: status as 'planned' | 'completed' | 'generating' | 'failed',
+        status,
       });
       break;
     }

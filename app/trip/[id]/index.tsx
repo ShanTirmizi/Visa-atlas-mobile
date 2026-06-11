@@ -255,10 +255,19 @@ export default function TripDetailScreen() {
   }, [id]);
 
   // ── Parsed data ──────────────────────────────────────────
-  const itinerary = useMemo(
-    () => safeParse<ItineraryDay[]>(trip?.itinerary, []),
-    [trip?.itinerary],
-  );
+  const itinerary = useMemo(() => {
+    const parsed = safeParse<Array<ItineraryDay | null | undefined>>(
+      trip?.itinerary,
+      [],
+    );
+    // Out-of-order per-day patches during streaming can leave transient
+    // null holes in the array (the server pads `days[idx] = …` past the
+    // end, and a malformed day can be skipped entirely). Filtering is
+    // render-safe: day labels come from `day.day`, not array position.
+    return Array.isArray(parsed)
+      ? parsed.filter((d): d is ItineraryDay => Boolean(d))
+      : [];
+  }, [trip?.itinerary]);
 
   const heroImage = useMemo(
     () =>
@@ -299,12 +308,18 @@ export default function TripDetailScreen() {
   // ── Derived: HighlightsStrip data ───────────────────────
   const highlights = useMemo<HighlightItem[]>(() => {
     if (itinerary.length === 0) return [];
-    return itinerary.slice(0, 6).map((day, idx) => ({
-      label: day.morning,
-      dayStamp: `DAY ${day.day ?? idx + 1}`,
-      imageUri: dayImages[idx]?.thumb ?? dayImages[idx]?.url ?? undefined,
-      onPress: () => router.push(`/trip/${id}/day/${idx}` as never),
-    }));
+    return itinerary.slice(0, 6).map((day, idx) => {
+      // Index images by the authoritative day number, not array position —
+      // identical in the steady state (server stamps day = idx + 1), but
+      // stays aligned if a null hole was filtered out mid-stream.
+      const imgIdx = (day.day ?? idx + 1) - 1;
+      return {
+        label: day.morning,
+        dayStamp: `DAY ${day.day ?? idx + 1}`,
+        imageUri: dayImages[imgIdx]?.thumb ?? dayImages[imgIdx]?.url ?? undefined,
+        onPress: () => router.push(`/trip/${id}/day/${idx}` as never),
+      };
+    });
   }, [itinerary, dayImages, id, router]);
 
   // ── Destination label ────────────────────────────────────
@@ -547,20 +562,38 @@ export default function TripDetailScreen() {
         )}
 
         {/* ── Itinerary tab ── */}
-        {activeTab === 'Itinerary' && (
-          <Animated.View entering={tabSlideIn(tabDirection * 18)} style={{ paddingTop: 8 }}>
-            <DayDeck
-              tripId={String(trip._id)}
-              days={itinerary}
-              dayImages={dayImages}
-              tripHeroImage={heroImage}
-              tripStartDate={trip.startDate}
-              destination={trip.countryName}
-              streamingDayIndex={getStreamingDayIndex(trip)}
-              expectedDayCount={trip.duration}
-            />
-          </Animated.View>
-        )}
+        {activeTab === 'Itinerary' && (() => {
+          // Mirrors the Visa tab's failure surface: if the itinerary stream
+          // failed, show a retry card below whatever partial days made it
+          // through. With zero days the deck's "No itinerary available"
+          // empty state would just duplicate the card's message, so the
+          // card stands alone in that case.
+          const itineraryFailed = hasFailed(trip, 'itinerary');
+          return (
+            <Animated.View entering={tabSlideIn(tabDirection * 18)} style={{ paddingTop: 8 }}>
+              {(itinerary.length > 0 || !itineraryFailed) && (
+                <DayDeck
+                  tripId={String(trip._id)}
+                  days={itinerary}
+                  dayImages={dayImages}
+                  tripHeroImage={heroImage}
+                  tripStartDate={trip.startDate}
+                  destination={trip.countryName}
+                  streamingDayIndex={getStreamingDayIndex(trip)}
+                  expectedDayCount={trip.duration}
+                />
+              )}
+              {itineraryFailed && (
+                <SectionRetryCard
+                  tripId={trip._id}
+                  section="itinerary"
+                  label="itinerary"
+                  retrying={isRetrying(trip, 'itinerary')}
+                />
+              )}
+            </Animated.View>
+          );
+        })()}
 
         {/* ── Bookings tab ── */}
         {activeTab === 'Bookings' && (

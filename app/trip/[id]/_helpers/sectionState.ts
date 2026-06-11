@@ -57,10 +57,17 @@ export function isSectionPending(trip: TripLike, section: SectionName): boolean 
 
 export function getStreamingDayIndex(trip: TripLike): number | null {
   if (!isGenerating(trip)) return null;
+  // Once the itinerary stream has failed, days are no longer arriving —
+  // returning null here unmounts the "writing…" pill/dots so the
+  // SectionRetryCard owns the state instead of contradicting it.
+  if (hasFailed(trip, 'itinerary')) return null;
   if (!trip.itinerary) return 0;
   try {
     const parsed = JSON.parse(trip.itinerary);
-    return Array.isArray(parsed) ? parsed.length : 0;
+    // Out-of-order per-day patches can leave transient null holes in the
+    // array (the server pads `days[idx] = …` past the end). Count only
+    // real days so the streaming index matches what's actually rendered.
+    return Array.isArray(parsed) ? parsed.filter(Boolean).length : 0;
   } catch {
     return 0;
   }
@@ -74,7 +81,9 @@ export function getCompletedSectionCount(trip: TripLike): number {
   if (trip.itinerary) {
     try {
       const days = JSON.parse(trip.itinerary);
-      if (Array.isArray(days) && days.length >= (trip.duration ?? 0)) count++;
+      // filter(Boolean): null holes from out-of-order day patches aren't
+      // completed days — see getStreamingDayIndex.
+      if (Array.isArray(days) && days.filter(Boolean).length >= (trip.duration ?? 0)) count++;
     } catch {
       /* */
     }
@@ -95,15 +104,20 @@ export function getTabDotIndicators(trip: TripLike): Record<string, boolean> {
       // or the cache, not from per-trip streaming, so there's no
       // per-trip pending or failed state to surface here.
       Tips: false,
-      Itinerary: false,
+      // A failed itinerary keeps its dot after generation settles so the
+      // retry affordance on the Itinerary tab stays discoverable —
+      // mirrors the Visa failure dot above.
+      Itinerary: hasFailed(trip, 'itinerary'),
     };
   }
   return {
     Visa: isSectionPending(trip, 'visaChecklist') || isSectionPending(trip, 'visaNotes'),
     Tips: false,
-    Itinerary: (() => {
-      const idx = getStreamingDayIndex(trip);
-      return idx !== null && idx < (trip.duration ?? 0);
-    })(),
+    Itinerary:
+      hasFailed(trip, 'itinerary') ||
+      (() => {
+        const idx = getStreamingDayIndex(trip);
+        return idx !== null && idx < (trip.duration ?? 0);
+      })(),
   };
 }

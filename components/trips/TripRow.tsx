@@ -15,6 +15,7 @@ import { useTheme } from '@/contexts/theme-context';
 import { Photo } from '@/components/ui/Photo';
 import { Flag } from '@/components/ui/Flag';
 import { VisaBadge, type Cat } from '@/components/ui/Badge';
+import { TypingDots } from '@/components/ui/TypingDots';
 import { toAlpha2 } from '@/utils/countryCode';
 
 // ──────────────────────────────────────────────
@@ -221,48 +222,23 @@ export function TripRow({
         </Text>
       </View>
 
-      {/* Right rail: visa pill on top, chevron below */}
+      {/* Right rail: visa pill on top, chevron below. Generating / failed
+          trips swap the visa badge for a soft status pill — bg tint +
+          coloured text, fully-rounded like VisaBadge, no leading dot. The
+          trailing TypingDots on "Planning" is the app's established
+          live-work language (DayDeck's "writing…", chat composer). */}
       <View style={styles.rightRail}>
         {isGenerating ? (
-          <View
-            style={{
-              backgroundColor: colors.coralBg,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 6,
-            }}
-          >
-            <Text
-              style={{
-                color: colors.coral,
-                fontSize: 9,
-                fontWeight: '600',
-                letterSpacing: 0.05 * 9,
-                textTransform: 'uppercase',
-              }}
-            >
-              Generating
+          <View style={[styles.statusPill, { backgroundColor: colors.coralBg }]}>
+            <Text style={[styles.statusPillText, { color: colors.coral }]}>
+              Planning
             </Text>
+            <TypingDots color={colors.coral} size="sm" gap={2} />
           </View>
         ) : isFailed ? (
-          <View
-            style={{
-              backgroundColor: colors.coralBg,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 6,
-            }}
-          >
-            <Text
-              style={{
-                color: colors.coral,
-                fontSize: 9,
-                fontWeight: '600',
-                letterSpacing: 0.05 * 9,
-                textTransform: 'uppercase',
-              }}
-            >
-              Failed
+          <View style={[styles.statusPill, { backgroundColor: colors.coralBg }]}>
+            <Text style={[styles.statusPillText, { color: colors.coral }]}>
+              Needs attention
             </Text>
           </View>
         ) : (
@@ -310,5 +286,21 @@ const styles = StyleSheet.create({
   rightRail: {
     alignItems: 'flex-end',
     gap: 8,
+  },
+  // Soft status pill — matches VisaBadge sm metrics (padV 4 / padH 9 /
+  // fs 10 / radius 999) so the right rail stays visually consistent
+  // whichever pill renders.
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+  },
+  statusPillText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    fontWeight: '600',
   },
 });

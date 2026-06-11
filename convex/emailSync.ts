@@ -3,6 +3,7 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
+import { requireAuth } from "./lib/auth";
 
 // ===== Types =====
 
@@ -469,6 +470,10 @@ function getDetailsKey(
 export const scanGmail = action({
   args: { accountId: v.id("emailAccounts") },
   handler: async (ctx, args) => {
+    // Auth gate BEFORE the try/catch — the catch below converts errors into
+    // a friendly { error } return, and an unauthenticated probe must throw,
+    // not get a 200-shaped response.
+    await requireAuth(ctx);
     try {
       // 1. Get and verify account
       const account = await ctx.runQuery(api.emailAccounts.getByProvider, {

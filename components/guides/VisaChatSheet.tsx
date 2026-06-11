@@ -348,7 +348,7 @@ const VisaChatSheet = forwardRef<VisaChatSheetRef, Props>(
               style={[styles.retryText, { color: colors.ink }]}
               numberOfLines={2}
             >
-              Couldn't reach Visa Atlas. Tap retry to send your message again.
+              Couldn’t reach Visa Atlas. Tap retry to send your message again.
             </Text>
             <TouchableOpacity onPress={retryFailed} hitSlop={8}>
               <Text style={[styles.retryAction, { color: colors.coralDeep }]}>

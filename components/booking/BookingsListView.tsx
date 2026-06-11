@@ -294,7 +294,7 @@ export default function BookingsListView({ bottomInset }: BookingsListViewProps)
                 No {activeFilterLabel}
               </Text>
               <Text style={[styles.filterEmptyBody, { color: colors.textSecondary }]}>
-                You don't have any {activeFilterLabel} booked yet.{'\n'}Tap + to add one.
+                You don’t have any {activeFilterLabel} booked yet.{'\n'}Tap + to add one.
               </Text>
             </View>
           ) : null

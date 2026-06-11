@@ -26,9 +26,15 @@ import { PillButton } from '@/components/ui/PillButton';
 
 // Sheet rests at its dynamic content height — no snap points needed.
 // BottomSheetKeyboardAwareScrollView (RNKC) measures the focused TextInput
-// itself and scrolls it above the keyboard with the right delta. We don't
-// set `keyboardBehavior` for the same reason: doubling sheet movement on
-// top of KAW's scroll over-scrolls the form.
+// itself and scrolls it above the keyboard with the right delta.
+//
+// Keyboard ownership: gorhom has NO way to disable its keyboard handling —
+// the default keyboardBehavior is "interactive" (there is no "none"), and it
+// engages whenever a BottomSheetTextInput focuses. That's fine here: the
+// interactive shift is clamped to the sheet's max position, and because this
+// form's dynamic height sits at/near maxDynamicContentSize the sheet barely
+// moves — RNKC's KAW is the effective owner and scrolls the focused input
+// the remaining distance. We set "interactive" explicitly to document that.
 
 export interface EditableDay {
   day: number;
@@ -150,9 +156,10 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
         enableDynamicSizing
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         topInset={insets.top + 10}
-        // Keyboard handling lives in BottomSheetKeyboardAwareScrollView
-        // (RNKC). We deliberately don't set keyboardBehavior here — see the
-        // comment block near the top of this file.
+        // "interactive" is gorhom's default (there is no "none") — set
+        // explicitly because keyboard avoidance is shared with RNKC's KAW;
+        // see the comment block near the top of this file.
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         backdropComponent={renderBackdrop}

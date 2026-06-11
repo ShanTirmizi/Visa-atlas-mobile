@@ -181,6 +181,9 @@ export default defineSchema({
     userId: v.id("users"),
     code: v.string(),
     expiresAt: v.number(),
+    // Wrong-guess counter — the code is deleted after MAX_VERIFY_ATTEMPTS
+    // failures (see emailVerification.verifyCode) to block brute force.
+    attempts: v.optional(v.number()),
   }).index("by_user", ["userId"]),
 
   // ── Visa Guides ──

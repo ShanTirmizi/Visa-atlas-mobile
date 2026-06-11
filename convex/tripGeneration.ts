@@ -798,7 +798,14 @@ async function runRetrySectionInner(
     if (!trip) throw new Error("Trip not found");
     if (!trip.originalInputs) throw new Error("No original inputs stored — cannot retry");
 
-    const input = JSON.parse(trip.originalInputs);
+    // originalInputs is written from validated args, but a corrupted/legacy
+    // doc would otherwise surface a raw SyntaxError to the client.
+    let input: Parameters<typeof buildSystemPrompt>[0];
+    try {
+      input = JSON.parse(trip.originalInputs);
+    } catch {
+      throw new Error("Stored trip inputs are corrupted — cannot retry");
+    }
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
 
@@ -1033,17 +1040,29 @@ export const fetchAndPatchImages = internalAction({
   },
 });
 
-/** Generic internal patch helper for fields not in SECTION_FIELD_MAP. */
+/** Generic internal patch helper for fields not in SECTION_FIELD_MAP.
+ *  The field name is allow-listed (literal union, not v.string()) so neither
+ *  the runtime nor a future caller can patch arbitrary trip fields — mirrors
+ *  the allow-list in the public `trips.updateTripField`. */
 export const _patchTripField = internalMutation({
   args: {
     tripId: v.id("trips"),
-    field: v.string(),
+    field: v.union(
+      v.literal("dayImages"),
+      v.literal("activityImages"),
+      v.literal("itinerary"),
+    ),
     value: v.string(),
   },
   handler: async (ctx, { tripId, field, value }) => {
     const trip = await ctx.db.get(tripId);
     if (!trip) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await ctx.db.patch(tripId, { [field]: value } as any);
+    const patch: Partial<{
+      dayImages: string;
+      activityImages: string;
+      itinerary: string;
+    }> = {};
+    patch[field] = value;
+    await ctx.db.patch(tripId, patch);
   },
 });

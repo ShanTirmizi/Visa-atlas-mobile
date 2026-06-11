@@ -109,18 +109,30 @@ export const deleteAccount = mutation({
     // 6. Delete the user document
     await ctx.db.delete(userId);
 
-    // 7. Delete auth-related records (no custom index, use filter)
+    // 7. Delete auth-related records. @convex-dev/auth's authTables ship
+    // with the indexes we need (authSessions."userId",
+    // authAccounts."userIdAndProvider", authRefreshTokens."sessionId") —
+    // .filter() here would table-scan every user's sessions/accounts.
     const authSessions = await ctx.db
       .query("authSessions")
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("userId", (q) => q.eq("userId", userId))
       .collect();
     for (const session of authSessions) {
+      // Refresh tokens hang off the session — delete them first so they
+      // aren't orphaned once the session row is gone.
+      const refreshTokens = await ctx.db
+        .query("authRefreshTokens")
+        .withIndex("sessionId", (q) => q.eq("sessionId", session._id))
+        .collect();
+      for (const token of refreshTokens) {
+        await ctx.db.delete(token._id);
+      }
       await ctx.db.delete(session._id);
     }
 
     const authAccounts = await ctx.db
       .query("authAccounts")
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("userIdAndProvider", (q) => q.eq("userId", userId))
       .collect();
     for (const account of authAccounts) {
       await ctx.db.delete(account._id);

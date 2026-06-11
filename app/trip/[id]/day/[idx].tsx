@@ -34,7 +34,10 @@ export default function DayDetailRoute() {
   );
 
   const itinerary = useMemo<DayDetailDay[]>(
-    () => safeParse<DayDetailDay[]>(trip?.itinerary, []),
+    // filter(Boolean): out-of-order per-day stream patches can leave
+    // transient null holes in the stored array — same guard as DayDeck,
+    // which also routes here by filtered-array position.
+    () => safeParse<DayDetailDay[]>(trip?.itinerary, []).filter(Boolean),
     [trip?.itinerary],
   );
   const dayImages = useMemo<DayImage[]>(

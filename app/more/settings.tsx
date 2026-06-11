@@ -4,10 +4,13 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  ScrollView,
   Alert,
   Image,
 } from 'react-native';
+import Animated, {
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -38,6 +41,7 @@ import { FontFamily, Spacing, type ThemeColors } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import BackButton from '@/components/ui/BackButton';
 import { Squiggle } from '@/components/ui/Squiggle';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import VerifyEmailSheet, { type VerifyEmailSheetRef } from '@/components/settings/VerifyEmailSheet';
 
 function buildWishlistRowValue(tripCount: number, countryCount: number): string {
@@ -186,6 +190,15 @@ export default function SettingsScreen() {
   const verifyEmailRef = useRef<VerifyEmailSheetRef>(null);
   const isEmailVerified = !!me?.emailVerificationTime;
 
+  // Scroll-fade for the top safe-area blur (Apple Mail pattern) — the blur
+  // ramps in as rows start to slide under the Dynamic Island.
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y;
+    },
+  });
+
   const handleClearLocal = () => {
     Alert.alert(
       'Clear Local Data',
@@ -264,7 +277,9 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundDeep }]}>
-      <ScrollView
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={{
           paddingTop: insets.top + Spacing.md,
           paddingBottom: insets.bottom + 60,
@@ -382,8 +397,8 @@ export default function SettingsScreen() {
                   isFirst
                   icon={<Mail size={16} color={colors.coralDeep} />}
                   label="Verify your email"
-                  value="Coming soon"
-                  disabled
+                  value={me?.email ?? undefined}
+                  onPress={() => verifyEmailRef.current?.open()}
                 />
               </View>
             </View>
@@ -555,10 +570,12 @@ export default function SettingsScreen() {
             VISA ATLAS · 1.0.0
           </Text>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Email verification sheet — opens via the "Verify your email" row */}
       <VerifyEmailSheet ref={verifyEmailRef} email={me?.email ?? null} />
+
+      <TopSafeAreaBlur scrollY={scrollY} />
     </View>
   );
 }

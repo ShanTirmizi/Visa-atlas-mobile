@@ -120,7 +120,7 @@ export default function DateInput({
 
   return (
     <View style={{ flex: 1 }}>
-      <Text style={[styles.label, { color: '#FFFFFF' }]}>
+      <Text style={[styles.label, { color: colors.solidText }]}>
         {label}
       </Text>
 
@@ -130,8 +130,8 @@ export default function DateInput({
         style={[
           styles.button,
           {
-            backgroundColor: 'rgba(255,255,255,0.9)',
-            borderColor: 'rgba(255,255,255,0.3)',
+            backgroundColor: colors.solidField,
+            borderColor: colors.solidBorderStrong,
           },
         ]}
       >
@@ -139,7 +139,7 @@ export default function DateInput({
         <Text
           style={[
             styles.buttonText,
-            { color: value ? '#222222' : 'rgba(0,0,0,0.4)' },
+            { color: value ? colors.textSecondary : colors.textMuted },
           ]}
         >
           {value ? formatDateDisplay(value) : 'Select date'}
@@ -170,7 +170,9 @@ export default function DateInput({
             <Animated.View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: '#000', opacity: backdropOpacity.interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] }) },
+                // colors.ink is the system near-black; opacity is animated
+                // separately so the base colour must be fully opaque.
+                { backgroundColor: colors.ink, opacity: backdropOpacity.interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] }) },
               ]}
             >
               <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowPicker(false)} />
@@ -184,7 +186,7 @@ export default function DateInput({
               ]}
             >
               <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-                <View style={styles.modalHeader}>
+                <View style={[styles.modalHeader, { borderBottomColor: colors.lineMid }]}>
                   <TouchableOpacity onPress={() => setShowPicker(false)}>
                     <Text style={[styles.modalCancel, { color: colors.textMuted }]}>Cancel</Text>
                   </TouchableOpacity>
@@ -248,7 +250,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   modalTitle: {
     fontFamily: FontFamily.condensedSemibold,

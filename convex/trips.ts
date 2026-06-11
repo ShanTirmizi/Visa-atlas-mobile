@@ -155,12 +155,11 @@ export const setTripStarred = mutation({
 export const updateTripStatus = mutation({
   args: {
     id: v.id("trips"),
-    status: v.union(
-      v.literal("planned"),
-      v.literal("completed"),
-      v.literal("generating"),
-      v.literal("failed"),
-    ),
+    // Only the user-facing statuses are client-settable. 'generating' and
+    // 'failed' are generation-lifecycle states owned by the internal
+    // tripGeneration mutations — letting a client set them would wedge the
+    // trip in the skeleton/failed screen with no stream running to recover it.
+    status: v.union(v.literal("planned"), v.literal("completed")),
   },
   handler: async (ctx, args) => {
     await checkTripPermission(ctx, args.id, "editor");

@@ -14,7 +14,8 @@ describe('getVisaCategoryColor', () => {
     expect(getVisaCategoryColor('required', LightColors)).toBe('#A83A5E');
   });
   it('falls back to ink for unknown categories', () => {
-    expect(getVisaCategoryColor('bogus', LightColors)).toBe('#0E0E0E');
+    expect(getVisaCategoryColor('bogus', LightColors)).toBe(LightColors.ink);
+    expect(getVisaCategoryColor('bogus', LightColors)).toBe('#0E0F0F');
   });
 });
 

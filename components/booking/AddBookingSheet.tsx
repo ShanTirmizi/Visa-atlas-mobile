@@ -10,10 +10,10 @@ import { Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BottomSheetModal,
-  BottomSheetScrollView,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
@@ -248,6 +248,13 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         enableDynamicSizing={true}
         maxDynamicContentSize={maxSheetHeight}
         backdropComponent={renderBackdrop}
+        // Keyboard handling lives in BottomSheetKeyboardAwareScrollView
+        // (RNKC) below — same shape as EditDaySheet. "restore" returns the
+        // sheet to its detent when the keyboard dismisses; adjustResize is
+        // gorhom's documented Android requirement (the inherited adjustPan
+        // default pans the whole window and fights edge-to-edge).
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
         // Paper-bg sheet matching the rest of the Signature v2 surfaces;
         // booking-type color is moved into accents inside the form, not the
         // entire sheet background.
@@ -255,10 +262,13 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         onDismiss={resetState}
       >
-        <BottomSheetScrollView
+        <BottomSheetKeyboardAwareScrollView
           contentContainerStyle={{ paddingTop: Spacing.sm, paddingBottom: 12 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          // Breathing room between the focused input and the keyboard top —
+          // matches Apple Mail / Notes (and EditDaySheet).
+          bottomOffset={24}
         >
           {step === 'type' && (
             <BookingTypePicker onSelect={handleTypeSelect} onScanComplete={handleScanComplete} />
@@ -275,7 +285,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
               prefillData={prefillData}
             />
           )}
-        </BottomSheetScrollView>
+        </BottomSheetKeyboardAwareScrollView>
       </BottomSheetModal>
     );
   },

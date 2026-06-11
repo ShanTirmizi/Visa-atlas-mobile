@@ -562,8 +562,8 @@ function EmptyState({ colors }: { colors: ReturnType<typeof useTheme>['colors'] 
           { color: colors.inkMute, textAlign: 'center', maxWidth: 280 },
         ]}
       >
-        Tap the heart on any country page or trip to save it here. We'll
-        keep them ready for when you're ready to plan.
+        Tap the heart on any country page or trip to save it here. We’ll
+        keep them ready for when you’re ready to plan.
       </Text>
     </View>
   );

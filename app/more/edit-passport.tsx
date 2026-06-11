@@ -3,13 +3,15 @@ import {
   View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, X } from 'lucide-react-native';
+import { Check, Search, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 import { passportCountries, type PassportCountry } from '@/data/passportCountries';
 import BackButton from '@/components/ui/BackButton';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { toAlpha2 } from '@/utils/countryCode';
 
 // ── Alpha-3 to flag emoji ────────────────────────────────────────────
@@ -120,6 +122,11 @@ export default function EditPassportScreen() {
         },
       ]}
     >
+      {/* RNKC KeyboardAvoidingView ("padding" on both platforms) compresses
+          the layout above the keyboard: the list shrinks but stays fully
+          scrollable, and the save bar rides up with it. A bare FlatList gave
+          the bottom screenful of results no keyboard inset at all. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       {/* Back button */}
       <View style={styles.backWrap}>
         <BackButton />
@@ -136,23 +143,32 @@ export default function EditPassportScreen() {
       </View>
 
       {/* Search */}
-      <View style={styles.searchWrap}>
+      <View
+        style={[
+          styles.searchWrap,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        <Search size={16} color={colors.textMuted} />
         <TextInput
           value={search}
           onChangeText={setSearch}
           placeholder="Search countries..."
           placeholderTextColor={colors.textMuted}
-          style={[
-            styles.searchInput,
-            {
-              backgroundColor: colors.card,
-              color: colors.foreground,
-              borderColor: colors.border,
-            },
-          ]}
+          style={[styles.searchInput, { color: colors.foreground }]}
           autoCorrect={false}
           autoCapitalize="words"
         />
+        {search.length > 0 ? (
+          <TouchableOpacity
+            onPress={() => setSearch('')}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
+            <X size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Selected chips (multi-mode) */}
@@ -183,6 +199,7 @@ export default function EditPassportScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         initialNumToRender={20}
       />
 
@@ -227,6 +244,9 @@ export default function EditPassportScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
+
+      <TopSafeAreaBlur />
     </View>
   );
 }
@@ -253,15 +273,19 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
   },
   searchWrap: {
-    marginBottom: Spacing.md,
-  },
-  searchInput: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
-    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     paddingHorizontal: Spacing.md,
     borderRadius: Radius.md,
     borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    paddingVertical: 12,
   },
   chipRow: {
     flexDirection: 'row',

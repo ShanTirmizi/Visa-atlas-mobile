@@ -17,6 +17,7 @@ import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
 } from 'react-native-reanimated';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, ArrowRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -27,6 +28,15 @@ import { Guilloche } from '@/components/ui/Guilloche';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 // PhotoTone kept as a typed prop for API back-compat; no longer used visually.
 import type { PhotoTone } from '@/components/ui/Photo';
+
+// RNKC's KeyboardAwareScrollView scrolls the focused input above the keyboard
+// with the right delta (Apple Mail / Notes algorithm) — the passport and
+// residence steps have a search input + inline country list that the keyboard
+// buried with a plain ScrollView. Wrapped with createAnimatedComponent so the
+// reanimated onScroll handler that drives TopSafeAreaBlur keeps working
+// (same pattern as components/ui/BottomSheetKeyboardAwareScrollView.tsx).
+const AnimatedKeyboardAwareScrollView =
+  Animated.createAnimatedComponent(KeyboardAwareScrollView);
 
 interface OnboardingScaffoldProps {
   /** 1-based step number. */
@@ -82,7 +92,7 @@ export function OnboardingScaffold({
       {/* Wavy guilloche paper texture — same as sign-in / forgot-password */}
       <Guilloche variant="wavy" color={colors.ink} opacity={0.04} />
 
-      <Animated.ScrollView
+      <AnimatedKeyboardAwareScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingTop: insets.top + 22,
@@ -93,6 +103,8 @@ export function OnboardingScaffold({
         keyboardShouldPersistTaps="handled"
         onScroll={onScroll}
         scrollEventThrottle={16}
+        // Breathing room between the focused input and the keyboard top.
+        bottomOffset={24}
       >
         {/* ── Top row: back button + skip link ───────────────────────── */}
         <View style={styles.topRow}>
@@ -210,7 +222,7 @@ export function OnboardingScaffold({
         </View>
 
         {children ? <View style={{ marginTop: 24 }}>{children}</View> : null}
-      </Animated.ScrollView>
+      </AnimatedKeyboardAwareScrollView>
 
       {/* ── Pinned CTA — ink fill with italic Fraunces label + arrow ─── */}
       <View

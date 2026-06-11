@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
-import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetFlatList,
+  // BottomSheetTextInput so gorhom's keyboard handling engages on focus —
+  // a plain RN TextInput is invisible to the sheet, so at the 30% snap the
+  // keyboard fully covered the search field.
+  BottomSheetTextInput,
+} from '@gorhom/bottom-sheet';
 import { ArrowRight, Sparkles, Search, X } from 'lucide-react-native';
-import { TextInput } from 'react-native';
 import { popularityRank } from '@/data/popularDestinations';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/theme-context';
@@ -287,7 +292,7 @@ export function ExploreSheet({
           ]}
         >
           <Search size={16} color={colors.inkMute} />
-          <TextInput
+          <BottomSheetTextInput
             style={[
               styles.searchInput,
               { color: colors.ink, fontFamily: FontFamily.regular },
@@ -379,6 +384,14 @@ export function ExploreSheet({
       ]}
       handleIndicatorStyle={styles.handleIndicator}
       enablePanDownToClose={false}
+      // Same recipe as VisaChatSheet: "extend" raises the sheet to its top
+      // snap when the search field focuses (the field rests in the bottom
+      // third at the 30% detent, where the keyboard would cover it),
+      // "restore" returns it on dismiss, and adjustResize is gorhom's
+      // documented Android requirement with edge-to-edge.
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
     >
       <BottomSheetFlatList
         data={moreCountries}

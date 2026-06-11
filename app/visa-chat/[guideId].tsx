@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Platform,
   FlatList,
   ActivityIndicator,
   Pressable,
@@ -256,8 +255,13 @@ export default function VisaChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
+      // RNKC's recommended chat-composer pattern: the view translates up in
+      // sync with the keyboard (a transform, not a re-layout) while top
+      // padding keeps the header pinned — same feel as iMessage. Passed
+      // unconditionally: RNKC KAV is a no-op when behavior is undefined,
+      // which silently disabled Android avoidance with the old
+      // Platform.OS ternary.
+      behavior="translate-with-padding"
     >
       {/* ── Editorial header ───────────────────────── */}
       <View

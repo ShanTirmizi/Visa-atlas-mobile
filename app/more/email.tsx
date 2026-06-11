@@ -8,11 +8,12 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mail, RefreshCw, Unlink, ChevronRight } from 'lucide-react-native';
+import { Mail, RefreshCw, Unlink } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useEmail } from '@/contexts/email-context';
 import { FontFamily, FontSize, Spacing } from '@/constants/theme';
 import BackButton from '@/components/ui/BackButton';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
@@ -31,14 +32,16 @@ export default function EmailScreen() {
   const { gmailAccount, isSyncing: isEmailSyncing, syncGmail, connectGmail, disconnectGmail } = useEmail();
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{
-        paddingTop: insets.top + Spacing.md,
-        paddingBottom: insets.bottom + 100,
-      }}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{
+          paddingTop: insets.top + Spacing.md,
+          paddingBottom: insets.bottom + 100,
+          paddingHorizontal: Spacing.lg,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
       <BackButton />
 
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
@@ -62,7 +65,6 @@ export default function EmailScreen() {
               Connect Gmail
             </Text>
           </View>
-          <ChevronRight color="#FFFFFF" size={18} />
         </TouchableOpacity>
       ) : (
         <>
@@ -105,7 +107,6 @@ export default function EmailScreen() {
                 )}
               </View>
             </View>
-            <ChevronRight color="#FFFFFF" size={18} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -134,18 +135,22 @@ export default function EmailScreen() {
                 Disconnect Gmail
               </Text>
             </View>
-            <ChevronRight color="#FFFFFF" size={18} />
           </TouchableOpacity>
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+
+      <TopSafeAreaBlur />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
+  },
+  scroll: {
+    flex: 1,
   },
   sectionTitle: {
     fontFamily: FontFamily.display,

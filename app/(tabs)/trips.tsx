@@ -5,7 +5,10 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedScrollHandler,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { tabSlideIn } from '@/utils/tabAnimation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -179,6 +182,16 @@ export default function TripsScreen() {
   // Planner sheet ref — used from search AI pill and empty state CTA
   const plannerRef = useRef<TripPlannerSheetRef>(null);
 
+  // Scroll-driven TopSafeAreaBlur (Apple Mail pattern): the blur fades in
+  // as content scrolls under the Dynamic Island. Shared by both the
+  // empty-state and main-list ScrollViews — only one renders at a time.
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y;
+    },
+  });
+
   // Search query — live-filters the rows list by country name.
   const [search, setSearch] = useState('');
 
@@ -202,6 +215,14 @@ export default function TripsScreen() {
     api.trips.listTrips,
     isAuthenticated ? {} : 'skip',
   );
+
+  // When the screen swaps render branches (loading → empty → list), the
+  // fresh ScrollView mounts at offset 0 without firing a scroll event —
+  // reset the shared value so the blur doesn't stay stuck visible.
+  const branch = trips === undefined ? 'loading' : trips.length === 0 ? 'empty' : 'list';
+  useEffect(() => {
+    scrollY.value = 0;
+  }, [branch, scrollY]);
 
   // Sort: starred first, then upcoming (nearest startDate), no-date trips
   // last, then by creation desc.
@@ -250,6 +271,7 @@ export default function TripsScreen() {
       >
         <TripsGreeting />
         <ActivityIndicator color={colors.inkMute} style={{ marginTop: 40 }} />
+        <TopSafeAreaBlur scrollY={scrollY} />
       </View>
     );
   }
@@ -258,13 +280,15 @@ export default function TripsScreen() {
   if (trips.length === 0) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-        <ScrollView
+        <Animated.ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{
             paddingTop: insets.top + 12,
             paddingBottom: insets.bottom + 110,
           }}
           showsVerticalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
         >
           {/* Greeting header */}
           <TripsGreeting />
@@ -289,8 +313,8 @@ export default function TripsScreen() {
             heldVisas={new Set()}
             onTripCreated={(tripId) => router.push(`/trip/${tripId}` as never)}
           />
-        </ScrollView>
-        <TopSafeAreaBlur />
+        </Animated.ScrollView>
+        <TopSafeAreaBlur scrollY={scrollY} />
       </View>
     );
   }
@@ -298,13 +322,15 @@ export default function TripsScreen() {
   // ── Main list ────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-    <ScrollView
+    <Animated.ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{
         paddingTop: insets.top + 12,
         paddingBottom: insets.bottom + 110,
       }}
       showsVerticalScrollIndicator={false}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       {/* 1. Greeting header */}
       <TripsGreeting />
@@ -412,8 +438,8 @@ export default function TripsScreen() {
         heldVisas={new Set()}
         onTripCreated={(tripId) => router.push(`/trip/${tripId}` as never)}
       />
-    </ScrollView>
-    <TopSafeAreaBlur />
+    </Animated.ScrollView>
+    <TopSafeAreaBlur scrollY={scrollY} />
     </View>
   );
 }

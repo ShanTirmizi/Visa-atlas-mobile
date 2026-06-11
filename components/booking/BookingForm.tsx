@@ -2,13 +2,12 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
-  Platform,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+// BottomSheetTextInput (not a plain RN TextInput) so gorhom's keyboard
+// handling engages on focus — plain TextInputs are invisible to the sheet.
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
@@ -206,7 +205,7 @@ export default function BookingForm({
         {label.toUpperCase()}
         {options?.required ? ' *' : ''}
       </Text>
-      <TextInput
+      <BottomSheetTextInput
         style={[
           inputStyle,
           options?.multiline && {
@@ -477,16 +476,14 @@ export default function BookingForm({
   const needsStandaloneTitle = false;
 
   // ── Render ─────────────────────────────────
+  // No KeyboardAvoidingView / ScrollView here: this form is mounted inside
+  // AddBookingSheet's BottomSheetKeyboardAwareScrollView, which owns both
+  // scrolling and keyboard avoidance (same shape as EditDaySheet). Nesting a
+  // KAV + ScrollView inside sheet content broke the padding math entirely —
+  // RNKC's KAV frame is relative to the sheet's scroll content, not the
+  // window.
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 12 }}
-        keyboardShouldPersistTaps="handled"
-      >
+    <View style={{ padding: Spacing.lg, paddingBottom: 12 }}>
         {/* ── Editorial header — kicker + italic "Add {type}." ─ */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -635,8 +632,7 @@ export default function BookingForm({
             ) : null}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

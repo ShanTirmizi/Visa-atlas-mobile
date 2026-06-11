@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+// BottomSheetTextInput so gorhom's keyboard handling engages — this input
+// only ever renders inside AddBookingSheet's bottom sheet.
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import Svg, { Line } from 'react-native-svg';
 import { Plane } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
@@ -70,7 +73,7 @@ export default function RouteInput({
           >
             FROM
           </Text>
-          <TextInput
+          <BottomSheetTextInput
             style={[
               styles.airportInput,
               {
@@ -137,7 +140,7 @@ export default function RouteInput({
           >
             TO
           </Text>
-          <TextInput
+          <BottomSheetTextInput
             style={[
               styles.airportInput,
               {

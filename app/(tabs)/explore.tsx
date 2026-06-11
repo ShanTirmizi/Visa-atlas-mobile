@@ -97,7 +97,7 @@ export default function ExploreScreen() {
   const { colors } = useTheme();
   const router = useRouter();
 
-  const { heldVisas, favorites, passports, residence } = useVisa();
+  const { heldVisas, favorites, toggleFavorite, passports, residence } = useVisa();
   const dynamicVisaData = useVisaData();
 
   const heldVisasSet = useMemo(
@@ -148,10 +148,12 @@ export default function ExploreScreen() {
     [router],
   );
 
-  // Toggle save — stub (saving is out of scope for Phase 2)
+  // Toggle save — persists via the AsyncStorage-backed visa context; the
+  // `saved` flag on each CountryBrief derives from the same `favorites` array,
+  // so the heart fills/unfills live.
   const handleToggleSave = useCallback((code: string) => {
-    console.log('[ExploreSheet] toggleSave:', code);
-  }, []);
+    toggleFavorite(code);
+  }, [toggleFavorite]);
 
   // Pass empty activeFilters to map (map coloring is always all-countries in this view)
   const emptyFilters = useMemo(() => new Set<string>(), []);

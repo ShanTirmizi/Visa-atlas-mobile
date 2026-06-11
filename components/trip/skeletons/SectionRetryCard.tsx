@@ -56,7 +56,7 @@ export function SectionRetryCard({ tripId, section, label, retrying }: SectionRe
       }}
     >
       <Text style={[Type.body13, { color: colors.ink, marginBottom: 6 }]}>
-        Couldn't generate {label}
+        Couldn’t generate {label}
       </Text>
       <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 11, marginBottom: 12 }]}>
         Tap retry to try again — your other sections are unaffected.

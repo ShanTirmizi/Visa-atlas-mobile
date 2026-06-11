@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { tabSlideIn } from '@/utils/tabAnimation';
 import {
-  View, Text, ScrollView, StyleSheet,
+  View, Text, StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -168,6 +171,19 @@ export default function CountryDetailScreen() {
 
   const tripSheetRef = useRef<TripPlannerSheetRef>(null);
   const guideSheetRef = useRef<VisaGuideSheetRef>(null);
+
+  // Scroll-fade chrome (Apple Music / App Store detail pattern): the fixed
+  // nav row floats over full-bleed scroll content, and TopSafeAreaBlur ramps
+  // in as content tucks under it. Header height is measured at layout time
+  // so the blur band and the content inset always match the real chrome.
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y;
+    },
+  });
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 56);
+
   const { isAuthenticated } = useConvexAuth();
   const existingGuide = useQuery(
     api.visaGuides.getGuideByCountry,
@@ -195,6 +211,7 @@ export default function CountryDetailScreen() {
         <Text style={[Type.display26, { color: colors.ink, textAlign: 'center', marginTop: 40 }]}>
           Country not found
         </Text>
+        <TopSafeAreaBlur />
       </View>
     );
   }
@@ -240,16 +257,25 @@ export default function CountryDetailScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* ── Header (always on paper, ink buttons) ─────────────────── */}
+      {/* ── Floating nav row — content scrolls beneath, TopSafeAreaBlur
+             frosts the band on scroll (App Store detail pattern) ────── */}
       <View
+        // box-none: only the circular buttons capture touches — drags on the
+        // rest of the band fall through to the scroll content beneath.
+        pointerEvents="box-none"
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
         style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 110,
           paddingTop: insets.top + 8,
           paddingHorizontal: Spacing.lg,
           paddingBottom: 10,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          backgroundColor: colors.background,
         }}
       >
         <CircleBtn solid onPress={() => router.back()} accessibilityLabel="Back">
@@ -272,9 +298,14 @@ export default function CountryDetailScreen() {
         </CircleBtn>
       </View>
 
-      <ScrollView
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={{
+          paddingTop: headerHeight,
+          paddingBottom: insets.bottom + 24,
+        }}
       >
         {/* ── Hero ────────────────────────────────────────────────── */}
         {photoUri ? (
@@ -414,7 +445,7 @@ export default function CountryDetailScreen() {
             </Animated.View>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* ── Preserved sheets ───────────────────────────────────────── */}
       {country && resolved && (
@@ -437,6 +468,10 @@ export default function CountryDetailScreen() {
           onGuideCreated={(guideId) => router.replace(`/guide/${guideId}` as never)}
         />
       )}
+
+      {/* Frosts the nav band as content scrolls beneath it. The nav row sits
+          at zIndex 110 (above the blur's 100) so its buttons stay crisp. */}
+      <TopSafeAreaBlur scrollY={scrollY} extra={Math.max(0, headerHeight - insets.top)} />
     </View>
   );
 }

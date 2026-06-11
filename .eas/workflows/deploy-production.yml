@@ -1,0 +1,51 @@
+# Production deploy pipeline (EAS Workflows — Expo's native CI).
+#
+# On every push to main:
+#   1. deploy_convex — pushes convex/ functions to the PRODUCTION Convex
+#      deployment (marvelous-koala-108) so the backend is live before any
+#      binary that depends on it ships.
+#   2. build_ios    — EAS cloud build, production profile (auto-increments
+#      build number; uses EXPO_PUBLIC_CONVEX_URL from eas.json).
+#   3. submit_ios   — uploads the build to App Store Connect / TestFlight.
+#
+# ── One-time setup (Expo dashboard / CLI) ─────────────────────────────
+# 1. Connect the GitHub repo so push triggers fire:
+#    https://expo.dev/accounts/[account]/projects/visa-atlas-mobile/github
+# 2. Create the Convex production deploy key and store it as an EAS
+#    environment variable (Secret) in the "production" environment:
+#      npx convex deploy-key                       # in the Convex dashboard: Settings → Deploy key (production)
+#      eas env:create --environment production --name CONVEX_DEPLOY_KEY --value "prod:..." --visibility secret
+# 3. Set up non-interactive App Store submission credentials (App Store
+#    Connect API key, stored on EAS servers):
+#      eas credentials --platform ios   # → App Store Connect: API Key
+name: Deploy to App Store
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy_convex:
+    name: Deploy Convex backend (production)
+    environment: production
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: Push Convex functions to production
+        run: npx convex deploy
+
+  build_ios:
+    name: Build iOS (production)
+    needs: [deploy_convex]
+    type: build
+    params:
+      platform: ios
+      profile: production
+
+  submit_ios:
+    name: Submit to App Store
+    needs: [build_ios]
+    type: submit
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}

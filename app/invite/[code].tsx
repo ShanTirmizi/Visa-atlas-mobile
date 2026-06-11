@@ -14,6 +14,7 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { UserPlus, Check, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 
 export default function InviteAcceptScreen() {
@@ -49,6 +50,7 @@ export default function InviteAcceptScreen() {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background, paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color={colors.primary} />
+        <TopSafeAreaBlur />
       </View>
     );
   }
@@ -72,6 +74,7 @@ export default function InviteAcceptScreen() {
         >
           <Text style={[styles.btnText, { color: colors.foreground }]}>Go Back</Text>
         </TouchableOpacity>
+        <TopSafeAreaBlur />
       </View>
     );
   }
@@ -84,7 +87,7 @@ export default function InviteAcceptScreen() {
         </View>
 
         <Text style={[styles.title, { color: colors.foreground, marginTop: Spacing.lg }]}>
-          You've been invited!
+          You’ve been invited!
         </Text>
         <Text style={[styles.tripName, { color: colors.primary }]}>
           {invite.countryName ?? 'a trip'}
@@ -118,6 +121,8 @@ export default function InviteAcceptScreen() {
           <Text style={[styles.btnText, { color: colors.textSecondary }]}>Decline</Text>
         </TouchableOpacity>
       </View>
+
+      <TopSafeAreaBlur />
     </View>
   );
 }

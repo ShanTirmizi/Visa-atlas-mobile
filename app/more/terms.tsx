@@ -154,7 +154,7 @@ export default function TermsScreen() {
           </P>
           <P colors={colors}>
             When you invite collaborators to a trip, those members will have
-            access to view and edit that trip's content. You are responsible for
+            access to view and edit that trip’s content. You are responsible for
             managing access to your trips.
           </P>
         </Section>
@@ -203,7 +203,7 @@ export default function TermsScreen() {
         {/* 7. Limitation of Liability */}
         <Section title="7. Limitation of Liability" colors={colors}>
           <P colors={colors}>
-            Visa Atlas is provided on an "as is" and "as available" basis without
+            Visa Atlas is provided on an “as is” and “as available” basis without
             any warranties of any kind, express or implied, including but not
             limited to fitness for a particular purpose or uninterrupted
             availability.

@@ -6,8 +6,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Dimensions } from 'react-native';
 import { BottomSheetModal, BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X } from 'lucide-react-native';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -41,12 +42,18 @@ interface CalendarReviewSheetProps {
 const CalendarReviewSheet = forwardRef<CalendarReviewSheetRef, CalendarReviewSheetProps>(
   ({ onComplete }, ref) => {
     const { colors, isDark } = useTheme();
+    const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const [items, setItems] = useState<ClassifiedEvent[]>([]);
 
     const createBooking = useMutation(api.bookings.createBooking);
 
-    const snapPoints = useMemo(() => ['70%'], []);
+    // Auto-fit content, capped just below the Dynamic Island / status bar —
+    // project convention (Apple Maps / Uber / Airbnb), see AppBottomSheet.
+    const maxDynamicContentSize = useMemo(
+      () => Dimensions.get('window').height - insets.top - 10,
+      [insets.top],
+    );
 
     // ── Imperative handle ────────────────────────────
     useImperativeHandle(ref, () => ({
@@ -241,8 +248,9 @@ const CalendarReviewSheet = forwardRef<CalendarReviewSheetRef, CalendarReviewShe
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
-        snapPoints={snapPoints}
-        enableDynamicSizing={false}
+        enableDynamicSizing
+        maxDynamicContentSize={maxDynamicContentSize}
+        topInset={insets.top + 10}
         backgroundStyle={{ backgroundColor: colors.background }}
         handleIndicatorStyle={{ backgroundColor: colors.textMuted }}
       >

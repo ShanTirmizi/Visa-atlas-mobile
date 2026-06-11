@@ -511,7 +511,7 @@ function ScamWarningsCard({ warnings }: { warnings: string[] }) {
             marginBottom: -4,
           }}
         >
-          "
+          “
         </Text>
 
         <Kicker color={colors.coral}>WATCH YOUR STEP</Kicker>
@@ -530,7 +530,7 @@ function ScamWarningsCard({ warnings }: { warnings: string[] }) {
           marginBottom: 14,
         }}
       >
-        Don't fall for these
+        Don’t fall for these
         <Text style={{ color: colors.coral }}>.</Text>
       </Text>
 
@@ -716,7 +716,7 @@ function TopHeader({ countryName }: { countryName: string }) {
           { color: colors.inkSoft, lineHeight: 20, marginTop: 10 },
         ]}
       >
-        In {countryName}, here's what to know before you land.
+        In {countryName}, here’s what to know before you land.
       </Text>
     </View>
   );

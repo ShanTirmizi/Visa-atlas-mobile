@@ -53,7 +53,7 @@ export function VAStamp({ size = 120 }: Props) {
           textAnchor="middle"
         >
           <TextPath href="#stampTopArc" startOffset="50%">
-            VISA · ATLAS · INT'L · ON FILE
+            VISA · ATLAS · INT’L · ON FILE
           </TextPath>
         </SvgText>
         {/* Bottom arc text */}

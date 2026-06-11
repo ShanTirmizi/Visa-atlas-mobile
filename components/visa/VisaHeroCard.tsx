@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleProp, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   FontFamily,
   visaCategoryColors,
@@ -35,8 +34,6 @@ interface VisaHeroCardProps {
   style?: StyleProp<ViewStyle>;
 }
 
-const KICKER_DOT = 8;
-
 export function VisaHeroCard({
   category,
   kicker,
@@ -69,13 +66,17 @@ export function VisaHeroCard({
           elevation: 8,
         }}
       >
-        {/* Inner clipped gradient — the guilloche + content lives here */}
+        {/* Inner clipped fill — the guilloche + content lives here.
+            Solid category tint (no gradient — per design language); the
+            Guilloche texture on top carries the depth. */}
         <View style={{ borderRadius: 22, overflow: 'hidden', position: 'relative' }}>
-          <LinearGradient
-            colors={[tokens.bgFrom, tokens.bgTo]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0.4, y: 1 }}
-            style={{ paddingTop: 22, paddingBottom: 20, paddingHorizontal: 22 }}
+          <View
+            style={{
+              backgroundColor: tokens.bgFrom,
+              paddingTop: 22,
+              paddingBottom: 20,
+              paddingHorizontal: 22,
+            }}
           >
             <Guilloche
               variant="wavy"
@@ -84,7 +85,8 @@ export function VisaHeroCard({
               density={category === 'required' ? 'tight' : 'med'}
             />
 
-            {/* Top row — kicker dot + label, stamp right */}
+            {/* Top row — kicker label, stamp right. No leading dot — the
+                tinted bg + coloured text carry the status (soft-pill rule). */}
             <View
               style={{
                 position: 'relative',
@@ -97,19 +99,10 @@ export function VisaHeroCard({
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: 8,
                   paddingTop: 4,
                   flexShrink: 1,
                 }}
               >
-                <View
-                  style={{
-                    width: KICKER_DOT,
-                    height: KICKER_DOT,
-                    borderRadius: KICKER_DOT / 2,
-                    backgroundColor: category === 'required' ? tokens.accent : tokens.ink,
-                  }}
-                />
                 <Text
                   style={{
                     fontFamily: FontFamily.monoMedium,
@@ -178,12 +171,12 @@ export function VisaHeroCard({
             <View style={{ position: 'relative', marginTop: 28 }}>
               <VisaMetaStrip items={meta} color={tokens.ink} divider={tokens.divider} />
             </View>
-          </LinearGradient>
+          </View>
         </View>
       </View>
 
       {/* CTA — evisa / required only.
-          The category accent is tuned for the warm gradient hero card above
+          The category accent is tuned for the warm tinted hero card above
           (e.g. e-visa's accent is #3D1810, designed to read on peach). On
           the dark colors.ink CTA card below, that dark-on-dark fails the
           contrast bar. Use colors.coral as the CTA accent so the icon, the

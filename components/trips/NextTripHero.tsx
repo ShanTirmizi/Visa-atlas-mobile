@@ -7,7 +7,7 @@
  * Block 3: Flight path strip (VIE → destination IATA, from FlightPath).
  * Block 4: Dual VISA / BUDGET cards side-by-side.
  */
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -325,8 +325,10 @@ export function NextTripHero({
             <Text
               style={[
                 Type.kickerSm,
-                { color: colors.ink, fontSize: 9, letterSpacing: 9 * 0.18 },
+                { color: colors.ink, fontSize: 9, letterSpacing: 9 * 0.18, flexShrink: 1 },
               ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
             >
               NEXT TRIP · {countryName.toUpperCase()}
             </Text>
@@ -350,6 +352,8 @@ export function NextTripHero({
                 lineHeight: 34,
                 color: '#FFFFFF',
               }}
+              numberOfLines={2}
+              ellipsizeMode="tail"
             >
               {head}
               <Text
@@ -508,6 +512,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 14,
     left: 14,
+    // Cap so a long country name ellipsizes instead of running under the
+    // countdown pill at the top-right.
+    maxWidth: '62%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

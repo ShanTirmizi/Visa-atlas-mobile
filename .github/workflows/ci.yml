@@ -1,0 +1,33 @@
+# Quality gate — runs on GitHub's runners (no EAS credits): typecheck,
+# lint, and unit tests on every push and PR. The App Store build + submit
+# pipeline lives in .eas/workflows/deploy-production.yml and runs on EAS.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    name: Typecheck, lint, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx expo lint -- --max-warnings 200
+
+      - name: Test
+        run: npx jest --silent --ci

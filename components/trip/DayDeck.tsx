@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -35,7 +35,11 @@ export interface DayDeckDay {
 
 interface DayDeckProps {
   tripId: string;
-  days: DayDeckDay[];
+  /** Parsed itinerary days. Tolerates null/undefined holes — out-of-order
+   *  per-day patches during streaming can pad the server-side array, and a
+   *  malformed day may be skipped entirely. Holes are filtered before
+   *  render; day labels come from `day.day`, so filtering is safe. */
+  days: Array<DayDeckDay | null | undefined>;
   dayImages: DayImage[];
   tripHeroImage?: DayImage;
   tripStartDate?: string;
@@ -260,7 +264,13 @@ function DayDeck({
   const [activeIdx, setActiveIdx] = useState(0);
   const dragX = useSharedValue(0);
 
-  const numDays = days.length;
+  // Drop null/undefined holes (see `days` prop doc) before any indexing.
+  const safeDays = useMemo(
+    () => (days ?? []).filter((d): d is DayDeckDay => Boolean(d)),
+    [days],
+  );
+
+  const numDays = safeDays.length;
   const isStreaming = streamingDayIndex !== null && streamingDayIndex !== undefined;
   // If the trip is mid-generation, the spec calls for the day-dots row to
   // visualize ALL planned days (e.g. 1..10), not just the ones written so far.
@@ -269,6 +279,15 @@ function DayDeck({
   const handleCommit = useCallback((newIdx: number) => {
     setActiveIdx(newIdx);
   }, []);
+
+  // Keep the active index in range when the day list shrinks — an
+  // itinerary retry clears the array and re-streams days, so a stale
+  // index would otherwise point past the deck and render nothing.
+  React.useEffect(() => {
+    if (activeIdx > 0 && activeIdx > numDays - 1) {
+      setActiveIdx(Math.max(0, numDays - 1));
+    }
+  }, [activeIdx, numDays]);
 
   const openDay = useCallback(() => {
     router.push(`/trip/${tripId}/day/${activeIdx}`);
@@ -309,7 +328,7 @@ function DayDeck({
 
   // Only render cards within ±visibleSideCards of the active index
   const visibleRange = DAY_DECK_PHYSICS.visibleSideCards;
-  const visibleCards = days
+  const visibleCards = safeDays
     .map((day, idx) => ({ day, idx }))
     .filter(({ idx }) => Math.abs(idx - activeIdx) <= visibleRange);
 
@@ -422,29 +441,35 @@ function DayDeck({
 
       {/* ── Card Deck ─────────────────────────────────────────────── */}
       <View style={styles.deckArea}>
-        {visibleCards.map(({ day, idx }) => (
-          <DeckCardItem
-            key={idx}
-            dayIdx={idx}
-            day={day}
-            // Per-day image only — never fall back to the trip-level hero,
-            // because during streaming the per-day images haven't arrived
-            // yet and ALL cards would render the same hero photo (Day 2,
-            // 3, 4 of New Zealand all showing the Queenstown hero, etc.).
-            // DayDeckCard handles `null` gracefully with its dark photo
-            // region, so an unloaded card reads as "image arriving" rather
-            // than "wrong image."
-            image={dayImages[idx] ?? null}
-            place={pickPlace(day) ?? destination}
-            date={formatDayDate(tripStartDate, idx)}
-            activeIdxJS={activeIdx}
-            dragX={dragX}
-            onCommit={handleCommit}
-            onTap={openDay}
-            numDays={numDays}
-            showCursor={isStreaming && idx === streamingDayIndex}
-          />
-        ))}
+        {visibleCards.map(({ day, idx }) => {
+          // Image/date are keyed on the authoritative day number, not the
+          // array position — identical in the steady state (day === idx+1)
+          // but stays aligned when a null hole was filtered out mid-stream.
+          const dayOffset = (day.day ?? idx + 1) - 1;
+          return (
+            <DeckCardItem
+              key={idx}
+              dayIdx={idx}
+              day={day}
+              // Per-day image only — never fall back to the trip-level hero,
+              // because during streaming the per-day images haven't arrived
+              // yet and ALL cards would render the same hero photo (Day 2,
+              // 3, 4 of New Zealand all showing the Queenstown hero, etc.).
+              // DayDeckCard handles `null` gracefully with its dark photo
+              // region, so an unloaded card reads as "image arriving" rather
+              // than "wrong image."
+              image={dayImages[dayOffset] ?? null}
+              place={pickPlace(day) ?? destination}
+              date={formatDayDate(tripStartDate, dayOffset)}
+              activeIdxJS={activeIdx}
+              dragX={dragX}
+              onCommit={handleCommit}
+              onTap={openDay}
+              numDays={numDays}
+              showCursor={isStreaming && idx === streamingDayIndex}
+            />
+          );
+        })}
       </View>
 
       {/* ── Progress dots — coral on active ───────────────────────── */}

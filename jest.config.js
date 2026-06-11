@@ -27,6 +27,10 @@ module.exports = {
       testPathIgnorePatterns: [
         '/node_modules/',
         '<rootDir>/app/.*/_helpers/.*',
+        // Pure-logic physics tests run in the `logic` project above; running
+        // them a second time under jest-expo trips Expo's winter runtime
+        // ("import a file outside of the scope of the test code").
+        '\\.physics\\.test\\.ts$',
       ],
       transformIgnorePatterns: [
         'node_modules/(?!(jest-)?react-native|@react-native|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-reanimated|react-native-gesture-handler|@gorhom/.*|lucide-react-native|country-flag-icons)',
@@ -35,7 +39,11 @@ module.exports = {
         '^@/(.*)$': '<rootDir>/$1',
         '^expo-image$': '<rootDir>/__mocks__/expo-image.js',
       },
-      setupFilesAfterEach: ['@testing-library/jest-native/extend-expect'],
+      // Native-module mocks (AsyncStorage etc.) must apply before modules load.
+      setupFiles: ['<rootDir>/jest.setup.js'],
+      // Was misspelled `setupFilesAfterEach` (unknown option) — the matchers
+      // were never registered. Correct Jest option is setupFilesAfterEnv.
+      setupFilesAfterEnv: ['@testing-library/jest-native/extend-expect'],
     },
   ],
 };

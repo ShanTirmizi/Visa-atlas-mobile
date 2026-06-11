@@ -47,7 +47,6 @@ import {
   formatRelativeDate,
 } from '@/constants/bookings';
 import { buildMapsSearchUrl, buildTelUrl } from '@/utils/maps';
-import { LinearGradient } from 'expo-linear-gradient';
 import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
 import { Guilloche } from '@/components/ui/Guilloche';
 
@@ -211,11 +210,10 @@ function BookingHero({
           { borderRadius: 22 },
         ]}
       >
-        <LinearGradient
-          colors={[tokens.bgFrom, tokens.bgTo]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0.4, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
+        {/* Solid category tint (no gradient — per design language); the
+            Guilloche texture on top carries the depth. */}
+        <View
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: tokens.bgFrom }]}
           pointerEvents="none"
         />
         <Guilloche
@@ -234,22 +232,18 @@ function BookingHero({
           >
             {icon}
           </View>
+          {/* Soft pill — bg tint + coloured text carry the status; no
+              leading dot (banned pattern). */}
           <View
             style={[
               heroStyles.statusPill,
               { backgroundColor: tokens.secondary, maxWidth: '68%', flexShrink: 1 },
             ]}
           >
-            <View
-              style={[
-                heroStyles.statusDot,
-                { backgroundColor: tokens.accent },
-              ]}
-            />
             <Text
               style={[
                 heroStyles.statusText,
-                { color: tokens.ink, letterSpacing: 11 * 0.22 },
+                { color: tokens.accent, letterSpacing: 11 * 0.22 },
               ]}
               numberOfLines={1}
             >
@@ -1467,12 +1461,6 @@ const heroStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 999,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
   },
   statusText: {
     fontFamily: FontFamily.monoMedium,

@@ -120,6 +120,10 @@ export const LightColors = {
   solidOverlay: 'rgba(255,255,255,0.20)',
   solidOverlayMd: 'rgba(255,255,255,0.25)',
   solidBorder: 'rgba(255,255,255,0.15)',
+  solidBorderStrong: 'rgba(255,255,255,0.30)',
+  // Near-opaque white input field sitting on a coloured card (e.g. DateInput
+  // inside the booking form's tinted sheet).
+  solidField: 'rgba(255,255,255,0.90)',
 
   // Dark text on light photo overlays (legacy, preserved)
   textOnLight: '#0E0E0E',

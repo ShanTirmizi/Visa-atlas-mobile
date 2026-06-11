@@ -450,7 +450,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                 Set your limits
               </Text>
               <Text style={[s.subtitle, { color: colors.textSecondary }]}>
-                We'll find destinations that match
+                We’ll find destinations that match
               </Text>
 
               {/* Budget */}

@@ -9,13 +9,15 @@ import React, {
 import {
   View,
   Text,
-  TextInput,
   Pressable,
   StyleSheet,
 } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetFlatList,
+  // BottomSheetTextInput so gorhom's keyboard handling engages on focus —
+  // a plain RN TextInput is invisible to the sheet.
+  BottomSheetTextInput,
 } from '@gorhom/bottom-sheet';
 import { Search, X } from 'lucide-react-native';
 import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
@@ -162,7 +164,11 @@ export const CountryPickerSheet = forwardRef<CountryPickerSheetRef, Props>(
     );
 
     return (
-      <AppBottomSheet ref={sheetRef}>
+      // "extend" raises the sheet to its top position on focus so the
+      // results list shrinks above the keyboard and stays fully scrollable
+      // while typing (VisaChatSheet recipe; restore/adjustResize come from
+      // AppBottomSheet's defaults).
+      <AppBottomSheet ref={sheetRef} keyboardBehavior="extend">
         <View style={styles.header}>
           <View
             style={{
@@ -204,7 +210,7 @@ export const CountryPickerSheet = forwardRef<CountryPickerSheetRef, Props>(
             ]}
           >
             <Search size={16} color={colors.inkMute} />
-            <TextInput
+            <BottomSheetTextInput
               style={[
                 styles.searchInput,
                 { color: colors.ink },

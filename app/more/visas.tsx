@@ -7,35 +7,33 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Check } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { availableVisas } from '@/data/visaData';
+import { BackButton } from '@/components/ui/BackButton';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
 
 export default function VisasScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { heldVisas, toggleHeldVisa } = useVisa();
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{
-        paddingTop: insets.top + Spacing.md,
-        paddingBottom: insets.bottom + 100,
-      }}
-      showsVerticalScrollIndicator={false}
-    >
-      <TouchableOpacity
-        style={[styles.backBtn, { backgroundColor: colors.surface }]}
-        onPress={() => router.back()}
-        hitSlop={12}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{
+          paddingTop: insets.top + Spacing.md,
+          paddingBottom: insets.bottom + 100,
+          paddingHorizontal: Spacing.lg,
+        }}
+        showsVerticalScrollIndicator={false}
       >
-        <ArrowLeft color={colors.foreground} size={20} />
-      </TouchableOpacity>
+      <View style={styles.backBtnWrap}>
+        <BackButton />
+      </View>
 
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
         Held Visas
@@ -88,21 +86,22 @@ export default function VisasScreen() {
           );
         })}
       </View>
-    </ScrollView>
+      </ScrollView>
+
+      <TopSafeAreaBlur />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+  scroll: {
+    flex: 1,
+  },
+  backBtnWrap: {
+    alignSelf: 'flex-start',
     marginBottom: Spacing.md,
   },
   sectionTitle: {

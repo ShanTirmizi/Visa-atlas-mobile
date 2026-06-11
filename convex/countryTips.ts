@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, internalMutation } from "./_generated/server";
+import { requireAuth } from "./lib/auth";
 
 // Shared validators — kept here so both the public query result and
 // the internal write mutation use the exact same shape.
@@ -35,6 +36,10 @@ const tapWaterValidator = v.union(
 export const getCountryTips = query({
   args: { countryCode: v.string() },
   handler: async (ctx, { countryCode }) => {
+    // The data is non-sensitive cached country facts, but every public
+    // query requires auth (CLAUDE.md: no exceptions) — without it this is
+    // a free anonymous endpoint anyone can poll.
+    await requireAuth(ctx);
     const upper = countryCode.toUpperCase();
     const row = await ctx.db
       .query("countryTipsCache")

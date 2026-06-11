@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { tabSlideIn } from '@/utils/tabAnimation';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Pressable,
   Linking,
@@ -46,6 +48,7 @@ import BackButton from '@/components/ui/BackButton';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Guilloche } from '@/components/ui/Guilloche';
 import { Flag } from '@/components/ui/Flag';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { toAlpha2 } from '@/utils/countryCode';
 
 // ---------------------------------------------------------------------------
@@ -316,6 +319,17 @@ export default function GuideDetailScreen() {
   const [expandedTip, setExpandedTip] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
+  // Scroll-fade chrome (App Store detail pattern): the BackButton row floats
+  // over full-bleed scroll content and TopSafeAreaBlur frosts the band as
+  // content tucks beneath it. Header height is measured at layout time.
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y;
+    },
+  });
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 56);
+
   type GuideTab = 'Checklist' | 'Details' | 'Tips';
   const GUIDE_TABS: ReadonlyArray<GuideTab> = ['Checklist', 'Details', 'Tips'];
   const [activeTab, setActiveTab] = useState<GuideTab>('Checklist');
@@ -394,6 +408,7 @@ export default function GuideDetailScreen() {
         <SkeletonBlock h={40} colors={colors} />
         <SkeletonBlock h={200} colors={colors} />
         <SkeletonBlock h={150} colors={colors} />
+        <TopSafeAreaBlur />
       </View>
     );
   }
@@ -414,6 +429,7 @@ export default function GuideDetailScreen() {
             This visa guide may have been deleted or the link is invalid.
           </Text>
         </View>
+        <TopSafeAreaBlur />
       </View>
     );
   }
@@ -433,19 +449,27 @@ export default function GuideDetailScreen() {
   ];
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md },
-      ]}
-    >
-      <View style={styles.headerRow}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Floating BackButton row — content scrolls beneath it, and
+          TopSafeAreaBlur (last child) frosts the band on scroll. */}
+      <View
+        // box-none: only the BackButton captures touches — drags on the rest
+        // of the band fall through to the scroll content beneath.
+        pointerEvents="box-none"
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+        style={[styles.headerRow, { paddingTop: insets.top + Spacing.md }]}
+      >
         <BackButton />
       </View>
 
-      <ScrollView
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: headerHeight + Spacing.sm },
+        ]}
       >
         {/* ── Editorial header ─────────────────────── */}
         <View style={{ marginBottom: 18 }}>
@@ -505,7 +529,7 @@ export default function GuideDetailScreen() {
               </Text>
             </View>
 
-            {/* Status pill — soft pill with dot */}
+            {/* Status pill — soft pill: bg tint + coloured text, no dot */}
             <View style={{ position: 'relative', zIndex: 20, marginTop: 2 }}>
               <TouchableOpacity
                 onPress={() => setStatusOpen(!statusOpen)}
@@ -515,14 +539,6 @@ export default function GuideDetailScreen() {
                 ]}
                 activeOpacity={0.7}
               >
-                <View
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: colors[currentStatus.tokenFg],
-                  }}
-                />
                 <Text style={[styles.statusText, { color: colors[currentStatus.tokenFg] }]}>
                   {currentStatus.label}
                 </Text>
@@ -550,14 +566,6 @@ export default function GuideDetailScreen() {
                           ]}
                           activeOpacity={0.7}
                         >
-                          <View
-                            style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: 3,
-                              backgroundColor: colors[cfg.tokenFg],
-                            }}
-                          />
                           <Text
                             style={{
                               fontFamily: FontFamily.monoMedium,
@@ -1289,7 +1297,7 @@ export default function GuideDetailScreen() {
                       marginBottom: -4,
                     }}
                   >
-                    "
+                    “
                   </Text>
                   <Kicker color={colors.coral}>COMMON PITFALLS</Kicker>
                 </View>
@@ -1306,7 +1314,7 @@ export default function GuideDetailScreen() {
                     marginBottom: 14,
                   }}
                 >
-                  Don't trip up
+                  Don’t trip up
                   <Text style={{ color: colors.coral }}>.</Text>
                 </Text>
 
@@ -1357,7 +1365,7 @@ export default function GuideDetailScreen() {
                   <Kicker color={colors.teal}>INSIDER TIPS</Kicker>
                 </View>
 
-                <EditorialTitle size={22}>From those who've done it</EditorialTitle>
+                <EditorialTitle size={22}>From those who’ve done it</EditorialTitle>
                 <Squiggle width={40} color={colors.coral} style={{ marginTop: 6, marginBottom: 14 }} />
 
                 <View style={{ gap: 14 }}>
@@ -1398,7 +1406,7 @@ export default function GuideDetailScreen() {
 
         {/* Bottom spacer */}
         <View style={{ height: insets.bottom + 90 }} />
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* ── Floating "Ask Visa Atlas AI" FAB ───── */}
       <Pressable
@@ -1423,6 +1431,9 @@ export default function GuideDetailScreen() {
       >
         <Sparkles size={22} color="#FFFFFF" strokeWidth={2.2} fill="#FFFFFF" />
       </Pressable>
+
+      {/* Frosts the BackButton band as content scrolls beneath it. */}
+      <TopSafeAreaBlur scrollY={scrollY} extra={Math.max(0, headerHeight - insets.top)} />
     </View>
   );
 }
@@ -1437,12 +1448,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
   },
   scrollContent: {
+    paddingHorizontal: Spacing.lg,
     paddingBottom: 40,
   },
 
+  // Floats over the scroll content; zIndex above TopSafeAreaBlur (100) so
+  // the circular BackButton stays crisp on top of the frost.
   headerRow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 110,
     flexDirection: 'row',
-    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
   },
 
   fab: {

@@ -251,7 +251,7 @@ function SignUpForm({ colors, loading, error, onSubmit }: SignUpFormProps) {
             marginBottom: 12,
           }}
         >
-          Passwords don't match
+          Passwords don’t match
         </Text>
       ) : null}
 
@@ -466,7 +466,12 @@ export default function SignInScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // RNKC's KeyboardAvoidingView does nothing when behavior is undefined
+        // (its animated-style switch falls through to `return {}`), and with
+        // KeyboardProvider + edge-to-edge there is no OS adjustResize fallback
+        // on Android. Pass "padding" unconditionally — RNKC's whole point is
+        // identical cross-platform behavior.
+        behavior="padding"
       >
         <Animated.ScrollView
           onScroll={onScroll}
@@ -695,8 +700,8 @@ export default function SignInScreen() {
         </Animated.ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Glass header overlay — always on top */}
-      <TopSafeAreaBlur />
+      {/* Glass header overlay — scroll-fade driven by the ScrollView above */}
+      <TopSafeAreaBlur scrollY={scrollY} />
     </View>
   );
 }

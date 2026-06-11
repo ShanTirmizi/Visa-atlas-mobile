@@ -69,7 +69,7 @@ export function GuidesEmptyCard({ onStart }: Props) {
         >
           Start visa application
         </Text>
-        . We'll keep your guide right here.
+        . We’ll keep your guide right here.
       </Text>
 
       {/* Single full-width CTA */}

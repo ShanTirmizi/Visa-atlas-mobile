@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   Share,
-  Platform,
   ScrollView,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -19,6 +18,7 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { Link, Mail } from 'lucide-react-native';
 import BackButton from '@/components/ui/BackButton';
+import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import SegmentedControl from '@/components/ui/SegmentedControl';
@@ -92,7 +92,9 @@ export default function InviteScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // RNKC's KeyboardAvoidingView is a no-op when behavior is undefined —
+      // pass "padding" unconditionally so Android avoids the keyboard too.
+      behavior="padding"
     >
       {/* Header */}
       <View
@@ -191,6 +193,8 @@ export default function InviteScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <TopSafeAreaBlur />
     </KeyboardAvoidingView>
   );
 }
