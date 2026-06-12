@@ -57,6 +57,10 @@ import { parseDiningGuide, type ItineraryDay } from '@/types/itinerary';
 // ── Collaboration — overlapping avatars in the header ──────
 import { CollabStack } from '@/components/trip/CollabStack';
 
+// ── Share — public link sheet (3-dot menu → Share this trip) ──
+import ShareTripSheet from '@/components/trip/ShareTripSheet';
+import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+
 // ── Visa guide sheet — same flow used on country/[code] ────
 import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
 import { useVisa } from '@/contexts/visa-context';
@@ -172,6 +176,7 @@ export default function TripDetailScreen() {
   const addBookingRef = useRef<AddBookingSheetRef>(null);
   const bookingDetailRef = useRef<BookingDetailSheetRef>(null);
   const guideSheetRef = useRef<VisaGuideSheetRef>(null);
+  const shareSheetRef = useRef<BottomSheetModal>(null);
 
   const { heldVisas, passports } = useVisa();
   const heldVisasSet = useMemo(
@@ -252,6 +257,10 @@ export default function TripDetailScreen() {
 
   const handleOpenMenu = () => {
     Alert.alert('Trip options', undefined, [
+      {
+        text: 'Share this trip',
+        onPress: () => shareSheetRef.current?.present(),
+      },
       {
         text: 'Chat with AI',
         onPress: () => router.push(`/chat/${id}` as never),
@@ -1128,6 +1137,15 @@ export default function TripDetailScreen() {
           onGuideCreated={(guideId) => router.push(`/guide/${guideId}` as never)}
         />
       ) : null}
+      {/* Public share-link sheet — opened from the 3-dot menu. For a
+          still-generating trip it opens with the toggle disabled and
+          explains why instead of erroring. */}
+      <ShareTripSheet
+        ref={shareSheetRef}
+        tripId={id as Id<'trips'>}
+        countryName={trip?.countryName ?? ''}
+        tripStatus={trip?.status}
+      />
     </View>
   );
 }
