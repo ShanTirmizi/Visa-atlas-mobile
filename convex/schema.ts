@@ -331,6 +331,24 @@ export default defineSchema({
     .index("by_trip", ["tripId"])
     .index("by_email", ["invitedEmail"]),
 
+  // ── Trip Share Links ──
+  // Public read-only share links (visa-atlas.vercel.app/t/<token>) for
+  // people WITHOUT the app. Distinct from tripInvites (collaboration,
+  // requires app). The token is a capability URL: unguessable 20-char
+  // CSPRNG string, revocable. Revoke-then-reshare mints a FRESH token so
+  // leaked old links die. viewCount is patched by recordShareView from
+  // the web share page.
+  tripShares: defineTable({
+    tripId: v.id("trips"),
+    token: v.string(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    viewCount: v.optional(v.number()),
+  })
+    .index("by_trip", ["tripId"])
+    .index("by_token", ["token"]),
+
   // ── Trip Votes ──
   tripVotes: defineTable({
     tripId: v.id("trips"),

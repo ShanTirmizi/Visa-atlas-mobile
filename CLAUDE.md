@@ -69,7 +69,7 @@ When you encounter any of these patterns, ship the **right** version on the firs
 
 ## Convex Security Guidelines
 
-- Every public Convex query, mutation, and action MUST call `requireAuth(ctx)` or `checkTripPermission(ctx, ...)` at the top of its handler. No exceptions.
+- Every public Convex query, mutation, and action MUST call `requireAuth(ctx)` or `checkTripPermission(ctx, ...)` at the top of its handler. The sole exception is the public share surface (`convex/tripShares.ts` `getSharedTrip` / `recordShareView`), which authorizes via `requireShareToken(ctx, token)` — an unguessable revocable capability token — and must only return the `buildSharedTripPayload` allowlist (never raw docs).
 - After getting the userId from `requireAuth`, always verify ownership before reading or modifying a document (e.g., `if (doc.userId !== userId) throw new Error("...")`).
 - Never accept a userId as a function argument for authorization. Always derive it server-side via `requireAuth`.
 

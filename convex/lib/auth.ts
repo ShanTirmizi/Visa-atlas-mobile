@@ -78,6 +78,32 @@ export async function checkTripPermission(
 }
 
 /**
+ * Token-gated PUBLIC access — the documented exception to the
+ * requireAuth-everywhere rule (see CLAUDE.md "Convex Security Guidelines").
+ * The share token IS the authorization: a 20-char CSPRNG capability string
+ * (~2^116 guesses) that any trip editor can revoke. Every public
+ * share-surface function (convex/tripShares.ts getSharedTrip /
+ * recordShareView) MUST resolve access through this helper and must only
+ * return / touch allowlisted data (see convex/lib/sharePayload.ts).
+ * Returns the active share + its non-deleted trip, or null (never throws —
+ * the web page turns null into a branded 404).
+ */
+export async function requireShareToken(
+  ctx: AuthCtx,
+  token: string,
+): Promise<{ share: Doc<"tripShares">; trip: Doc<"trips"> } | null> {
+  if (typeof token !== "string" || token.length < 16 || token.length > 64) return null;
+  const share = await ctx.db
+    .query("tripShares")
+    .withIndex("by_token", (q) => q.eq("token", token))
+    .unique();
+  if (share === null || share.revokedAt !== undefined) return null;
+  const trip = await ctx.db.get(share.tripId);
+  if (trip === null || trip.deletedAt !== undefined) return null;
+  return { share, trip };
+}
+
+/**
  * Returns true if `userId` is a collaborator on `tripId`, false otherwise.
  */
 export async function isTripCollaborator(
