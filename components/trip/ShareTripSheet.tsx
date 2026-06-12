@@ -18,7 +18,7 @@ import { BottomSheetView, type BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useConvexAuth } from 'convex/react';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
@@ -61,35 +61,56 @@ export interface ShareTripSheetProps {
   tripId: Id<'trips'>;
   countryName: string;
   tripStatus?: string;
+  /** Collaborator role from getTrip's `_role`. Viewers can copy/share an
+   *  already-on link, but only editors may toggle it on or off. */
+  role?: string;
 }
 
-/** Surface the backend's generating-trip message faithfully; collapse
+export interface ShareTripSheetRef {
+  present: () => void;
+  dismiss: () => void;
+}
+
+/** Surface the backend's generation-guard messages faithfully; collapse
  *  everything else (network blips, request-id noise) to one calm line. */
 function shareErrorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : '';
-  if (raw.includes('still generating')) {
-    return "This trip is still generating — try again when it's ready";
+  // Widened to plain 'generating' so BOTH backend guards (still-generating
+  // and didn't-finish/failed) surface their copy verbatim.
+  if (raw.includes('generating')) {
+    return raw.includes("didn't finish")
+      ? "This trip didn't finish generating — retry it before sharing"
+      : "This trip is still generating — try again when it's ready";
   }
-  return 'Could not update the share link — try again.';
+  return "Couldn't update the share link — try again.";
 }
 
-const ShareTripSheet = forwardRef<BottomSheetModal, ShareTripSheetProps>(
-  ({ tripId, countryName, tripStatus }, ref) => {
+const ShareTripSheet = forwardRef<ShareTripSheetRef, ShareTripSheetProps>(
+  ({ tripId, countryName, tripStatus, role }, ref) => {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const { showToast } = useToast();
 
     const sheetRef = useRef<BottomSheetModal>(null);
-    // Parent drives present()/dismiss() through the forwarded ref; we keep a
-    // local handle for the invite handoff dismissal below.
-    useImperativeHandle(ref, () => sheetRef.current as BottomSheetModal);
+    // Present-gated subscription (EditDaySheet ref idiom): the share-status
+    // query stays 'skip' until the sheet is first opened, so the trip screen
+    // doesn't pay an always-on Convex subscription for a sheet most sessions
+    // never present. Once opened it stays live — reopens are instant.
+    const [everPresented, setEverPresented] = useState(false);
+    useImperativeHandle(ref, () => ({
+      present: () => {
+        setEverPresented(true);
+        sheetRef.current?.present();
+      },
+      dismiss: () => sheetRef.current?.dismiss(),
+    }));
 
     // ── Share-link state ────────────────────────────────────
     const { isAuthenticated } = useConvexAuth();
     const status = useQuery(
       api.tripShares.getShareStatus,
-      isAuthenticated ? { tripId } : 'skip',
+      isAuthenticated && everPresented ? { tripId } : 'skip',
     );
     const createShareLink = useMutation(api.tripShares.createShareLink);
     const revokeShareLink = useMutation(api.tripShares.revokeShareLink);
@@ -110,7 +131,10 @@ const ShareTripSheet = forwardRef<BottomSheetModal, ShareTripSheetProps>(
     // Generating/failed trips can't mint links (backend enforces it too) —
     // premium behavior is to explain up front and disable, not error.
     const generationBlocked = tripStatus === 'generating' || tripStatus === 'failed';
-    const switchDisabled = status === undefined || generationBlocked;
+    // Viewers can't toggle the link (createShareLink/revokeShareLink need
+    // editor), but Copy/Share/PDF stay available while the link is on.
+    const isViewer = role === 'viewer';
+    const switchDisabled = status === undefined || generationBlocked || isViewer;
 
     const handleToggle = useCallback(() => {
       // One in-flight mutation at a time — taps during the spring are
@@ -134,7 +158,7 @@ const ShareTripSheet = forwardRef<BottomSheetModal, ShareTripSheetProps>(
         await Clipboard.setStringAsync(shareUrlForToken(status.token));
         showToast('success', 'Link copied');
       } catch {
-        showToast('error', 'Could not copy the link.');
+        showToast('error', "Couldn't copy the link — try again.");
       }
     }, [status, showToast]);
 
@@ -157,7 +181,14 @@ const ShareTripSheet = forwardRef<BottomSheetModal, ShareTripSheetProps>(
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       setPdfBusy(true);
       try {
-        const safeName = countryName.replace(/[^a-z0-9 ]/gi, '').trim() || 'Trip';
+        // NFD splits accented chars into base + combining mark so the ASCII
+        // strip keeps the base letter: "Türkiye" → "Turkiye", not "Trkiye".
+        const safeName =
+          countryName
+            .normalize('NFD')
+            .replace(/\p{Diacritic}/gu, '')
+            .replace(/[^a-z0-9 ]/gi, '')
+            .trim() || 'Trip';
         // idempotent: a re-export overwrites the cached copy instead of
         // rejecting with DestinationAlreadyExists.
         const file = await File.downloadFileAsync(
@@ -171,7 +202,7 @@ const ShareTripSheet = forwardRef<BottomSheetModal, ShareTripSheetProps>(
           dialogTitle: `${countryName} itinerary`,
         });
       } catch {
-        showToast('error', 'Could not fetch the PDF — try again.');
+        showToast('error', "Couldn't fetch the PDF — try again.");
       } finally {
         setPdfBusy(false);
       }
@@ -223,9 +254,13 @@ const ShareTripSheet = forwardRef<BottomSheetModal, ShareTripSheetProps>(
             <Text style={{ color: colors.coral }}>.</Text>
           </Text>
           <Text style={[styles.subtitle, { color: colors.inkSoft }]}>
-            {generationBlocked
-              ? 'Your trip is still generating — sharing unlocks when it’s ready.'
-              : 'Anyone with the link can view — no app needed.'}
+            {tripStatus === 'failed'
+              ? 'This trip didn’t finish generating, so there’s nothing to share yet.'
+              : tripStatus === 'generating'
+                ? 'Your trip is still generating — sharing unlocks when it’s ready.'
+                : isViewer
+                  ? 'Only trip editors can turn the link on or off.'
+                  : 'Anyone with the link can view — no app needed.'}
           </Text>
 
           {/* ── Link card ── */}
@@ -282,11 +317,10 @@ const ShareTripSheet = forwardRef<BottomSheetModal, ShareTripSheetProps>(
 
           {/* ── Action row — only while the link is live ── */}
           {linkOn && status ? (
-            <Animated.View
-              entering={FadeInDown.duration(220)}
-              exiting={FadeOutDown.duration(180)}
-              style={styles.actionRow}
-            >
+            // No `exiting`: inside a dynamic-sizing sheet an exiting view
+            // leaves layout immediately and overlaps the rows below while it
+            // fades — the sheet's own height animation covers the collapse.
+            <Animated.View entering={FadeInDown.duration(220)} style={styles.actionRow}>
               <ActionPill icon={Copy} label="Copy link" onPress={handleCopy} />
               <ActionPill icon={Share2} label="Share…" onPress={handleShare} />
               <ActionPill icon={FileText} label="PDF" onPress={handlePdf} busy={pdfBusy} />

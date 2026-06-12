@@ -66,9 +66,14 @@ export const createShareLink = mutation({
     if (trip === null || trip.deletedAt !== undefined) {
       throw new Error("Trip not found");
     }
-    if (trip.status === "generating" || trip.status === "failed") {
+    if (trip.status === "generating") {
       throw new Error(
         "This trip is still generating — try again when it's ready",
+      );
+    }
+    if (trip.status === "failed") {
+      throw new Error(
+        "This trip didn't finish generating — retry it before sharing",
       );
     }
 

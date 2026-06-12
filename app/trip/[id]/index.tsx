@@ -58,8 +58,7 @@ import { parseDiningGuide, type ItineraryDay } from '@/types/itinerary';
 import { CollabStack } from '@/components/trip/CollabStack';
 
 // ── Share — public link sheet (3-dot menu → Share this trip) ──
-import ShareTripSheet from '@/components/trip/ShareTripSheet';
-import type { BottomSheetModal } from '@gorhom/bottom-sheet';
+import ShareTripSheet, { type ShareTripSheetRef } from '@/components/trip/ShareTripSheet';
 
 // ── Visa guide sheet — same flow used on country/[code] ────
 import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
@@ -176,7 +175,7 @@ export default function TripDetailScreen() {
   const addBookingRef = useRef<AddBookingSheetRef>(null);
   const bookingDetailRef = useRef<BookingDetailSheetRef>(null);
   const guideSheetRef = useRef<VisaGuideSheetRef>(null);
-  const shareSheetRef = useRef<BottomSheetModal>(null);
+  const shareSheetRef = useRef<ShareTripSheetRef>(null);
 
   const { heldVisas, passports } = useVisa();
   const heldVisasSet = useMemo(
@@ -1145,6 +1144,7 @@ export default function TripDetailScreen() {
         tripId={id as Id<'trips'>}
         countryName={trip?.countryName ?? ''}
         tripStatus={trip?.status}
+        role={trip?._role}
       />
     </View>
   );
