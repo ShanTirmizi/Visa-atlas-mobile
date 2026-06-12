@@ -65,6 +65,7 @@ import {
   resolveCountry,
   type HeldVisaType,
 } from '@/data/visaData';
+import { toAlpha3 } from '@/utils/countryCode';
 import { VisaHeroCardForCountry } from '@/components/visa/VisaHeroCardForCountry';
 import { VisaDeadlineCard } from '@/components/visa/VisaDeadlineCard';
 import { VisaChecklistCard } from '@/components/visa/VisaChecklistCard';
@@ -736,15 +737,26 @@ export default function TripDetailScreen() {
             );
           }
 
-          const country = staticVisaData.find((c) => c.code === trip.countryCode);
-          if (!country) return null;
-          const resolved = resolveCountry(country, heldVisasSet);
+          // Trip docs store the country code in EITHER alpha-2 ('PT') or
+          // alpha-3 ('VNM') depending on the creation path, while the
+          // static table is keyed alpha-3 — normalize before looking up.
+          // (Unnormalized, Portugal's Visa tab rendered completely blank:
+          // 'PT' missed the 'PRT' row and the tab returned null.)
+          const lookupCode = toAlpha3(trip.countryCode) || trip.countryCode;
+          const country = staticVisaData.find((c) => c.code === lookupCode);
+          const resolved = country ? resolveCountry(country, heldVisasSet) : null;
 
           // Status-derived editorial copy. Prefer the streamed category —
           // generation receives the traveler's actual passport(s), while the
           // static table is not passport-aware yet — and fall back to the
           // static resolution for older trips / off-vocabulary values.
-          const c = normalizeStreamedVisaCategory(trip.visaCategory) ?? resolved.category;
+          // Never blank the tab: streamed category first, static fallback,
+          // and visa-required (the most conservative copy) as a floor for
+          // trips whose country code matches nothing.
+          const c =
+            normalizeStreamedVisaCategory(trip.visaCategory) ??
+            resolved?.category ??
+            'visa-required';
           const editorial = (() => {
             if (c === 'visa-free' || c === 'home') {
               return {
@@ -863,15 +875,20 @@ export default function TripDetailScreen() {
                 />
               </View>
 
-              {/* Visa hero card — same streamed-first category as the editorial */}
-              <VisaHeroCardForCountry
-                country={country}
-                category={c}
-                days={resolved.days}
-                passports={passports}
-                hasGuide={!!existingGuide}
-                onCreateGuide={handleStartVisaApplication}
-              />
+              {/* Visa hero card — same streamed-first category as the
+                  editorial. Skipped (not the whole tab) when the country is
+                  missing from the static table — the editorial header,
+                  checklist, and tip above/below carry the essentials. */}
+              {country && resolved && (
+                <VisaHeroCardForCountry
+                  country={country}
+                  category={c}
+                  days={resolved.days}
+                  passports={passports}
+                  hasGuide={!!existingGuide}
+                  onCreateGuide={handleStartVisaApplication}
+                />
+              )}
 
               {/* Apply-by deadline — startDate − (processing + 2-week buffer).
                   Renders only for action-required categories on dated trips
@@ -880,7 +897,7 @@ export default function TripDetailScreen() {
                 category={c}
                 startDate={trip.startDate}
                 processingTime={trip.visaProcessingTime}
-                fallbackProcessingTime={country.processingTime}
+                fallbackProcessingTime={country?.processingTime}
               />
 
               {/* Bring-with-you checklist — checkable rows, progress persisted

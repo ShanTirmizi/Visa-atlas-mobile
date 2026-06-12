@@ -8,8 +8,6 @@ import { ChevronRight, Search, X } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  useAnimatedReaction,
-  runOnJS,
   withRepeat,
   withSequence,
   withTiming,
@@ -18,9 +16,10 @@ import Animated, {
   Extrapolation,
 } from 'react-native-reanimated';
 import {
-  BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView,
+  BottomSheetModal, BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,38 +61,25 @@ const COMPANION_OPTIONS = ['solo', 'partner', 'friends', 'family'];
 // Avatar tones for traveler stack — warm, forest, sunset palette
 const AVATAR_TONES = ['#C4A882', '#6B8F71', '#C97B4B'] as const;
 
-// Keyboard handling on this sheet — the design after many tries:
+// Keyboard handling on this sheet — same recipe as AddBookingSheet and
+// EditDaySheet, the two QA-proven siblings:
 //
-// We deliberately DO NOT use BottomSheetKeyboardAwareScrollView here.
-// KAW renders a sentinel View after children with
-// `paddingBottom: keyboardHeight + 1`. That inflates the contentContainer,
-// which trips enableDynamicSizing into resizing the sheet. With our
-// short form (~700pt), the math doesn't work out: the scroll range
-// inside the sheet ends up being too small to bring the focused input
-// above the keyboard, and the sentinel itself shows as a visible empty
-// gap above the keyboard. KAW's design assumes a tall form; ours isn't.
+//   1. BottomSheetKeyboardAwareScrollView (RNKC) scrolls the focused
+//      input above the keyboard with the right delta — the Apple Mail
+//      "scroll BY delta" algorithm, no hand-rolled math.
+//   2. enableDynamicSizing + maxDynamicContentSize cap the height;
+//      topInset clamps the position below the Dynamic Island.
+//   3. Default keyboardBehavior ("interactive") + keyboardBlurBehavior
+//      "restore" — gorhom shifts the sheet, RNKC scrolls the field.
+//   4. The CTA collapses (height → 0) while the keyboard is up, driven
+//      by useReanimatedKeyboardAnimation, so the notes field is the
+//      bottom-most element while typing.
 //
-// What we do instead — the pattern used by the production expo-template
-// gorhom + react-native-keyboard-controller example
-// (kacgrzes/expo-template/.../keyboard-sheet.tsx):
-//
-//   1. Use plain BottomSheetScrollView — no sentinel, no inflation.
-//   2. Use enableDynamicSizing — sheet rests at content height.
-//   3. Default keyboardBehavior ("interactive") — sheet shifts up by
-//      the keyboard height when the keyboard appears.
-//   4. keyboardBlurBehavior="restore" — sheet returns to its detent
-//      when the keyboard dismisses.
-//   5. Animate the CTA's height to 0 when the keyboard is shown,
-//      driven by useReanimatedKeyboardAnimation. This makes the form
-//      ~70pt shorter while typing, which is exactly what's needed for
-//      the input (now the bottom-most visual element) to sit just
-//      above the keyboard after gorhom's interactive shift.
-//
-// Net behavior: tap input → CTA collapses, sheet shifts up so its
-// bottom is at the keyboard top, input is the bottom-most element and
-// sits just above the keyboard. Dismiss the keyboard → CTA expands
-// back, sheet returns to its rest position. No empty gap, no jumping
-// to the top of the screen.
+// History, so nobody reinvents this: a custom keyboard-height spacer +
+// scrollToEnd-on-settle was tried here and shipped a giant blank void
+// between the notes field and the keyboard (scrollToEnd scrolled past
+// the field to the spacer's end). Per CLAUDE.md, the library pattern
+// wins — the booking form proves KAW works with this exact sheet config.
 //
 // Modals (date picker, country picker) are rendered OUTSIDE this sheet
 // so they don't pollute the contentContainer measurement.
@@ -339,29 +325,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // Keyboard progress (0 = closed, 1 = open). Used to collapse the CTA
     // when the keyboard appears so the input ends up just above the
     // keyboard after gorhom's interactive sheet shift. See top-of-file.
-    const { progress: keyboardProgress, height: keyboardHeight } =
-      useReanimatedKeyboardAnimation();
-    const scrollRef = useRef<React.ComponentRef<typeof BottomSheetScrollView>>(null);
-
-    // With topInset clamping the sheet below the Dynamic Island, the
-    // interactive shift alone can't clear the keyboard on tall screens —
-    // the notes field (bottom-most element) would hide behind it. A
-    // keyboard-height spacer at the end of the scroll content creates the
-    // missing scroll slack (dynamic sizing is capped at max, so no resize
-    // loop), and we scroll to the end once the keyboard settles so the
-    // field lands just above it.
-    const keyboardSpacerStyle = useAnimatedStyle(() => ({
-      height: Math.abs(keyboardHeight.value),
-    }));
-    const scrollNotesIntoView = useCallback(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, []);
-    useAnimatedReaction(
-      () => keyboardProgress.value > 0.95,
-      (open, prevOpen) => {
-        if (open && prevOpen === false) runOnJS(scrollNotesIntoView)();
-      },
-    );
+    const { progress: keyboardProgress } = useReanimatedKeyboardAnimation();
     // Natural height of the CTA block, measured at layout (button height +
     // its 18pt marginTop from s.ctaButton). The previous hardcoded 70 was
     // ~5pt shorter than the real button, and the overflow:'hidden' wrapper
@@ -687,13 +651,14 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           }
         }}
       >
-        <BottomSheetScrollView
-          ref={scrollRef}
+        <BottomSheetKeyboardAwareScrollView
           contentContainerStyle={s.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           // iMessage-style interactive drag-to-dismiss for the keyboard.
           keyboardDismissMode="interactive"
+          // Breathing room between the focused input and the keyboard top.
+          bottomOffset={24}
         >
           {/* ── MAIN FORM ──────────────────────────────────────── */}
           {!isLoading && (
@@ -976,16 +941,14 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               </View>
 
               {/* "Anything else?" — free-form notes that flow into the
-                  generation prompt as userNotes (Task 8). onFocus covers
-                  the case the keyboard-progress reaction can't: keyboard
-                  ALREADY open when the field is focused (e.g. planner
-                  presented over a focused search bar) — no progress
-                  transition fires, so scroll on focus too. */}
+                  generation prompt as userNotes (Task 8). KAW measures the
+                  focused TextInput itself and scrolls it above the keyboard
+                  — including when the keyboard is already open at focus
+                  time — so no manual scroll wiring is needed here. */}
               <View style={{ marginTop: 18 }}>
                 <TripPlannerNotesField
                   value={userNotes}
                   onChangeText={setUserNotes}
-                  onFocus={scrollNotesIntoView}
                 />
               </View>
 
@@ -1102,10 +1065,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               </Text>
             </View>
           )}
-          {/* Keyboard spacer — scroll slack while the keyboard is open
-              (see the keyboardSpacerStyle note above). */}
-          <Animated.View style={keyboardSpacerStyle} />
-        </BottomSheetScrollView>
+        </BottomSheetKeyboardAwareScrollView>
       </BottomSheetModal>
 
       {/* ── Date picker — calendar grid (iOS) / native dialog (Android) ──

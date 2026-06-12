@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Dimensions } from 'react-native';
+import { Dimensions, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BottomSheetModal,
@@ -298,7 +298,16 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
             <BookingForm
               type={selectedType}
               isEditing={editingId != null}
-              onBack={() => setStep('type')}
+              // Dismiss the keyboard BEFORE unmounting the form: gorhom's
+              // keyboardBlurBehavior="restore" only fires off a blur from a
+              // still-mounted BottomSheetTextInput. Unmounting a focused
+              // input mid-keyboard strands the sheet at its lifted position
+              // — it sat visibly detached above the screen bottom
+              // (QA-reproduced: form → focus field → back arrow).
+              onBack={() => {
+                Keyboard.dismiss();
+                setStep('type');
+              }}
               onSubmit={handleSubmit}
               defaultCountryCode={prelinkedTrip?.countryCode}
               defaultStartDate={prelinkedTrip?.startDate}
