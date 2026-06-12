@@ -6,6 +6,7 @@ import { Photo } from '@/components/ui/Photo';
 import { Type } from '@/constants/typography';
 import { Shadows, FontFamily } from '@/constants/theme';
 import { useTheme } from '@/contexts/theme-context';
+import { cityTemperatures } from '@/data/temperatureData';
 
 interface TripOverviewHeroProps {
   tripName: string;
@@ -14,12 +15,27 @@ interface TripOverviewHeroProps {
   duration?: number;
 }
 
+/**
+ * Real average-high temperature for the destination this month, or null.
+ * `cityName` is the trip's capital (trip.capital is set from
+ * countryMeta[code].capital — see utils/dayPlaces.ts), which is exactly the
+ * key cityTemperatures uses. Same recipe as the Atlas explore label.
+ * No data → no pill; we never invent weather conditions.
+ */
+function getMonthlyTemperature(cityName: string): number | null {
+  const temps = cityTemperatures[cityName];
+  if (!temps) return null;
+  const temp = temps[new Date().getMonth()];
+  return typeof temp === 'number' ? temp : null;
+}
+
 export function TripOverviewHero({
   tripName,
   cityName,
   heroImageUrl,
 }: TripOverviewHeroProps) {
   const { colors } = useTheme();
+  const temperature = getMonthlyTemperature(cityName);
 
   // Pull last word out for italic emphasis ("Indonesia." → italic period)
   const words = tripName.split(/\s+/);
@@ -42,22 +58,26 @@ export function TripOverviewHero({
         pointerEvents="none"
       />
 
-      {/* Top-left: warm white weather pill with coral sun */}
-      <View style={styles.topLeft}>
-        <View style={styles.weatherPill}>
-          <Sun size={12} color={colors.coral} fill={colors.coral} />
-          <Text
-            style={{
-              fontFamily: FontFamily.semibold,
-              fontSize: 11,
-              fontWeight: '600',
-              color: colors.ink,
-            }}
-          >
-            21°C · clear
-          </Text>
+      {/* Top-left: warm white weather pill with coral sun — real monthly
+          average high for the destination. Rendered only when we have data;
+          we never fabricate conditions we don't know. */}
+      {temperature != null && (
+        <View style={styles.topLeft}>
+          <View style={styles.weatherPill}>
+            <Sun size={12} color={colors.coral} fill={colors.coral} />
+            <Text
+              style={{
+                fontFamily: FontFamily.semibold,
+                fontSize: 11,
+                fontWeight: '600',
+                color: colors.ink,
+              }}
+            >
+              {`${temperature}°`}
+            </Text>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Top-right: glass city pill */}
       <View style={styles.topRight}>

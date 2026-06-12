@@ -89,15 +89,22 @@ export default function GuidesScreen() {
     pickerRef.current?.open();
   }, []);
 
-  const handleCountryPicked = useCallback(
-    (code: string, name: string) => {
-      setPickedCountry({ code, name });
-      // The country picker dismiss animation is ~280ms — wait a beat so the
-      // visa-guide sheet can present cleanly without a stacking conflict.
-      setTimeout(() => guideSheetRef.current?.present(), 280);
-    },
-    [],
-  );
+  // Selection parks the country and lets the picker dismiss; the follow-up
+  // sheet presents from the picker's onDismiss — the actual close-animation
+  // completion — instead of a guessed timer. Setting state here also mounts
+  // the (conditionally rendered) VisaGuideSheet well before onDismiss fires.
+  const pendingGuidePresentRef = useRef(false);
+  const handleCountryPicked = useCallback((code: string, name: string) => {
+    setPickedCountry({ code, name });
+    pendingGuidePresentRef.current = true;
+  }, []);
+
+  const handlePickerDismissed = useCallback(() => {
+    if (!pendingGuidePresentRef.current) return; // plain swipe-away, no pick
+    pendingGuidePresentRef.current = false;
+    // rAF: let the current commit settle before presenting the next modal.
+    requestAnimationFrame(() => guideSheetRef.current?.present());
+  }, []);
 
   const handleGuideCreated = useCallback(
     (guideId: string) => {
@@ -256,6 +263,7 @@ export default function GuidesScreen() {
         excludeCodes={existingCodes}
         heldVisas={heldSet}
         onSelect={handleCountryPicked}
+        onDismiss={handlePickerDismissed}
       />
 
       {/* Visa guide generator — only mounted once a country is picked */}

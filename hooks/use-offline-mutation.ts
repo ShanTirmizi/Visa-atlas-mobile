@@ -6,7 +6,7 @@ import { useCallback } from 'react';
 import { useMutation } from 'convex/react';
 import { getFunctionName } from 'convex/server';
 import type { FunctionReference, FunctionArgs } from 'convex/server';
-import { useOffline } from '@/contexts/offline-context';
+import { useOffline, notifyMutationQueued } from '@/contexts/offline-context';
 import {
   enqueueMutation,
   getCachedTrip,
@@ -160,6 +160,10 @@ export function useOfflineMutation<Mutation extends FunctionReference<'mutation'
 
       const intent = resolveIntent(refStr, argsRecord);
       await enqueueMutation(intent);
+      // Nudge the offline banner's "N pending" count the moment the row
+      // lands — before the optimistic cache write, so the count is fresh
+      // even if that write fails.
+      notifyMutationQueued();
       await applyOptimisticUpdate(intent);
     },
     // convexMutate identity is stable per Convex docs; isOffline and mutationRef

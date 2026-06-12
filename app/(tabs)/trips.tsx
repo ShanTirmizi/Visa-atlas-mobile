@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { tabSlideIn } from '@/utils/tabAnimation';
+import { toLocalYMD } from '@/utils/localDate';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useConvexAuth } from 'convex/react';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
@@ -81,20 +82,30 @@ const HAND_PICKED: HandPickedDest[] = [
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
-function isUpcoming(startDate: string | undefined): boolean {
-  if (!startDate) return false;
-  return new Date(startDate).getTime() > Date.now();
+// A trip is "Past" only once it has fully ENDED — a trip starting today or
+// one the user is currently on belongs under "Upcoming". Comparing local
+// YYYY-MM-DD strings keeps day granularity and avoids the UTC-midnight bug
+// where a trip starting today flipped to "Past" by mid-morning.
+function tripEndYMD(t: RawTrip): string | undefined {
+  return t.endDate ?? t.startDate;
 }
 
-function isPast(startDate: string | undefined): boolean {
-  if (!startDate) return false;
-  return new Date(startDate).getTime() <= Date.now();
+function isUpcoming(t: RawTrip): boolean {
+  const end = tripEndYMD(t);
+  if (!end) return false;
+  return end >= toLocalYMD(new Date());
+}
+
+function isPast(t: RawTrip): boolean {
+  const end = tripEndYMD(t);
+  if (!end) return false;
+  return end < toLocalYMD(new Date());
 }
 
 function applyFilter(trips: RawTrip[], filter: FilterTab): RawTrip[] {
   switch (filter) {
-    case 'Upcoming': return trips.filter((t) => isUpcoming(t.startDate));
-    case 'Past':     return trips.filter((t) => isPast(t.startDate));
+    case 'Upcoming': return trips.filter((t) => isUpcoming(t));
+    case 'Past':     return trips.filter((t) => isPast(t));
     case 'Dreaming': return trips.filter((t) => !t.startDate);
     default:         return trips;
   }
@@ -253,7 +264,7 @@ export default function TripsScreen() {
   // Featured = first upcoming trip; fallback = first trip overall
   const featured = useMemo<RawTrip | null>(() => {
     if (sortedTrips.length === 0) return null;
-    const upcoming = sortedTrips.find((t) => isUpcoming(t.startDate));
+    const upcoming = sortedTrips.find((t) => isUpcoming(t));
     return upcoming ?? sortedTrips[0];
   }, [sortedTrips]);
 
@@ -429,14 +440,9 @@ export default function TripsScreen() {
             >
               More trips
             </Text>
-            <Text
-              style={[
-                Type.kickerSm,
-                { color: colors.teal, fontSize: 10, letterSpacing: 0.6, fontWeight: '700' },
-              ]}
-            >
-              SEE ALL
-            </Text>
+            {/* "SEE ALL" removed — the rows below already ARE all matching
+                trips, so the label was dead UI (looked tappable, did
+                nothing). Per CLAUDE.md: no dead affordances. */}
           </View>
           {rows.map((trip) => (
             <TripRow

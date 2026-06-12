@@ -92,6 +92,10 @@ export default defineSchema({
     // The interpolated refinement-answer phrases, stored alongside the
     // merged userNotes so the brief readout can render them as chips.
     refinementAnswers: v.optional(v.array(v.string())),
+    // ms-epoch of the most recent streaming patch (any section/day/failure
+    // marker). The zero-content watchdog reads this to distinguish a slow
+    // but live generation from a genuinely stalled one before failing it.
+    lastStreamAt: v.optional(v.number()),
   })
     .index("by_status", ["status"])
     .index("by_country", ["countryCode"])
@@ -220,7 +224,10 @@ export default defineSchema({
     ),
   })
     .index("by_country", ["countryCode"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    // Point lookup for getGuideByCountry — replaces collecting every guide
+    // the user owns and .find()ing client-side in the query.
+    .index("by_user_and_country", ["userId", "countryCode"]),
 
   // ── Bookings ──
   bookings: defineTable({
@@ -370,6 +377,25 @@ export default defineSchema({
     residence: v.union(v.string(), v.null()),
     // JSON-encoded CountryVisa[] — same encoding convention as trips.itinerary.
     visaMap: v.string(),
+    // Client preference sync (favorites/visited country codes and the
+    // passport/visa expiry-dates record). All optional — pre-sync profiles
+    // simply lack them, and saveVisaProfile only patches what's provided.
+    favorites: v.optional(v.array(v.string())),
+    visited: v.optional(v.array(v.string())),
+    // JSON-encoded Record<string, string> of expiry dates.
+    expiryDates: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // ── Rate Limits ──
+  // Fixed-window per-user counters guarding every LLM-triggering public
+  // function (trip generation, retries, refinement analysis, the AI proxy
+  // actions). One row per (userId, key); `windowStart` resets when the
+  // window lapses. See convex/lib/rateLimit.ts.
+  rateLimits: defineTable({
+    userId: v.id("users"),
+    key: v.string(),
+    windowStart: v.number(),
+    count: v.number(),
+  }).index("by_user_and_key", ["userId", "key"]),
 });

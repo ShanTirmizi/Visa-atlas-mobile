@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import BottomSheet, {
   BottomSheetFlatList,
   // BottomSheetTextInput so gorhom's keyboard handling engages on focus —
@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { Radius, FontFamily } from '@/constants/theme';
-import { SectionKicker } from '@/components/ui/SectionKicker';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Flag } from '@/components/ui/Flag';
 import { VisaBadge } from '@/components/ui/Badge';
@@ -52,8 +51,6 @@ interface ExploreSheetProps {
 }
 
 const FILTER_OPTIONS = ['All', 'Visa-free', 'On arrival', 'E-visa'];
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export function ExploreSheet({
   countries,
@@ -143,7 +140,163 @@ export function ExploreSheet({
     };
   }, [featured, onViewDetails, onToggleSave]);
 
-  const renderHeader = useCallback(() => (
+  // ── Header element ────────────────────────────────────────────────────
+  // MUST be a memoized ELEMENT of a stable module-level component type.
+  // The previous shape — ListHeaderComponent bound to a useCallback that
+  // closed over `search` — handed the FlatList a new function identity per
+  // keystroke; RN renders function headers as <Fn />, so each identity was
+  // a new element TYPE and React unmounted/remounted the entire header:
+  // the keyboard dismissed after every character and the flag carousel
+  // remounted. Now a keystroke changes none of these deps (the search text
+  // lives inside <SheetSearchField>), so the element reference is stable
+  // and React skips the header subtree entirely while the list re-filters.
+  const headerElement = useMemo(
+    () => (
+      <SheetHeader
+        countriesCount={countries.length}
+        popularCountries={popularCountries}
+        selectedCode={selectedCode}
+        onCarouselSelect={handleCarouselSelect}
+        filter={filter}
+        onFilterChange={setFilter}
+        featuredCardProps={featuredCardProps}
+        onSurpriseMe={onSurpriseMe}
+        onSearchChange={setSearch}
+      />
+    ),
+    [
+      countries.length,
+      popularCountries,
+      selectedCode,
+      handleCarouselSelect,
+      filter,
+      featuredCardProps,
+      onSurpriseMe,
+    ],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: CountryBrief }) => (
+      <Pressable
+        onPress={() => onViewDetails(item.code)}
+        style={({ pressed }) => [
+          styles.listRow,
+          { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
+        ]}
+      >
+        <Flag code={item.iso2} size={40} />
+        <View style={styles.listRowContent}>
+          <Text
+            style={{
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+              fontSize: 15,
+              fontWeight: '500',
+              color: colors.ink,
+              letterSpacing: -15 * 0.012,
+            }}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <Text
+            style={[
+              Type.kickerSm,
+              { color: colors.inkMute, marginTop: 2, fontSize: 9 },
+            ]}
+            numberOfLines={1}
+          >
+            {item.region.toUpperCase()}
+          </Text>
+        </View>
+        <VisaBadge
+          cat={item.visaCategory}
+          size="sm"
+          style={{ alignSelf: 'center' }}
+        />
+        <DarkOrb size={32} muted>
+          <ArrowRight size={13} color={colors.ink} strokeWidth={2} />
+        </DarkOrb>
+      </Pressable>
+    ),
+    [colors, onViewDetails],
+  );
+
+  const keyExtractor = useCallback((item: CountryBrief) => item.code, []);
+
+  return (
+    <BottomSheet
+      ref={bottomSheetRef}
+      index={0}
+      snapPoints={snapPoints}
+      topInset={sheetTopInset}
+      backgroundStyle={[
+        styles.sheetBackground,
+        { backgroundColor: colors.background },
+      ]}
+      handleIndicatorStyle={[styles.handleIndicator, { backgroundColor: colors.inkFaint }]}
+      enablePanDownToClose={false}
+      // Same recipe as the shared AppBottomSheet: "extend" raises the sheet
+      // to its top snap when the search field focuses (the field rests in
+      // the bottom third at the 30% detent, where the keyboard would cover
+      // it), "restore" returns it on dismiss, and adjustResize is gorhom's
+      // documented Android requirement with edge-to-edge.
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
+    >
+      <BottomSheetFlatList
+        data={moreCountries}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListHeaderComponent={headerElement}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        ItemSeparatorComponent={ListSeparator}
+      />
+    </BottomSheet>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Module-level list pieces — stable component types so the FlatList never
+// remounts them. Inline arrows / useCallback identities passed as
+// ListHeaderComponent / ItemSeparatorComponent are rendered as component
+// TYPES by RN, so any new identity forces a full unmount/remount.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ListSeparator() {
+  return <View style={styles.separator} />;
+}
+
+interface SheetHeaderProps {
+  countriesCount: number;
+  popularCountries: CountryBrief[];
+  selectedCode: string;
+  onCarouselSelect: (code: string) => void;
+  filter: string;
+  onFilterChange: (value: string) => void;
+  featuredCardProps: FeaturedCountryProps | null;
+  onSurpriseMe?: () => void;
+  onSearchChange: (text: string) => void;
+}
+
+function SheetHeader({
+  countriesCount,
+  popularCountries,
+  selectedCode,
+  onCarouselSelect,
+  filter,
+  onFilterChange,
+  featuredCardProps,
+  onSurpriseMe,
+  onSearchChange,
+}: SheetHeaderProps) {
+  const { colors } = useTheme();
+  return (
     <View style={styles.header}>
       {/* Editorial header — kicker → italic display + Surprise me CTA */}
       <View style={styles.editorialHeader}>
@@ -207,7 +360,7 @@ export function ExploreSheet({
         <CountryCarousel
           countries={popularCountries}
           selectedCode={selectedCode}
-          onSelect={handleCarouselSelect}
+          onSelect={onCarouselSelect}
         />
       </View>
 
@@ -216,7 +369,7 @@ export function ExploreSheet({
         <SegmentedControl
           options={FILTER_OPTIONS}
           value={filter}
-          onChange={setFilter}
+          onChange={onFilterChange}
           variant="pill"
         />
       </View>
@@ -281,133 +434,72 @@ export function ExploreSheet({
             { color: colors.inkMute, marginLeft: 'auto', fontSize: 9 },
           ]}
         >
-          {countries.length} ON ATLAS
+          {countriesCount} ON ATLAS
         </Text>
       </View>
 
       {/* Search bar — narrows the alphabetical list */}
-      <View style={styles.searchWrap}>
-        <View
-          style={[
-            styles.searchBar,
-            { backgroundColor: colors.surface, borderColor: colors.line },
-          ]}
-        >
-          <Search size={16} color={colors.inkMute} />
-          <BottomSheetTextInput
-            style={[
-              styles.searchInput,
-              { color: colors.ink, fontFamily: FontFamily.regular },
-            ]}
-            placeholder="Search countries"
-            placeholderTextColor={colors.inkFaint}
-            value={search}
-            onChangeText={setSearch}
-            autoCorrect={false}
-            autoCapitalize="none"
-          />
-          {search.length > 0 ? (
-            <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <X size={14} color={colors.inkMute} />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
+      <SheetSearchField onSearchChange={onSearchChange} />
     </View>
-  ), [
-    countries,
-    popularCountries,
-    selectedCode,
-    handleCarouselSelect,
-    filter,
-    featuredCardProps,
-    colors,
-    search,
-  ]);
+  );
+}
 
-  const renderItem = useCallback(
-    ({ item }: { item: CountryBrief }) => (
-      <Pressable
-        onPress={() => onViewDetails(item.code)}
-        style={({ pressed }) => [
-          styles.listRow,
-          { backgroundColor: colors.surface, opacity: pressed ? 0.85 : 1 },
-        ]}
-      >
-        <Flag code={item.iso2} size={40} />
-        <View style={styles.listRowContent}>
-          <Text
-            style={{
-              fontFamily: FontFamily.displayItalic,
-              fontStyle: 'italic',
-              fontSize: 15,
-              fontWeight: '500',
-              color: colors.ink,
-              letterSpacing: -15 * 0.012,
-            }}
-            numberOfLines={1}
-          >
-            {item.name}
-          </Text>
-          <Text
-            style={[
-              Type.kickerSm,
-              { color: colors.inkMute, marginTop: 2, fontSize: 9 },
-            ]}
-            numberOfLines={1}
-          >
-            {item.region.toUpperCase()}
-          </Text>
-        </View>
-        <VisaBadge
-          cat={item.visaCategory}
-          size="sm"
-          style={{ alignSelf: 'center' }}
-        />
-        <DarkOrb size={32} muted>
-          <ArrowRight size={13} color={colors.ink} strokeWidth={2} />
-        </DarkOrb>
-      </Pressable>
-    ),
-    [colors, onViewDetails],
+/**
+ * Search field with its own local text state. Typing re-renders ONLY this
+ * component — the parent learns about changes through `onSearchChange` (to
+ * filter the list rows below), but the header element it memoizes never
+ * depends on the live text, so the carousel/featured card above don't
+ * re-render per keystroke and the input never loses focus.
+ */
+function SheetSearchField({
+  onSearchChange,
+}: {
+  onSearchChange: (text: string) => void;
+}) {
+  const { colors } = useTheme();
+  const [value, setValue] = useState('');
+
+  const handleChange = useCallback(
+    (text: string) => {
+      setValue(text);
+      onSearchChange(text);
+    },
+    [onSearchChange],
   );
 
-  const keyExtractor = useCallback((item: CountryBrief) => item.code, []);
+  const handleClear = useCallback(() => {
+    setValue('');
+    onSearchChange('');
+  }, [onSearchChange]);
 
   return (
-    <BottomSheet
-      ref={bottomSheetRef}
-      index={0}
-      snapPoints={snapPoints}
-      topInset={sheetTopInset}
-      backgroundStyle={[
-        styles.sheetBackground,
-        { backgroundColor: colors.background },
-      ]}
-      handleIndicatorStyle={[styles.handleIndicator, { backgroundColor: colors.inkFaint }]}
-      enablePanDownToClose={false}
-      // Same recipe as VisaChatSheet: "extend" raises the sheet to its top
-      // snap when the search field focuses (the field rests in the bottom
-      // third at the 30% detent, where the keyboard would cover it),
-      // "restore" returns it on dismiss, and adjustResize is gorhom's
-      // documented Android requirement with edge-to-edge.
-      keyboardBehavior="extend"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
-    >
-      <BottomSheetFlatList
-        data={moreCountries}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: insets.bottom + 24 },
+    <View style={styles.searchWrap}>
+      <View
+        style={[
+          styles.searchBar,
+          { backgroundColor: colors.surface, borderColor: colors.line },
         ]}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
-    </BottomSheet>
+      >
+        <Search size={16} color={colors.inkMute} />
+        <BottomSheetTextInput
+          style={[
+            styles.searchInput,
+            { color: colors.ink, fontFamily: FontFamily.regular },
+          ]}
+          placeholder="Search countries"
+          placeholderTextColor={colors.inkFaint}
+          value={value}
+          onChangeText={handleChange}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {value.length > 0 ? (
+          <Pressable onPress={handleClear} hitSlop={8}>
+            <X size={14} color={colors.inkMute} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
   );
 }
 

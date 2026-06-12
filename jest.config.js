@@ -7,6 +7,7 @@ module.exports = {
       testEnvironment: 'node',
       testMatch: [
         '<rootDir>/constants/**/*.test.ts',
+        '<rootDir>/data/**/*.test.ts',
         '<rootDir>/utils/**/*.test.ts',
         '<rootDir>/convex/**/*.test.ts',
         '<rootDir>/components/**/*.physics.test.ts',

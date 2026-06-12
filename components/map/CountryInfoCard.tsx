@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/theme-context';
 import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
 import {
   getVisaCategoryColor,
+  getVisaCategoryBgColor,
   getVisaCategoryShortLabel,
   type VisaCategory,
 } from '@/constants/categories';
@@ -37,6 +38,7 @@ export default function CountryInfoCard({
 }: CountryInfoCardProps) {
   const { colors } = useTheme();
   const catColor = getVisaCategoryColor(categoryKey, colors);
+  const catBg = getVisaCategoryBgColor(categoryKey, colors);
   const catLabel = getVisaCategoryShortLabel(categoryKey);
   const flag = getFlag(code);
 
@@ -57,8 +59,9 @@ export default function CountryInfoCard({
             {name}
           </Text>
           <View style={styles.metaRow}>
-            <View style={[styles.badge, { backgroundColor: catColor + '20' }]}>
-              <View style={[styles.badgeDot, { backgroundColor: catColor }]} />
+            {/* Soft pill: theme *Bg token + coloured text. No leading dot —
+                the tint + text carry the status (house style). */}
+            <View style={[styles.badge, { backgroundColor: catBg }]}>
               <Text style={[styles.badgeText, { color: catColor }]}>{catLabel}</Text>
             </View>
             {maxStay != null && maxStay > 0 && (
@@ -108,15 +111,9 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: Radius.full,
-  },
-  badgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   badgeText: {
     fontFamily: FontFamily.condensedSemibold,

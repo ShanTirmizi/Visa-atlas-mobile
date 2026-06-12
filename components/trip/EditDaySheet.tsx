@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import {
   BottomSheetModal,
   BottomSheetBackdrop,
@@ -19,6 +19,7 @@ import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
+import { useToast } from '@/contexts/toast-context';
 import type { ItineraryDay, StopSlot } from '@/types/itinerary';
 import { FontFamily, type ThemeColors } from '@/constants/theme';
 import { Type } from '@/constants/typography';
@@ -58,6 +59,7 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
   ({ tripId, dayIndex, itinerary, onSaved }, ref) => {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    const { showToast } = useToast();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const updateField = useMutation(api.trips.updateTripField);
 
@@ -118,7 +120,8 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
           {...props}
           disappearsOnIndex={-1}
           appearsOnIndex={0}
-          opacity={0.5}
+          // 0.4 — unified with AppBottomSheet / the booking sheets.
+          opacity={0.4}
         />
       ),
       [],
@@ -182,6 +185,10 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
 
         onSaved?.(updated);
         bottomSheetRef.current?.dismiss();
+      } catch {
+        // Keep the sheet open with the user's edits intact — a silent
+        // failure here read as "saved" while the trip stayed unchanged.
+        showToast('error', "Couldn't save — try again.");
       } finally {
         setSaving(false);
       }

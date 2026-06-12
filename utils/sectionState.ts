@@ -39,6 +39,30 @@ const STREAMED_SECTIONS: SectionName[] = [
 
 const TOTAL_SECTIONS = STREAMED_SECTIONS.length + 2; // + itinerary + heroImage
 
+/** Pre-parsed `trip.itinerary` array. May contain transient `null` holes
+ *  from out-of-order streaming day patches — the helpers count only real
+ *  days. Callers that already JSON.parse the itinerary (the trip detail
+ *  screen memoizes one) should pass it in so each helper doesn't re-parse
+ *  a multi-KB string on every render. */
+export type ParsedItineraryDays = readonly unknown[];
+
+/** Resolve the itinerary day array: the caller-supplied pre-parsed array
+ *  wins; otherwise parse `trip.itinerary`. Returns null when there's no
+ *  parseable array (empty string, malformed JSON, non-array payload). */
+function resolveItineraryDays(
+  trip: TripLike,
+  parsedItinerary?: ParsedItineraryDays,
+): ParsedItineraryDays | null {
+  if (parsedItinerary) return parsedItinerary;
+  if (!trip.itinerary) return null;
+  try {
+    const parsed: unknown = JSON.parse(trip.itinerary);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function isGenerating(trip: TripLike): boolean {
   return trip.status === 'generating';
 }
@@ -58,38 +82,35 @@ export function isSectionPending(trip: TripLike, section: SectionName): boolean 
   return !trip[section];
 }
 
-export function getStreamingDayIndex(trip: TripLike): number | null {
+export function getStreamingDayIndex(
+  trip: TripLike,
+  parsedItinerary?: ParsedItineraryDays,
+): number | null {
   if (!isGenerating(trip)) return null;
   // Once the itinerary stream has failed, days are no longer arriving —
   // returning null here unmounts the "writing…" pill/dots so the
   // SectionRetryCard owns the state instead of contradicting it.
   if (hasFailed(trip, 'itinerary')) return null;
-  if (!trip.itinerary) return 0;
-  try {
-    const parsed = JSON.parse(trip.itinerary);
-    // Out-of-order per-day patches can leave transient null holes in the
-    // array (the server pads `days[idx] = …` past the end). Count only
-    // real days so the streaming index matches what's actually rendered.
-    return Array.isArray(parsed) ? parsed.filter(Boolean).length : 0;
-  } catch {
-    return 0;
-  }
+  const days = resolveItineraryDays(trip, parsedItinerary);
+  // Out-of-order per-day patches can leave transient null holes in the
+  // array (the server pads `days[idx] = …` past the end). Count only
+  // real days so the streaming index matches what's actually rendered.
+  return days ? days.filter(Boolean).length : 0;
 }
 
-export function getCompletedSectionCount(trip: TripLike): number {
+export function getCompletedSectionCount(
+  trip: TripLike,
+  parsedItinerary?: ParsedItineraryDays,
+): number {
   let count = 0;
   for (const s of STREAMED_SECTIONS) {
     if (trip[s]) count++;
   }
   if (trip.itinerary) {
-    try {
-      const days = JSON.parse(trip.itinerary);
-      // filter(Boolean): null holes from out-of-order day patches aren't
-      // completed days — see getStreamingDayIndex.
-      if (Array.isArray(days) && days.filter(Boolean).length >= (trip.duration ?? 0)) count++;
-    } catch {
-      /* */
-    }
+    const days = resolveItineraryDays(trip, parsedItinerary);
+    // filter(Boolean): null holes from out-of-order day patches aren't
+    // completed days — see getStreamingDayIndex.
+    if (days && days.filter(Boolean).length >= (trip.duration ?? 0)) count++;
   }
   if (trip.heroImage) count++;
   return count;
@@ -99,7 +120,10 @@ export function getTotalSectionCount(): number {
   return TOTAL_SECTIONS;
 }
 
-export function getTabDotIndicators(trip: TripLike): Record<string, boolean> {
+export function getTabDotIndicators(
+  trip: TripLike,
+  parsedItinerary?: ParsedItineraryDays,
+): Record<string, boolean> {
   if (!isGenerating(trip)) {
     return {
       Visa: hasFailed(trip, 'visaChecklist') || hasFailed(trip, 'visaNotes'),
@@ -121,7 +145,7 @@ export function getTabDotIndicators(trip: TripLike): Record<string, boolean> {
     Itinerary:
       hasFailed(trip, 'itinerary') ||
       (() => {
-        const idx = getStreamingDayIndex(trip);
+        const idx = getStreamingDayIndex(trip, parsedItinerary);
         return idx !== null && idx < (trip.duration ?? 0);
       })(),
     // Dining is generated AFTER the itinerary finishes, so this stays

@@ -114,6 +114,10 @@ export const LightColors = {
 
   // Misc
   overlay: 'rgba(0,0,0,0.30)',
+  // Full-screen modal dim behind centred dialogs (e.g. the planner's date
+  // picker) — matches the 0.4 BottomSheetBackdrop opacity used app-wide so
+  // every scrim dims the page identically.
+  scrim: 'rgba(0,0,0,0.40)',
   shimmer: 'rgba(0,0,0,0.04)',
 
   // Button text on primary (ink) bg

@@ -1351,9 +1351,21 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
 
     const deleteBooking = useMutation(api.bookings.deleteBooking);
 
+    // Edit handoff (TripPlannerSheet's pendingTripIdRef recipe): the booking
+    // parks here while the sheet's slide-down plays, and onDismiss fires
+    // onEdit exactly when the close animation completes — gorhom's iOS close
+    // animation is a distance-dependent spring, so the old setTimeout(250)
+    // either truncated it or added dead time before AddBookingSheet
+    // presented. isPresentedRef covers the already-dismissed edge: gorhom's
+    // dismiss() early-returns without firing onDismiss when the sheet is
+    // already closed, which would silently drop the edit.
+    const pendingEditRef = useRef<BookingDetailData | null>(null);
+    const isPresentedRef = useRef(false);
+
     useImperativeHandle(ref, () => ({
       open: (data: BookingDetailData) => {
         setBooking(data);
+        isPresentedRef.current = true;
         bottomSheetRef.current?.present();
       },
       close: () => {
@@ -1387,11 +1399,26 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
 
     const handleEdit = useCallback(() => {
       if (!booking) return;
+      if (!isPresentedRef.current) {
+        // Sheet already fully closed — dismiss() would no-op and onDismiss
+        // never refire, silently dropping the handoff. Edit directly.
+        onEdit?.(booking);
+        return;
+      }
+      // Park the handoff; handleDismiss fires it when the close animation
+      // completes so AddBookingSheet presents without a stacking conflict.
+      pendingEditRef.current = booking;
       bottomSheetRef.current?.dismiss();
-      // Defer the parent callback until the sheet has dismissed so the
-      // AddBookingSheet can present cleanly without a stacking conflict.
-      setTimeout(() => onEdit?.(booking), 250);
     }, [booking, onEdit]);
+
+    const handleDismiss = useCallback(() => {
+      isPresentedRef.current = false;
+      if (pendingEditRef.current) {
+        const pending = pendingEditRef.current;
+        pendingEditRef.current = null;
+        onEdit?.(pending);
+      }
+    }, [onEdit]);
 
     const sheetBg = booking
       ? bookingTypeColors[bookingTypeToHeroType(booking.type)].bgFrom
@@ -1403,6 +1430,7 @@ const BookingDetailSheet = forwardRef<BookingDetailSheetRef, BookingDetailSheetP
       <AppBottomSheet
         ref={bottomSheetRef}
         backgroundColor={sheetBg}
+        onDismiss={handleDismiss}
       >
         <BottomSheetScrollView
           contentContainerStyle={sheetStyles.scrollContent}

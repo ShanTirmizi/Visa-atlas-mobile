@@ -22,18 +22,18 @@ import Animated, {
   FadeIn,
   FadeOut,
 } from 'react-native-reanimated';
+import { useAction } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
-import { useVisa } from '@/contexts/visa-context';
+import { useVisa, useVisaData } from '@/contexts/visa-context';
 import {
   FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
 } from '@/constants/theme';
-import { endpoints } from '@/constants/api';
 import { resolveCountry, type HeldVisaType } from '@/data/visaData';
-import { useVisaData } from '@/contexts/visa-context';
 import { travelData } from '@/data/travelData';
 import { getFlightHours } from '@/utils/flightTime';
 import {
-  getVisaCategoryColor, getVisaCategoryShortLabel, type VisaCategory,
+  getVisaCategoryColor, getVisaCategoryBgColor, getVisaCategoryShortLabel, type VisaCategory,
 } from '@/constants/categories';
 import { TypingDots } from '@/components/ui/TypingDots';
 import { toAlpha2 } from '@/utils/countryCode';
@@ -233,6 +233,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
     const dynamicVisaData = useVisaData();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+    const proxySurprise = useAction(api.aiProxy.surprise);
 
     // ── Step state ──────────────────────────────────────────────────
     const [step, setStep] = useState<Step>('vibes');
@@ -297,9 +298,9 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
       setError('');
       setResult(null);
       try {
-        const res = await fetch(endpoints.surprise, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        // Authenticated + rate-limited proxy (convex/aiProxy.ts) — a failed
+        // call rejects into the existing catch → inline retry, unchanged UX.
+        const data = (await proxySurprise({
           body: JSON.stringify({
             vibes: [...selectedVibes],
             maxFlightHours: maxFlight,
@@ -312,9 +313,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
             passports,
             residence,
           }),
-        });
-        if (!res.ok) throw new Error('Search failed');
-        const data = await res.json();
+        })) as { pick?: string | { code?: string }; reason?: string };
         // API returns { pick: { code, name, ... } | null, reason: string }
         const pickCode = typeof data.pick === 'string' ? data.pick : data.pick?.code;
         if (!pickCode) throw new Error('No destination found');
@@ -324,7 +323,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
         setError('Something went wrong. Please try again.');
         setStep('prefs');
       }
-    }, [selectedVibes, maxFlight, budget, travelMonth, heldVisas, includeVisaReq, passports, residence]);
+    }, [selectedVibes, maxFlight, budget, travelMonth, heldVisas, includeVisaReq, passports, residence, proxySurprise]);
 
     // ── Backdrop ────────────────────────────────────────────────────
     const renderBackdrop = useCallback(
@@ -333,7 +332,8 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
           {...props}
           disappearsOnIndex={-1}
           appearsOnIndex={0}
-          opacity={0.5}
+          // 0.4 — unified with AppBottomSheet / the booking sheets.
+          opacity={0.4}
         />
       ),
       [],
@@ -355,7 +355,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
         costLevel: travel?.costLevel,
         reason: result.reason,
       };
-    }, [result, heldVisas]);
+    }, [result, heldVisas, dynamicVisaData, residence]);
 
     const s = useMemo(() => makeStyles(colors), [colors]);
 
@@ -383,10 +383,10 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
           {/* ── STEP 1: Vibes ──────────────────────────────────── */}
           {step === 'vibes' && (
             <View>
-              <Text style={[s.title, { color: colors.foreground }]}>
+              <Text style={[s.title, { color: colors.ink }]}>
                 What kind of trip?
               </Text>
-              <Text style={[s.subtitle, { color: colors.textSecondary }]}>
+              <Text style={[s.subtitle, { color: colors.inkSoft }]}>
                 Pick 1-3 vibes that excite you
               </Text>
 
@@ -401,14 +401,14 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                       style={[
                         s.chip,
                         {
-                          backgroundColor: active ? colors.accent : colors.card,
-                          borderColor: active ? colors.accent : colors.border,
+                          backgroundColor: active ? colors.coral : colors.surface,
+                          borderColor: active ? colors.coral : colors.line,
                         },
                       ]}
                     >
                       <Text style={[
                         s.chipText,
-                        { color: active ? '#FFFFFF' : colors.foreground },
+                        { color: active ? '#FFFFFF' : colors.ink },
                       ]}>
                         {l}
                       </Text>
@@ -424,15 +424,15 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                 style={[
                   s.nextBtn,
                   {
-                    backgroundColor: selectedVibes.size >= 1 ? colors.primary : colors.surfaceMuted,
+                    backgroundColor: selectedVibes.size >= 1 ? colors.coral : colors.surfaceMuted,
                     opacity: selectedVibes.size >= 1 ? 1 : 0.5,
-                    ...(selectedVibes.size >= 1 ? Shadows.glow(colors.primary, 0.25) : {}),
+                    ...(selectedVibes.size >= 1 ? Shadows.glow(colors.coral, 0.25) : {}),
                   },
                 ]}
               >
                 <Text style={[
                   s.nextBtnText,
-                  { color: selectedVibes.size >= 1 ? '#FFFFFF' : colors.textMuted },
+                  { color: selectedVibes.size >= 1 ? '#FFFFFF' : colors.inkMute },
                 ]}>
                   Next
                 </Text>
@@ -664,33 +664,43 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
               <Text style={s.revealFlag}>{revealData.flag}</Text>
 
               {/* Country name */}
-              <Text style={[s.revealName, { color: colors.foreground }]}>
+              <Text style={[s.revealName, { color: colors.ink }]}>
                 {revealData.name}
               </Text>
 
               {/* AI reason */}
-              <Text style={[s.revealReason, { color: colors.textSecondary }]}>
+              <Text style={[s.revealReason, { color: colors.inkSoft }]}>
                 {revealData.reason}
               </Text>
 
               {/* Quick facts row */}
               <View style={s.factsRow}>
-                {/* Visa badge */}
-                <View style={[s.factBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={[
-                    s.factDot,
-                    { backgroundColor: getVisaCategoryColor(revealData.category, colors) },
-                  ]} />
-                  <Text style={[s.factText, { color: colors.foreground }]}>
+                {/* Visa badge — soft pill: category-tinted bg + category-
+                    coloured text, no leading dot (status-pill convention). */}
+                <View
+                  style={[
+                    s.factBadge,
+                    {
+                      backgroundColor: getVisaCategoryBgColor(revealData.category, colors),
+                      borderColor: 'transparent',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      s.factText,
+                      { color: getVisaCategoryColor(revealData.category, colors) },
+                    ]}
+                  >
                     {getVisaCategoryShortLabel(revealData.category)}
                   </Text>
                 </View>
 
                 {/* Flight time */}
                 {revealData.flightHours != null && (
-                  <View style={[s.factBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <Plane size={14} color={colors.textSecondary} />
-                    <Text style={[s.factText, { color: colors.foreground }]}>
+                  <View style={[s.factBadge, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                    <Plane size={14} color={colors.inkSoft} />
+                    <Text style={[s.factText, { color: colors.ink }]}>
                       {revealData.flightHours}h
                     </Text>
                   </View>
@@ -698,8 +708,8 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
 
                 {/* Cost level */}
                 {revealData.costLevel != null && (
-                  <View style={[s.factBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <Text style={[s.factText, { color: colors.foreground }]}>
+                  <View style={[s.factBadge, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                    <Text style={[s.factText, { color: colors.ink }]}>
                       {'$'.repeat(revealData.costLevel)}
                     </Text>
                   </View>
@@ -716,8 +726,8 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                 style={[
                   s.primaryBtn,
                   {
-                    backgroundColor: colors.primary,
-                    ...Shadows.glow(colors.primary, 0.25),
+                    backgroundColor: colors.coral,
+                    ...Shadows.glow(colors.coral, 0.25),
                   },
                 ]}
               >
@@ -728,9 +738,9 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
               <TouchableOpacity
                 onPress={search}
                 activeOpacity={0.7}
-                style={[s.secondaryBtn, { borderColor: colors.border }]}
+                style={[s.secondaryBtn, { borderColor: colors.line }]}
               >
-                <Text style={[s.secondaryBtnText, { color: colors.foreground }]}>
+                <Text style={[s.secondaryBtnText, { color: colors.ink }]}>
                   Different Place
                 </Text>
               </TouchableOpacity>
@@ -741,7 +751,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
                 activeOpacity={0.7}
                 style={s.textLink}
               >
-                <Text style={[s.textLinkText, { color: colors.textSecondary }]}>
+                <Text style={[s.textLinkText, { color: colors.inkSoft }]}>
                   Change Filters
                 </Text>
               </TouchableOpacity>
@@ -1004,11 +1014,6 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 8,
       borderRadius: Radius.full,
       borderWidth: 1,
-    },
-    factDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
     },
     factText: {
       fontFamily: FontFamily.semibold,

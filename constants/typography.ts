@@ -50,10 +50,13 @@ export const Type = {
     letterSpacing: -40 * 0.022,
     fontWeight: '500',
   } as TextStyle,
+  // lineHeight ~1.15× — Fraunces has deep descenders (g, y, p) that clip on
+  // iOS when lineHeight === fontSize. 1.05–1.15 matches the other display
+  // sizes; never ship a serif display style at exactly 1.0.
   display32: {
     fontFamily: 'Fraunces_500Medium',
     fontSize: 32,
-    lineHeight: 32 * 1.0,
+    lineHeight: 37, // 32 * 1.15, rounded
     letterSpacing: -32 * 0.022,
     fontWeight: '500',
   } as TextStyle,
@@ -61,14 +64,14 @@ export const Type = {
     fontFamily: 'Fraunces_500Medium_Italic',
     fontStyle: 'italic',
     fontSize: 32,
-    lineHeight: 32 * 1.0,
+    lineHeight: 37, // 32 * 1.15, rounded
     letterSpacing: -32 * 0.022,
     fontWeight: '500',
   } as TextStyle,
   display26: {
     fontFamily: 'Fraunces_500Medium',
     fontSize: 26,
-    lineHeight: 26 * 1.0,
+    lineHeight: 30, // 26 * 1.15, rounded
     letterSpacing: -26 * 0.02,
     fontWeight: '500',
   } as TextStyle,
@@ -76,7 +79,7 @@ export const Type = {
     fontFamily: 'Fraunces_500Medium_Italic',
     fontStyle: 'italic',
     fontSize: 26,
-    lineHeight: 26 * 1.0,
+    lineHeight: 30, // 26 * 1.15, rounded
     letterSpacing: -26 * 0.02,
     fontWeight: '500',
   } as TextStyle,

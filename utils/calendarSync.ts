@@ -1,13 +1,29 @@
 import * as Calendar from 'expo-calendar';
 import { Platform } from 'react-native';
+import type { BookingType } from '@/constants/bookings';
 import { classifyEvents, type CalendarEvent, type ClassifiedEvent } from './calendarClassifier';
-import { findMatchingTrip } from './tripMatcher';
+import { toLocalISODateString } from './calendarDates';
+import { findMatchingTrip, type MatchableTrip } from './tripMatcher';
 
 export interface SyncResult {
   imported: number;
   forReview: ClassifiedEvent[];
   skipped: number;
   error?: string;
+}
+
+/** Shape of the booking document created for an auto-imported event. */
+export interface CalendarBookingDraft {
+  type: BookingType;
+  source: 'calendar';
+  provider: string;
+  status: 'upcoming';
+  title: string;
+  startDate: string;
+  endDate?: string;
+  location?: string;
+  calendarEventId: string;
+  calendarSource: 'apple' | 'google';
 }
 
 /**
@@ -78,19 +94,13 @@ async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
     title: event.title || '',
     notes: event.notes || undefined,
     location: event.location || undefined,
-    startDate: toISODateString(event.startDate),
-    endDate: toISODateString(event.endDate),
-    organizer: (event as any).organizerEmail || undefined,
+    // LOCAL date parts — converting via toISOString() shifted every event
+    // east of Greenwich (e.g. a 1AM IST flight) back one calendar day.
+    startDate: toLocalISODateString(event.startDate),
+    endDate: toLocalISODateString(event.endDate),
+    organizer: event.organizerEmail || undefined,
     allDay: event.allDay ?? false,
   }));
-}
-
-/**
- * Converts a date string or Date to an ISO date string (YYYY-MM-DD).
- */
-function toISODateString(date: string | Date): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toISOString().split('T')[0];
 }
 
 /**
@@ -107,11 +117,11 @@ function toISODateString(date: string | Date): string {
  * @param linkBookingFn - Function to link a booking to a trip
  * @param trips - Array of trips to match against
  */
-export async function runCalendarSync(
+export async function runCalendarSync<TId extends string = string>(
   existingCalendarEventIds: Set<string>,
-  createBookingFn: (booking: Record<string, any>) => Promise<any>,
-  linkBookingFn: (bookingId: string, tripId: string) => Promise<any>,
-  trips: any[]
+  createBookingFn: (booking: CalendarBookingDraft) => Promise<string>,
+  linkBookingFn: (bookingId: string, tripId: TId) => Promise<unknown>,
+  trips: MatchableTrip<TId>[]
 ): Promise<SyncResult> {
   try {
     // Fetch all calendar events
@@ -137,15 +147,15 @@ export async function runCalendarSync(
 
       const bookingId = await createBookingFn({
         type: bookingType,
-        source: 'calendar' as const,
+        source: 'calendar',
         provider: providerName,
-        status: 'upcoming' as const,
+        status: 'upcoming',
         title: event.title,
         startDate: event.startDate,
         endDate: event.endDate !== event.startDate ? event.endDate : undefined,
         location: event.location || undefined,
         calendarEventId: event.id,
-        calendarSource: calendarSource as 'apple' | 'google',
+        calendarSource,
       });
 
       // Try trip matching (countryCode undefined for calendar events, match on dates)
@@ -170,12 +180,12 @@ export async function runCalendarSync(
     }
 
     return { imported, forReview: review, skipped };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       imported: 0,
       forReview: [],
       skipped: 0,
-      error: error?.message || 'Calendar sync failed',
+      error: error instanceof Error ? error.message : 'Calendar sync failed',
     };
   }
 }

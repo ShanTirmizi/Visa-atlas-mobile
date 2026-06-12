@@ -159,6 +159,12 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
           ? JSON.stringify(data.typeDetails)
           : undefined;
 
+        // BookingForm submits a parseCostInput-normalised numeric string,
+        // but guard with isFinite anyway — a NaN persisted here renders as
+        // "$NaN" on every booking card.
+        const costNumber = data.cost ? Number(data.cost) : NaN;
+        const safeCost = Number.isFinite(costNumber) ? costNumber : undefined;
+
         if (editingId) {
           // Edit existing booking — patch only, preserve trip linkage.
           await updateBooking({
@@ -169,7 +175,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
             location: data.location || undefined,
             countryCode: data.countryCode || undefined,
             confirmationNumber: data.confirmationNumber || undefined,
-            cost: data.cost ? parseFloat(data.cost) : undefined,
+            cost: safeCost,
             currency: data.currency || undefined,
             notes: data.notes || undefined,
             [detailsKey]: detailsJson,
@@ -191,7 +197,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
           location: data.location || undefined,
           countryCode: data.countryCode || undefined,
           confirmationNumber: data.confirmationNumber || undefined,
-          cost: data.cost ? parseFloat(data.cost) : undefined,
+          cost: safeCost,
           currency: data.currency || undefined,
           notes: data.notes || undefined,
           [detailsKey]: detailsJson,

@@ -28,7 +28,18 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[ErrorBoundary] Caught error:', error, errorInfo);
+    // No crash-reporting backend is wired up — log the full error, its JS
+    // stack, and the React component stack so the crash at least reaches
+    // device logs / the Metro console. (Do not claim "the team has been
+    // notified" anywhere in the UI: nothing reports remotely.)
+    console.error(
+      '[ErrorBoundary] Caught error:',
+      error.message,
+      '\nStack:',
+      error.stack ?? '(no stack)',
+      '\nComponent stack:',
+      errorInfo.componentStack ?? '(no component stack)',
+    );
   }
 
   handleRetry = () => {
@@ -42,7 +53,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
     const message =
       this.state.error?.message?.trim() ||
-      'An unexpected error occurred. The team has been notified.';
+      'Something went wrong. Try again.';
 
     return (
       <View style={styles.container}>

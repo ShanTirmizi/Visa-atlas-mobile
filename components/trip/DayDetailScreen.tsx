@@ -10,7 +10,7 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, ChevronRight, Pencil, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Pencil, Share, Sparkles } from 'lucide-react-native';
 import { FontFamily } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CircleBtn } from '@/components/ui/CircleBtn';
@@ -145,15 +145,13 @@ function countDayStops(day: DayDetailDay): number {
   ).length;
 }
 
+// Only real itinerary tips render — no fabricated fallback. The old
+// "Visit X before 9 AM…" filler presented invented advice as local
+// knowledge; a day without a tip simply has no pull-quote.
 function deriveTip(day: DayDetailDay): string {
   if (day.localTip && day.localTip.trim().length > 0) return day.localTip;
   if (day.tip && day.tip.trim().length > 0) return day.tip;
-
-  const firstStop = day.morningPlace ?? day.afternoonPlace ?? day.eveningPlace;
-  if (firstStop) {
-    return `Visit ${firstStop} before 9 AM for quiet photos — crowds arrive by 10.`;
-  }
-  return 'Explore local neighbourhoods early in the morning to avoid the crowds.';
+  return '';
 }
 
 // ── Tone for hero placeholder ─────────────────────────────────────────
@@ -184,6 +182,7 @@ function DayDetailScreen({
   tripStartDate,
   diningGuide,
   onBack,
+  onShare,
   onEdit,
   onNavigateDay,
   onTweakWithAI,
@@ -355,10 +354,12 @@ function DayDetailScreen({
         </View>
         </Animated.View>
 
-        {/* ── Top bar (52px from top, 18px horizontal) — stays mounted
+        {/* ── Top bar (safe-area-pinned, 18px horizontal) — stays mounted
             across day changes (only the pill label updates), rendered after
-            the paging media so it sits on top. ── */}
-        <View style={[styles.topBar, { top: 52 }]}>
+            the paging media so it sits on top. insets.top, not a hardcoded
+            52 — a fixed offset overlaps the Dynamic Island on Pro Max
+            phones and floats too low on SE-class devices. ── */}
+        <View style={[styles.topBar, { top: insets.top + 4 }]}>
           <CircleBtn
             solid
             onPress={onBack}
@@ -406,13 +407,22 @@ function DayDetailScreen({
             </Pressable>
           </View>
 
-          <CircleBtn
-            solid
-            onPress={onEdit}
-            accessibilityLabel="Edit day"
-          >
-            <Pencil size={16} color={colors.ink} strokeWidth={2} />
-          </CircleBtn>
+          <View style={styles.topBarActions}>
+            <CircleBtn
+              solid
+              onPress={onShare}
+              accessibilityLabel="Share day"
+            >
+              <Share size={16} color={colors.ink} strokeWidth={2} />
+            </CircleBtn>
+            <CircleBtn
+              solid
+              onPress={onEdit}
+              accessibilityLabel="Edit day"
+            >
+              <Pencil size={16} color={colors.ink} strokeWidth={2} />
+            </CircleBtn>
+          </View>
         </View>
       </View>
 
@@ -474,8 +484,8 @@ function DayDetailScreen({
               when the day has no named places) */}
           <DayMapStrip day={day} destination={destination} />
 
-          {/* Pull quote */}
-          <PullQuote tip={tip} />
+          {/* Pull quote — only when the itinerary actually has a tip */}
+          {tip ? <PullQuote tip={tip} /> : null}
 
           {/* One-tap day rewrites — soft chips firing tweakDay; swaps to a
               "Rewriting this day…" pill while the server run is in flight. */}
@@ -567,6 +577,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  topBarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   dayNav: {
     flexDirection: 'row',

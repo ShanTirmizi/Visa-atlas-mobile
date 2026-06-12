@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,16 +29,17 @@ import Animated, {
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '@/convex/_generated/api';
-import { useQuery, useMutation, useConvexAuth } from 'convex/react';
+import { useQuery, useMutation, useAction, useConvexAuth } from 'convex/react';
 import { Id } from '@/convex/_generated/dataModel';
-import { Send, Sparkles, ArrowRight } from 'lucide-react-native';
+import { Send, Sparkles } from 'lucide-react-native';
 import BackButton from '@/components/ui/BackButton';
+import TopSafeAreaBlur from '@/components/ui/TopSafeAreaBlur';
+import { hapticSelect } from '@/utils/haptics';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
 import { toAlpha2 } from '@/utils/countryCode';
-import { endpoints } from '@/constants/api';
 import { FontFamily, Spacing } from '@/constants/theme';
 
 type GuideMessage = {
@@ -50,6 +51,8 @@ type GuideMessage = {
 };
 
 // Cycling thinking copy — visa-flavoured to match the screen's role.
+// Cadence matches the trip-chat screen (~2.2s per phrase).
+const THINK_TICK_MS = 2200;
 const THINKING_PHRASES = [
   'Thinking',
   'Reading the visa rules',
@@ -99,24 +102,16 @@ export default function VisaChatScreen() {
     isAuthenticated && guideId ? { guideId: guideId as Id<'visaGuides'> } : 'skip',
   ) as GuideMessage[] | undefined;
   const addGuideMessage = useMutation(api.visaGuides.addGuideMessage);
+  const proxyVisaChat = useAction(api.aiProxy.visaChat);
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [failedMessage, setFailedMessage] = useState<string | null>(null);
-  const [thinkTick, setThinkTick] = useState(0);
-
-  // Cycle the thinking phrase every ~2.2s while in flight; reset on send.
-  useEffect(() => {
-    if (!isSending) {
-      setThinkTick(0);
-      return;
-    }
-    const id = setInterval(() => {
-      setThinkTick((t) => t + 1);
-    }, 2200);
-    return () => clearInterval(id);
-  }, [isSending]);
+  // Floating-header height — pre-layout estimate, corrected by onLayout on
+  // the first frame (same pattern as app/guide/[id].tsx). Drives the
+  // TopSafeAreaBlur `extra` band and the scroll content's top padding.
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 70);
 
   const countryName = guide?.countryName ?? 'your visa';
   const visaType = guide?.visaType ?? '';
@@ -130,20 +125,25 @@ export default function VisaChatScreen() {
       setIsSending(true);
       setFailedMessage(null);
 
-      await addGuideMessage({
-        guideId: guideId as Id<'visaGuides'>,
-        role: 'user',
-        content: text,
-      });
-
       try {
+        // Inside the try: if this first write fails (offline / socket blip),
+        // the catch surfaces the retry banner with the text preserved and
+        // `finally` releases the spinner — outside it, a rejection stranded
+        // isSending forever and the message was silently lost.
+        await addGuideMessage({
+          guideId: guideId as Id<'visaGuides'>,
+          role: 'user',
+          content: text,
+        });
+
         const chatHistory = (messages ?? [])
           .slice(-10)
           .map((m) => ({ role: m.role, content: m.content }));
 
-        const res = await fetch(endpoints.visaChat, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        // Authenticated + rate-limited proxy (convex/aiProxy.ts) — the raw
+        // Vercel endpoint is being locked down. A dropped socket rejects
+        // into the existing catch → retry banner, same as the old fetch.
+        const data = (await proxyVisaChat({
           body: JSON.stringify({
             message: text,
             guideContext: { countryName, visaType, guide: guideJson },
@@ -151,11 +151,7 @@ export default function VisaChatScreen() {
             passports,
             residence,
           }),
-        });
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const data = (await res.json()) as { reply?: string; error?: string };
+        })) as { reply?: string; error?: string };
         if (!data.reply) throw new Error('Empty reply');
 
         await addGuideMessage({
@@ -170,7 +166,7 @@ export default function VisaChatScreen() {
         setIsSending(false);
       }
     },
-    [isSending, guide, guideId, messages, countryName, visaType, guideJson, passports, residence, addGuideMessage],
+    [isSending, guide, guideId, messages, countryName, visaType, guideJson, passports, residence, addGuideMessage, proxyVisaChat],
   );
 
   const sendMessage = useCallback(async () => {
@@ -186,100 +182,39 @@ export default function VisaChatScreen() {
 
   const dismissFailed = useCallback(() => setFailedMessage(null), []);
 
-  const SUGGESTIONS = [
-    'Do I need bank statements?',
-    visaType ? `How long does the ${visaType} take to process?` : 'How long does the visa take to process?',
-    'What photos do I need for my application?',
-    'Can I work on this visa?',
-  ];
-
-  const renderMessage = useCallback(
-    ({ item }: { item: GuideMessage }) => {
-      const isAssistant = item.role === 'assistant';
-
-      if (isAssistant) {
-        return (
-          <View style={styles.aiBubbleWrap}>
-            <View
-              style={[
-                styles.aiBubble,
-                { backgroundColor: colors.surface, borderColor: colors.line },
-              ]}
-            >
-              <View style={styles.aiHeader}>
-                <View style={[styles.aiOrb, { backgroundColor: colors.coralBg }]}>
-                  <Sparkles
-                    size={11}
-                    color={colors.coralDeep}
-                    strokeWidth={2.2}
-                    fill={colors.coralDeep}
-                  />
-                </View>
-                <Text
-                  style={{
-                    fontFamily: FontFamily.monoMedium,
-                    fontSize: 9,
-                    fontWeight: '700',
-                    letterSpacing: 9 * 0.22,
-                    textTransform: 'uppercase',
-                    color: colors.coralDeep,
-                  }}
-                >
-                  VISA ATLAS AI
-                </Text>
-              </View>
-              <Text
-                style={{
-                  fontFamily: FontFamily.regular,
-                  fontSize: 14.5,
-                  lineHeight: 22,
-                  color: colors.ink,
-                }}
-              >
-                {item.content}
-              </Text>
-            </View>
-          </View>
-        );
-      }
-
-      return (
-        <View style={styles.userBubbleWrap}>
-          <View style={[styles.userBubble, { backgroundColor: colors.coral }]}>
-            <Text
-              style={{
-                fontFamily: FontFamily.monoMedium,
-                fontSize: 9,
-                fontWeight: '700',
-                letterSpacing: 9 * 0.22,
-                textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.7)',
-                marginBottom: 6,
-              }}
-            >
-              YOU
-            </Text>
-            <Text
-              style={{
-                fontFamily: FontFamily.displayItalic,
-                fontStyle: 'italic',
-                fontSize: 17,
-                lineHeight: 22,
-                letterSpacing: -17 * 0.014,
-                fontWeight: '500',
-                color: '#FFFFFF',
-              }}
-            >
-              {item.content}
-            </Text>
-          </View>
-        </View>
-      );
-    },
-    [colors],
+  const suggestions = useMemo(
+    () => [
+      'Do I need bank statements?',
+      visaType ? `How long does the ${visaType} take to process?` : 'How long does the visa take to process?',
+      'What photos do I need for my application?',
+      'Can I work on this visa?',
+    ],
+    [visaType],
   );
 
-  const keyExtractor = useCallback((item: GuideMessage) => item._id, []);
+  // Starter chips send straight through sendChat (same guards as the input
+  // bar) — never just prefill the input. Matches the trip-chat starter
+  // pattern (iMessage / ChatGPT starter suggestions).
+  const onStarterPress = useCallback(
+    (prompt: string) => {
+      hapticSelect();
+      void sendChat(prompt);
+    },
+    [sendChat],
+  );
+
+  // Memoized so the FlatList data identity is stable while `messages` is
+  // still undefined and the React.memo'd rows can bail out between renders.
+  const listMessages = useMemo(() => messages ?? [], [messages]);
+
+  const renderMessage = useCallback(
+    ({ item }: { item: GuideMessage }) => <MessageBubble message={item} />,
+    [],
+  );
+
+  const scrollToEnd = useCallback(() => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+  }, []);
 
   return (
     <KeyboardAvoidingView
@@ -291,15 +226,16 @@ export default function VisaChatScreen() {
       // behavior is undefined.
       behavior="padding"
     >
-      {/* ── Editorial header ───────────────────────── */}
+      {/* ── Editorial header — floats over the list (Apple Mail pattern,
+          same recipe as app/guide/[id].tsx and app/chat/[tripId].tsx):
+          messages scroll beneath it and fade out under the TopSafeAreaBlur
+          mounted as the last child below; zIndex 110 keeps the header text
+          crisp above the blur (100). box-none: drags on the empty edges
+          fall through to the messages beneath. ── */}
       <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + Spacing.sm,
-            backgroundColor: colors.background,
-          },
-        ]}
+        pointerEvents="box-none"
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+        style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}
       >
         <View style={{ position: 'absolute', left: Spacing.md, top: insets.top + Spacing.sm }}>
           <BackButton />
@@ -354,7 +290,6 @@ export default function VisaChatScreen() {
           ) : null}
         </View>
       </View>
-      <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.line }} />
 
       {/* ── Empty state ─────────────────────────────── */}
       {(!messages || messages.length === 0) && !isSending ? (
@@ -362,7 +297,10 @@ export default function VisaChatScreen() {
         // interactively, matching the populated FlatList below — iMessage
         // behaves the same on an empty conversation.
         <ScrollView
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[
+            styles.emptyContainer,
+            { paddingTop: headerHeight + 40 },
+          ]}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -449,43 +387,36 @@ export default function VisaChatScreen() {
             </Text>
           </View>
 
+          {/* Starter prompts — soft pills that send on tap. Soft pill =
+              bg-tint + coloured text, no leading dot (house rule). Same
+              recipe as the trip-chat starter chips. */}
           <View style={styles.suggestions}>
-            {SUGGESTIONS.map((s, i) => (
+            {suggestions.map((s) => (
               <Pressable
-                key={i}
+                key={s}
+                disabled={isSending}
+                accessibilityRole="button"
+                accessibilityLabel={s}
+                onPress={() => onStarterPress(s)}
                 style={({ pressed }) => [
                   styles.suggestionChip,
                   {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.line,
-                    opacity: pressed ? 0.85 : 1,
+                    backgroundColor: colors.coralBg,
+                    opacity: isSending ? 0.4 : pressed ? 0.7 : 1,
                   },
                 ]}
-                onPress={() => {
-                  setInputText(s);
-                  inputRef.current?.focus();
-                }}
               >
-                <View
-                  style={{
-                    width: 4,
-                    height: 4,
-                    borderRadius: 2,
-                    backgroundColor: colors.coral,
-                    marginRight: 10,
-                  }}
-                />
                 <Text
                   style={{
-                    fontFamily: FontFamily.regular,
+                    fontFamily: FontFamily.medium,
                     fontSize: 14,
-                    color: colors.ink,
-                    flex: 1,
+                    lineHeight: 19,
+                    color: colors.coralDeep,
+                    textAlign: 'center',
                   }}
                 >
                   {s}
                 </Text>
-                <ArrowRight size={13} color={colors.inkMute} strokeWidth={2} />
               </Pressable>
             ))}
           </View>
@@ -493,14 +424,17 @@ export default function VisaChatScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages ?? []}
+          data={listMessages}
           renderItem={renderMessage}
-          keyExtractor={keyExtractor}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          keyExtractor={messageKeyExtractor}
+          contentContainerStyle={[
+            styles.messagesList,
+            { paddingTop: headerHeight + 18 },
+          ]}
+          onContentSizeChange={scrollToEnd}
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
-          ListFooterComponent={isSending ? <ThinkingRow tick={thinkTick} /> : null}
+          ListFooterComponent={isSending ? <ThinkingRow /> : null}
         />
       )}
 
@@ -590,16 +524,126 @@ export default function VisaChatScreen() {
           onPress={sendMessage}
         />
       </Animated.View>
+
+      {/* House chrome — LAST child so it frosts everything painted before
+          it. Scrolled messages fade out under the safe area + header band
+          over an 18px gradient instead of hitting a hard edge. */}
+      <TopSafeAreaBlur extra={Math.max(0, headerHeight - insets.top)} />
     </KeyboardAvoidingView>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Message bubble — module-level + React.memo so the FlatList re-renders only
+// rows whose props changed. The previous inline closure rebuilt every visible
+// bubble on each parent state tick (typing, focus, sending).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Module-scope so the FlatList sees one stable function identity.
+const messageKeyExtractor = (item: GuideMessage) => item._id;
+
+const MessageBubble = React.memo(function MessageBubble({
+  message,
+}: {
+  message: GuideMessage;
+}) {
+  const { colors } = useTheme();
+
+  if (message.role === 'assistant') {
+    return (
+      <View style={styles.aiBubbleWrap}>
+        <View
+          style={[
+            styles.aiBubble,
+            { backgroundColor: colors.surface, borderColor: colors.line },
+          ]}
+        >
+          <View style={styles.aiHeader}>
+            <View style={[styles.aiOrb, { backgroundColor: colors.coralBg }]}>
+              <Sparkles
+                size={11}
+                color={colors.coralDeep}
+                strokeWidth={2.2}
+                fill={colors.coralDeep}
+              />
+            </View>
+            <Text
+              style={{
+                fontFamily: FontFamily.monoMedium,
+                fontSize: 9,
+                fontWeight: '700',
+                letterSpacing: 9 * 0.22,
+                textTransform: 'uppercase',
+                color: colors.coralDeep,
+              }}
+            >
+              VISA ATLAS AI
+            </Text>
+          </View>
+          <Text
+            style={{
+              fontFamily: FontFamily.regular,
+              fontSize: 14.5,
+              lineHeight: 22,
+              color: colors.ink,
+            }}
+          >
+            {message.content}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.userBubbleWrap}>
+      <View style={[styles.userBubble, { backgroundColor: colors.coral }]}>
+        <Text
+          style={{
+            fontFamily: FontFamily.monoMedium,
+            fontSize: 9,
+            fontWeight: '700',
+            letterSpacing: 9 * 0.22,
+            textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.7)',
+            marginBottom: 6,
+          }}
+        >
+          YOU
+        </Text>
+        <Text
+          style={{
+            fontFamily: FontFamily.displayItalic,
+            fontStyle: 'italic',
+            fontSize: 17,
+            lineHeight: 22,
+            letterSpacing: -17 * 0.014,
+            fontWeight: '500',
+            color: '#FFFFFF',
+          }}
+        >
+          {message.content}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Thinking row + dots
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ThinkingRow({ tick }: { tick: number }) {
+function ThinkingRow() {
   const { colors } = useTheme();
+  // The 2.2s phrase cycle lives INSIDE this footer so each tick re-renders
+  // only the row — when the interval lived in the screen component, every
+  // tick re-rendered the whole message list. The row unmounts when the send
+  // settles, so each new send naturally restarts at the plain "Thinking".
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), THINK_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
   const phrase = THINKING_PHRASES[tick % THINKING_PHRASES.length];
   return (
     <View style={[styles.thinkingRow, { backgroundColor: colors.surface, borderColor: colors.line }]}>
@@ -705,7 +749,14 @@ function SendButton({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  // Header floats over the message list; zIndex above TopSafeAreaBlur (100)
+  // so the title and BackButton stay crisp on top of the frost.
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 110,
     paddingHorizontal: Spacing.md,
     paddingBottom: 14,
     alignItems: 'center',
@@ -713,19 +764,19 @@ const styles = StyleSheet.create({
   },
   headerCenter: { alignItems: 'center', justifyContent: 'center' },
 
-  // flexGrow (not flex): it's a ScrollView contentContainerStyle
-  emptyContainer: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 40 },
-  suggestions: { gap: 10 },
+  // flexGrow (not flex): it's a ScrollView contentContainerStyle. Top
+  // padding is applied inline (headerHeight + 40) since the header floats.
+  emptyContainer: { flexGrow: 1, paddingHorizontal: 22 },
+  // pills hug their text and sit centered, iMessage-style
+  suggestions: { gap: 10, alignItems: 'center' },
   suggestionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 22, // full pill
   },
 
-  messagesList: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 12, gap: 10 },
+  // Top padding applied inline (headerHeight + 18) since the header floats.
+  messagesList: { paddingHorizontal: 16, paddingBottom: 12, gap: 10 },
 
   userBubbleWrap: { alignItems: 'flex-end', marginVertical: 4 },
   userBubble: {

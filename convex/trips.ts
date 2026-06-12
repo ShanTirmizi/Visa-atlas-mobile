@@ -2,7 +2,8 @@ import { query, mutation, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireAuth, checkTripPermission } from "./lib/auth";
-import type { Doc, Id } from "./_generated/dataModel";
+import { cascadeDeleteTrip } from "./lib/tripCascade";
+import type { Doc } from "./_generated/dataModel";
 
 // How long a soft-deleted trip stays recoverable before the scheduled hard
 // delete cascades it away. The client's Undo toast lasts 6s — comfortably
@@ -324,70 +325,17 @@ export const undoDeleteTrip = mutation({
  * Finalizes a soft delete: cascades all trip-linked rows, then removes the
  * trip itself. Scheduled by `deleteTrip`; aborts silently if the trip is
  * already gone (double-delete raced) or the user undid the delete.
+ *
+ * The cascade itself lives in lib/tripCascade — the single implementation
+ * shared with account.deleteAccount, so the two paths can't diverge on
+ * what dies with a trip.
  */
 export const hardDeleteTrip = internalMutation({
   args: { id: v.id("trips") },
   handler: async (ctx, args) => {
     const trip = await ctx.db.get(args.id);
     if (trip === null || trip.deletedAt === undefined) return;
-
-    // Cascade: delete tripMessages
-    const messages = await ctx.db
-      .query("tripMessages")
-      .withIndex("by_trip", (q) => q.eq("tripId", args.id))
-      .collect();
-    for (const msg of messages) {
-      await ctx.db.delete(msg._id);
-    }
-
-    // Cascade: delete tripCollaborators
-    const collaborators = await ctx.db
-      .query("tripCollaborators")
-      .withIndex("by_trip", (q) => q.eq("tripId", args.id))
-      .collect();
-    for (const collab of collaborators) {
-      await ctx.db.delete(collab._id);
-    }
-
-    // Cascade: delete tripInvites
-    const invites = await ctx.db
-      .query("tripInvites")
-      .withIndex("by_trip", (q) => q.eq("tripId", args.id))
-      .collect();
-    for (const invite of invites) {
-      await ctx.db.delete(invite._id);
-    }
-
-    // Cascade: delete tripVotes (prefix query on by_trip_and_activity)
-    const votes = await ctx.db
-      .query("tripVotes")
-      .withIndex("by_trip_and_activity", (q) => q.eq("tripId", args.id))
-      .collect();
-    for (const vote of votes) {
-      await ctx.db.delete(vote._id);
-    }
-
-    // Cascade: delete tripPresence
-    const presence = await ctx.db
-      .query("tripPresence")
-      .withIndex("by_trip", (q) => q.eq("tripId", args.id))
-      .collect();
-    for (const p of presence) {
-      await ctx.db.delete(p._id);
-    }
-
-    // Cascade: delete bookings linked to this trip — the delete flow's copy
-    // has always promised "this will also delete its bookings"; leaving them
-    // behind would strand dangling tripId references.
-    const bookings = await ctx.db
-      .query("bookings")
-      .withIndex("by_trip", (q) => q.eq("tripId", args.id))
-      .collect();
-    for (const booking of bookings) {
-      await ctx.db.delete(booking._id);
-    }
-
-    await ctx.db.delete(args.id);
+    await cascadeDeleteTrip(ctx, args.id);
   },
 });
 

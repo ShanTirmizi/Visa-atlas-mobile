@@ -132,6 +132,42 @@ describe('sectionState helpers', () => {
     expect(getTabDotIndicators(baseTrip).Food).toBe(false);
   });
 
+  it('helpers use a caller-supplied pre-parsed itinerary instead of re-parsing', () => {
+    // The itinerary string is deliberately NOT valid JSON — if any helper
+    // fell back to JSON.parse instead of honouring the pre-parsed array,
+    // it would see 0 days and these assertions would flip.
+    const trip = {
+      ...baseTrip,
+      status: 'generating',
+      duration: 2,
+      itinerary: 'not-json — pre-parsed days must win',
+    } as const;
+    const parsedDays = [{ title: 'D1' }, null, { title: 'D2' }];
+
+    expect(getStreamingDayIndex(trip, parsedDays)).toBe(2);
+    // 2 real days (null hole ignored) >= duration 2 → itinerary counts.
+    expect(getCompletedSectionCount(trip, parsedDays)).toBe(1);
+    // All expected days arrived → no Itinerary dot while generating.
+    expect(getTabDotIndicators(trip, parsedDays).Itinerary).toBe(false);
+    // One day short → dot comes back on.
+    expect(
+      getTabDotIndicators({ ...trip, duration: 3 }, parsedDays).Itinerary,
+    ).toBe(true);
+  });
+
+  it('pre-parsed path keeps the settled/failed early returns', () => {
+    const parsedDays = [{ title: 'D1' }];
+    expect(
+      getStreamingDayIndex({ ...baseTrip, status: 'planned' }, parsedDays),
+    ).toBeNull();
+    expect(
+      getStreamingDayIndex(
+        { ...baseTrip, status: 'generating', failedSections: ['itinerary'] },
+        parsedDays,
+      ),
+    ).toBeNull();
+  });
+
   it('getTabDotIndicators flags Itinerary on failure, settled or generating', () => {
     expect(
       getTabDotIndicators({ ...baseTrip, failedSections: ['itinerary'] }).Itinerary,

@@ -50,9 +50,6 @@ function normalizeCategoryKey(category: DataVisaCategory | string): string {
   }
 }
 
-// Load GeoJSON once at module level
-const countriesGeoJSON = getCountriesGeoJSON();
-
 // ── Point-in-polygon ─────────────────────────────────────────────────
 // MapLibre's ShapeSource.onPress returns every feature inside its hitbox,
 // not just the one whose geometry actually contains the tap. For neighbors
@@ -135,6 +132,14 @@ export function VisaMap({
   const { colors, isDark } = useTheme();
   const [selected, setSelected] = useState<SelectedInfo | null>(null);
   const [mapReady, setMapReady] = useState(false);
+
+  // GeoJSON pipeline (topojson → rewind → antimeridian split) is 100–300ms
+  // of synchronous work. It used to run at module scope — i.e. at import
+  // time — which made merely importing this file expensive and defeated
+  // <MapPrewarm>'s "warm after first paint" scheduling. getCountriesGeoJSON
+  // memoizes at module scope inside data/countriesGeo.ts, so this is a
+  // cache hit whenever the prewarm pass already ran.
+  const countriesGeoJSON = useMemo(() => getCountriesGeoJSON(), []);
 
   // Skeleton fade — sits over the MapView until tiles paint, then fades
   // out. Prevents the "blank screen" feel on first cold load before

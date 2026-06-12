@@ -242,8 +242,8 @@ const styles = StyleSheet.create({
   },
   legendLabel: {
     fontFamily: 'JetBrainsMono_500Medium',
-    fontSize: 8,
-    letterSpacing: 8 * 0.18,
+    fontSize: 9, // 9pt floor — 8pt mono is below the legibility minimum
+    letterSpacing: 9 * 0.18,
     textTransform: 'uppercase',
     fontWeight: '600',
   },

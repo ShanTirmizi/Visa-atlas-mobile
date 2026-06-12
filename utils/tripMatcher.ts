@@ -1,7 +1,7 @@
 // Generic over the id type so branded ids (e.g. Convex's Id<'trips'>) flow
 // through findMatchingTrip untouched — callers get back the same id type
 // they passed in, no casts needed.
-type Trip<TId extends string = string> = {
+export type MatchableTrip<TId extends string = string> = {
   _id: TId;
   countryCode: string;
   startDate?: string;
@@ -10,6 +10,8 @@ type Trip<TId extends string = string> = {
   isMultiCountry?: boolean;
   legs?: string; // JSON array of leg objects with countryCode
 };
+
+type Trip<TId extends string = string> = MatchableTrip<TId>;
 
 type MatchResult<TId extends string = string> = {
   tripId: TId;
@@ -41,8 +43,66 @@ function getTripCountries(trip: Trip): string[] {
   return countries;
 }
 
+/** Resolves a trip's [start, end] window in epoch ms, or null without a start. */
+function getTripWindow(trip: Trip): { start: number; end: number } | null {
+  if (!trip.startDate) return null;
+  const start = new Date(trip.startDate).getTime();
+  const end = trip.endDate
+    ? new Date(trip.endDate).getTime()
+    : start + trip.duration * BUFFER_MS; // duration in days
+  return { start, end };
+}
+
+/**
+ * Date-only fallback used when the booking carries no country code —
+ * calendar-imported events never have one. Matches how Google Trips groups
+ * reservations into trips: date containment alone is the signal.
+ *
+ * A single overlapping trip is an unambiguous match → high confidence (so
+ * calendar auto-import actually links). Multiple overlapping trips pick the
+ * largest overlap but downgrade to medium.
+ */
+function matchByDateOverlap<TId extends string>(
+  startDate: string | undefined | null,
+  endDate: string | undefined | null,
+  trips: Trip<TId>[]
+): MatchResult<TId> | null {
+  if (!startDate && !endDate) return null;
+
+  const bookingStart = startDate ? new Date(startDate).getTime() : 0;
+  const bookingEnd = endDate ? new Date(endDate).getTime() : bookingStart;
+
+  const overlapping: Array<{ tripId: TId; overlapMs: number }> = [];
+
+  for (const trip of trips) {
+    const window = getTripWindow(trip);
+    if (!window) continue;
+
+    const hasOverlap =
+      bookingStart <= window.end + BUFFER_MS &&
+      bookingEnd >= window.start - BUFFER_MS;
+    if (!hasOverlap) continue;
+
+    // Raw overlap (can be ≤ 0 when the match only lands inside the 1-day
+    // buffer) — only used to rank candidates against each other.
+    const overlapMs =
+      Math.min(bookingEnd, window.end) - Math.max(bookingStart, window.start);
+    overlapping.push({ tripId: trip._id, overlapMs });
+  }
+
+  if (overlapping.length === 0) return null;
+  if (overlapping.length === 1) {
+    return { tripId: overlapping[0].tripId, confidence: 'high' };
+  }
+
+  overlapping.sort((a, b) => b.overlapMs - a.overlapMs);
+  return { tripId: overlapping[0].tripId, confidence: 'medium' };
+}
+
 /**
  * Finds the best matching trip for a booking based on country code and date overlap.
+ * When the booking has no country code (calendar imports), falls back to
+ * pure date-overlap matching instead of bailing out.
  * Returns a MatchResult with the trip ID and confidence level, or null if no match.
  */
 export function findMatchingTrip<TId extends string = string>(
@@ -51,8 +111,12 @@ export function findMatchingTrip<TId extends string = string>(
   endDate: string | undefined | null,
   trips: Trip<TId>[]
 ): MatchResult<TId> | null {
-  if (!countryCode || !trips || trips.length === 0) {
+  if (!trips || trips.length === 0) {
     return null;
+  }
+
+  if (!countryCode) {
+    return matchByDateOverlap(startDate, endDate, trips);
   }
 
   let bestScore = 0;

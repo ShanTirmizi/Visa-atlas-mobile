@@ -1,5 +1,10 @@
 // Visa Atlas — Schema.org JSON-LD Parser for Email Bookings
 // Extracts structured booking data from schema.org markup embedded in email HTML
+//
+// JSON-LD from arbitrary senders is untrusted input — everything is parsed
+// as `unknown` and narrowed through the helpers below instead of `any`
+// property chains, so a malformed payload can never leak an object into a
+// string field ("[object Object]") or throw mid-parse.
 
 import type { BookingType } from '@/constants/bookings';
 
@@ -33,6 +38,39 @@ const SCHEMA_TYPE_MAP: Record<string, BookingType> = {
 };
 
 // ──────────────────────────────────────────────
+// Narrowing helpers
+// ──────────────────────────────────────────────
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Walks a key path through nested unknown values. Returns undefined as soon
+ * as any hop isn't a plain object.
+ */
+function get(value: unknown, ...path: string[]): unknown {
+  let current: unknown = value;
+  for (const key of path) {
+    if (!isRecord(current)) return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+/** Like get(), but only returns non-empty string leaves. */
+function getString(value: unknown, ...path: string[]): string | undefined {
+  const leaf = get(value, ...path);
+  return typeof leaf === 'string' && leaf.length > 0 ? leaf : undefined;
+}
+
+/** Date-like JSON-LD leaves are ISO strings; tolerate epoch numbers too. */
+function getDateLike(value: unknown, ...path: string[]): string | number | undefined {
+  const leaf = get(value, ...path);
+  return typeof leaf === 'string' || typeof leaf === 'number' ? leaf : undefined;
+}
+
+// ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
 
@@ -40,8 +78,8 @@ const SCHEMA_TYPE_MAP: Record<string, BookingType> = {
  * Converts an arbitrary date-like value to a YYYY-MM-DD string.
  * Falls back to today's date when the value is missing or unparseable.
  */
-function toDateString(value: any): string {
-  if (!value) return todayString();
+function toDateString(value: string | number | undefined): string {
+  if (value == null || value === '') return todayString();
 
   const parsed = new Date(value);
   if (isNaN(parsed.getTime())) return todayString();
@@ -64,149 +102,177 @@ function todayString(): string {
  * Extracts a provider name from a schema.org reservation item.
  * Tries several common locations before falling back to the sender domain.
  */
-function extractProvider(item: any, senderDomain: string): string {
-  if (item.provider?.name) return item.provider.name;
-  if (item.reservationFor?.provider?.name) return item.reservationFor?.provider.name;
-  if (item.airline?.name) return item.airline.name;
+function extractProvider(item: unknown, senderDomain: string): string {
+  const fromItem =
+    getString(item, 'provider', 'name') ??
+    getString(item, 'reservationFor', 'provider', 'name') ??
+    getString(item, 'airline', 'name');
+  if (fromItem) return fromItem;
 
   // Prettify the sender domain as a fallback
   const domainName = senderDomain.replace(/\.\w+$/, '');
   return domainName.charAt(0).toUpperCase() + domainName.slice(1);
 }
 
+function getConfirmationNumber(item: unknown): string | undefined {
+  return getString(item, 'reservationNumber') ?? getString(item, 'confirmationNumber');
+}
+
 // ──────────────────────────────────────────────
 // Type-specific parsers
 // ──────────────────────────────────────────────
 
-function parseFlight(item: any, provider: string): ParsedEmailBooking {
-  const dep = item.reservationFor?.departureAirport?.iataCode ?? '???';
-  const arr = item.reservationFor?.arrivalAirport?.iataCode ?? '???';
+function parseFlight(item: unknown, provider: string): ParsedEmailBooking {
+  const dep = getString(item, 'reservationFor', 'departureAirport', 'iataCode') ?? '???';
+  const arr = getString(item, 'reservationFor', 'arrivalAirport', 'iataCode') ?? '???';
   const flightNumber =
-    item.reservationFor?.flightNumber ??
-    item.reservationFor?.trainNumber ??
-    item.reservationFor?.busNumber ??
+    getString(item, 'reservationFor', 'flightNumber') ??
+    getString(item, 'reservationFor', 'trainNumber') ??
+    getString(item, 'reservationFor', 'busNumber') ??
     '';
   const airline =
-    item.reservationFor?.airline?.name ?? item.airline?.name ?? provider;
+    getString(item, 'reservationFor', 'airline', 'name') ??
+    getString(item, 'airline', 'name') ??
+    provider;
 
   return {
     type: 'flight',
     title: `${dep} → ${arr}${flightNumber ? ' ' + flightNumber : ''}`,
     startDate: toDateString(
-      item.reservationFor?.departureTime ?? item.reservationFor?.departureDate
+      getDateLike(item, 'reservationFor', 'departureTime') ??
+        getDateLike(item, 'reservationFor', 'departureDate')
     ),
     endDate: toDateString(
-      item.reservationFor?.arrivalTime ?? item.reservationFor?.arrivalDate
+      getDateLike(item, 'reservationFor', 'arrivalTime') ??
+        getDateLike(item, 'reservationFor', 'arrivalDate')
     ),
     location: `${dep} → ${arr}`,
-    confirmationNumber:
-      item.reservationNumber ?? item.confirmationNumber ?? undefined,
+    confirmationNumber: getConfirmationNumber(item),
     provider,
     details: {
       airline,
       flightNumber,
       departure: dep,
       arrival: arr,
-      class: item.reservationFor?.boardingGroup ?? '',
+      class: getString(item, 'reservationFor', 'boardingGroup') ?? '',
     },
   };
 }
 
-function parseHotel(item: any, provider: string): ParsedEmailBooking {
+function parseHotel(item: unknown, provider: string): ParsedEmailBooking {
   const hotelName =
-    item.reservationFor?.name ?? item.reservationFor?.hotelName ?? provider;
+    getString(item, 'reservationFor', 'name') ??
+    getString(item, 'reservationFor', 'hotelName') ??
+    provider;
+  // address can be a PostalAddress object or a plain string
   const address =
-    item.reservationFor?.address?.streetAddress ??
-    item.reservationFor?.address?.name ??
-    (typeof item.reservationFor?.address === 'string'
-      ? item.reservationFor.address
-      : '');
+    getString(item, 'reservationFor', 'address', 'streetAddress') ??
+    getString(item, 'reservationFor', 'address', 'name') ??
+    getString(item, 'reservationFor', 'address') ??
+    '';
+
+  const checkIn = toDateString(
+    getDateLike(item, 'checkinTime') ?? getDateLike(item, 'checkinDate')
+  );
+  const checkOut = toDateString(
+    getDateLike(item, 'checkoutTime') ?? getDateLike(item, 'checkoutDate')
+  );
 
   return {
     type: 'hotel',
     title: hotelName,
-    startDate: toDateString(item.checkinTime ?? item.checkinDate),
-    endDate: toDateString(item.checkoutTime ?? item.checkoutDate),
+    startDate: checkIn,
+    endDate: checkOut,
     location: address || undefined,
-    confirmationNumber:
-      item.reservationNumber ?? item.confirmationNumber ?? undefined,
+    confirmationNumber: getConfirmationNumber(item),
     provider,
     details: {
       hotelName,
       address,
-      checkIn: toDateString(item.checkinTime ?? item.checkinDate),
-      checkOut: toDateString(item.checkoutTime ?? item.checkoutDate),
-      roomType: item.reservationFor?.roomType ?? '',
+      checkIn,
+      checkOut,
+      roomType: getString(item, 'reservationFor', 'roomType') ?? '',
     },
   };
 }
 
-function parseRestaurant(item: any, provider: string): ParsedEmailBooking {
-  const name = item.reservationFor?.name ?? provider;
-  const partySize = item.partySize ? String(item.partySize) : '';
+function parseRestaurant(item: unknown, provider: string): ParsedEmailBooking {
+  const name = getString(item, 'reservationFor', 'name') ?? provider;
+  const partySizeRaw = get(item, 'partySize');
+  const partySize =
+    typeof partySizeRaw === 'number' || typeof partySizeRaw === 'string'
+      ? String(partySizeRaw)
+      : '';
 
   return {
     type: 'restaurant',
     title: name,
-    startDate: toDateString(item.startTime ?? item.reservationFor?.startDate),
+    startDate: toDateString(
+      getDateLike(item, 'startTime') ?? getDateLike(item, 'reservationFor', 'startDate')
+    ),
     location: name,
-    confirmationNumber:
-      item.reservationNumber ?? item.confirmationNumber ?? undefined,
+    confirmationNumber: getConfirmationNumber(item),
     provider,
     details: {
       name,
       cuisine: '',
       partySize,
-      time: item.startTime ?? '',
+      time: getString(item, 'startTime') ?? '',
     },
   };
 }
 
-function parseCarRental(item: any, provider: string): ParsedEmailBooking {
+function parseCarRental(item: unknown, provider: string): ParsedEmailBooking {
   const pickupLocation =
-    item.pickupLocation?.name ?? item.pickupLocation?.address ?? '';
+    getString(item, 'pickupLocation', 'name') ??
+    getString(item, 'pickupLocation', 'address') ??
+    '';
   const dropoffLocation =
-    item.dropoffLocation?.name ?? item.dropoffLocation?.address ?? '';
+    getString(item, 'dropoffLocation', 'name') ??
+    getString(item, 'dropoffLocation', 'address') ??
+    '';
 
   return {
     type: 'car_rental',
     title: `${provider} rental`,
-    startDate: toDateString(item.pickupTime ?? item.pickupDate),
-    endDate: toDateString(item.dropoffTime ?? item.dropoffDate),
+    startDate: toDateString(
+      getDateLike(item, 'pickupTime') ?? getDateLike(item, 'pickupDate')
+    ),
+    endDate: toDateString(
+      getDateLike(item, 'dropoffTime') ?? getDateLike(item, 'dropoffDate')
+    ),
     location: pickupLocation || undefined,
-    confirmationNumber:
-      item.reservationNumber ?? item.confirmationNumber ?? undefined,
+    confirmationNumber: getConfirmationNumber(item),
     provider,
     details: {
       company: provider,
       pickupLocation,
       dropoffLocation,
-      carType: item.reservationFor?.name ?? '',
+      carType: getString(item, 'reservationFor', 'name') ?? '',
     },
   };
 }
 
-function parseExperience(item: any, provider: string): ParsedEmailBooking {
-  const name = item.reservationFor?.name ?? provider;
+function parseExperience(item: unknown, provider: string): ParsedEmailBooking {
+  const name = getString(item, 'reservationFor', 'name') ?? provider;
+  // location can be a Place object or a plain string
   const location =
-    item.reservationFor?.location?.name ??
-    item.reservationFor?.location?.address ??
-    (typeof item.reservationFor?.location === 'string'
-      ? item.reservationFor.location
-      : '');
+    getString(item, 'reservationFor', 'location', 'name') ??
+    getString(item, 'reservationFor', 'location', 'address') ??
+    getString(item, 'reservationFor', 'location') ??
+    '';
+
+  const endDateRaw = getDateLike(item, 'reservationFor', 'endDate');
 
   return {
     type: 'experience',
     title: name,
     startDate: toDateString(
-      item.reservationFor?.startDate ?? item.startTime
+      getDateLike(item, 'reservationFor', 'startDate') ?? getDateLike(item, 'startTime')
     ),
-    endDate: item.reservationFor?.endDate
-      ? toDateString(item.reservationFor.endDate)
-      : undefined,
+    endDate: endDateRaw != null ? toDateString(endDateRaw) : undefined,
     location: location || undefined,
-    confirmationNumber:
-      item.reservationNumber ?? item.confirmationNumber ?? undefined,
+    confirmationNumber: getConfirmationNumber(item),
     provider,
     details: {
       activityName: name,
@@ -238,7 +304,7 @@ export function parseSchemaOrg(
     const raw = match[1].trim();
     if (!raw) continue;
 
-    let parsed: any;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
@@ -246,11 +312,13 @@ export function parseSchemaOrg(
     }
 
     // Normalize to array (JSON-LD can be a single object or an array)
-    const items: any[] = Array.isArray(parsed) ? parsed : [parsed];
+    const items: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
 
     for (const item of items) {
+      if (!isRecord(item)) continue;
+
       const schemaType = item['@type'];
-      if (!schemaType) continue;
+      if (typeof schemaType !== 'string') continue;
 
       const bookingType = SCHEMA_TYPE_MAP[schemaType];
       if (!bookingType) continue;

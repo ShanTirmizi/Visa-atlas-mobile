@@ -109,6 +109,58 @@ function findCacheConfig(queryRef: FunctionReference<'query'>): CacheConfig | nu
 }
 
 // ---------------------------------------------------------------------------
+// Cache-write hygiene
+// ---------------------------------------------------------------------------
+
+/** Trailing debounce for cache writes. Convex re-emits the full document on
+ *  every server patch (per-section/per-day updates while a trip streams in,
+ *  message-list updates while the AI replies), and persisting each emission
+ *  churns SQLite with snapshots that are stale milliseconds later. Instead
+ *  we write at most once per quiet window, keeping the LAST payload seen. */
+const CACHE_WRITE_DEBOUNCE_MS = 3000;
+
+// Module-level (shared across hook instances): several screens often
+// subscribe to the same query+args — e.g. trip detail and trip chat both
+// read getTrip — so both maps are keyed on query name + serialized args.
+// Duplicate subscriptions converge on one debounce timer, and a payload
+// identical to the last one written is skipped entirely.
+const lastWrittenHashByKey = new Map<string, string>();
+const pendingWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Tiny non-cryptographic hash (djb2) over the serialized payload. We only
+ *  need "did the payload change since the last write?", and retaining full
+ *  serialized payloads per query key would pin megabytes of JS heap. The
+ *  length prefix further cuts the (already negligible) collision risk. */
+function hashPayload(serialized: string): string {
+  let hash = 5381;
+  for (let i = 0; i < serialized.length; i++) {
+    hash = ((hash << 5) + hash + serialized.charCodeAt(i)) | 0;
+  }
+  return `${serialized.length}:${hash}`;
+}
+
+/** True when the doc is still streaming in server-side. Caching it would
+ *  burn a disk write on data that's about to change again — we re-cache
+ *  once it settles (status flips away from 'generating'). */
+function isMidGeneration(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as { status?: unknown }).status === 'generating'
+  );
+}
+
+/** Drop mid-generation docs from a payload before caching: a single
+ *  generating doc skips the write entirely (undefined); an array keeps only
+ *  its settled members (upsert-style writes never delete the others). */
+function omitMidGeneration(data: unknown): unknown {
+  if (isMidGeneration(data)) return undefined;
+  if (Array.isArray(data)) return data.filter((item) => !isMidGeneration(item));
+  return data;
+}
+
+// ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
@@ -130,16 +182,42 @@ export function useOfflineQuery<Query extends FunctionReference<'query'>>(
     [argsKey],
   );
 
-  // Write to cache whenever live data arrives.
+  // Write to cache whenever live data arrives — debounced (trailing,
+  // CACHE_WRITE_DEBOUNCE_MS), deduped against the last payload written for
+  // this query+args, and skipped while the doc is still mid-generation.
   useEffect(() => {
     if (liveData === undefined) return;
     const config = findCacheConfig(queryRef);
     if (!config) return;
 
-    config.cacheWrite(liveData, resolvedArgs).catch(() => {
-      // Cache write failures are non-fatal — silently ignore.
-    });
-  }, [liveData, queryRef, resolvedArgs]);
+    const writable = omitMidGeneration(liveData);
+    if (writable === undefined) return; // mid-generation — re-cache on settle
+
+    const cacheKey = `${getFunctionName(queryRef)}:${argsKey}`;
+    const argsForWrite = resolvedArgs;
+
+    // Trailing debounce on a module-level timer: every emission within the
+    // window replaces the scheduled snapshot, so only the LAST one in a
+    // burst hits SQLite. Deliberately NOT cleared on unmount — the final
+    // write should still land if the user navigates away mid-window, and
+    // the callback touches no React state.
+    const existing = pendingWriteTimers.get(cacheKey);
+    if (existing !== undefined) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      pendingWriteTimers.delete(cacheKey);
+      // Serialize once per quiet window (not per emission) — dedupes
+      // identical payloads across hook instances subscribed to this key.
+      const payloadHash = hashPayload(JSON.stringify(writable));
+      if (lastWrittenHashByKey.get(cacheKey) === payloadHash) return;
+      lastWrittenHashByKey.set(cacheKey, payloadHash);
+      config.cacheWrite(writable, argsForWrite).catch(() => {
+        // Cache write failures are non-fatal — forget the hash so the next
+        // emission retries the write.
+        lastWrittenHashByKey.delete(cacheKey);
+      });
+    }, CACHE_WRITE_DEBOUNCE_MS);
+    pendingWriteTimers.set(cacheKey, timer);
+  }, [liveData, queryRef, argsKey, resolvedArgs]);
 
   // Read from cache when offline and live data is unavailable.
   useEffect(() => {

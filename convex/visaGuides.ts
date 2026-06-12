@@ -33,11 +33,17 @@ export const getGuideByCountry = query({
   args: { countryCode: v.string() },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
-    const guides = await ctx.db
+    // Point lookup on the compound index — no more collecting every guide
+    // the user owns just to .find() one. .first() (not .unique()) because
+    // createGuide doesn't dedupe per country; matches the previous
+    // oldest-first .find() semantics under default ascending order.
+    const guide = await ctx.db
       .query("visaGuides")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    return guides.find((g) => g.countryCode === args.countryCode) ?? null;
+      .withIndex("by_user_and_country", (q) =>
+        q.eq("userId", userId).eq("countryCode", args.countryCode),
+      )
+      .first();
+    return guide ?? null;
   },
 });
 

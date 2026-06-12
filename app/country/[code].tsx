@@ -8,6 +8,7 @@ import {
   View, Text, StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Heart, Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
@@ -311,16 +312,13 @@ export default function CountryDetailScreen() {
         {photoUri ? (
           <View style={{ height: HERO_PHOTO_HEIGHT, marginHorizontal: Spacing.lg, marginBottom: 18, borderRadius: 24, overflow: 'hidden' }}>
             <Photo uri={photoUri} style={StyleSheet.absoluteFillObject} />
-            {/* Bottom-weighted darken for legibility */}
-            <View
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 140,
-                backgroundColor: 'rgba(0,0,0,0.45)',
-              }}
+            {/* Bottom-weighted gradient scrim for legibility — same recipe
+                as TripOverviewHero / NextTripHero, never a hard-edged band. */}
+            <LinearGradient
+              colors={['rgba(0,0,0,0.18)', 'transparent', 'rgba(0,0,0,0.58)']}
+              locations={[0, 0.45, 1]}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
             />
             <View
               style={{

@@ -6,13 +6,17 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { Calendar } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing } from '@/constants/theme';
+import { toLocalYMD, fromLocalYMD } from '@/utils/localDate';
 
 interface DateInputProps {
   label: string;
   value: string; // YYYY-MM-DD or ''
   onChange: (dateString: string) => void;
   accentColor: string;
+  /** Earliest selectable date — pass the start date on end-date fields so
+   *  the picker can't produce a check-out before check-in. */
+  minimumDate?: Date;
 }
 
 function formatDateDisplay(dateStr: string): string {
@@ -26,17 +30,8 @@ function formatDateDisplay(dateStr: string): string {
   });
 }
 
-function toYMD(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 function parseValue(value: string): Date {
-  if (!value) return new Date();
-  const [y, m, d] = value.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  return fromLocalYMD(value) ?? new Date();
 }
 
 export default function DateInput({
@@ -44,6 +39,7 @@ export default function DateInput({
   value,
   onChange,
   accentColor,
+  minimumDate,
 }: DateInputProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -100,7 +96,11 @@ export default function DateInput({
     // modal renders underneath the still-open keyboard. The host sheet's
     // keyboardBlurBehavior="restore" settles the sheet back to its detent.
     Keyboard.dismiss();
-    setTempDate(parseValue(value));
+    // Clamp the picker's starting point to the minimum — opening an
+    // end-date spinner below its allowed floor leaves iOS in a snap-back
+    // tug-of-war with the user.
+    const parsed = parseValue(value);
+    setTempDate(minimumDate && parsed < minimumDate ? minimumDate : parsed);
     setShowPicker(true);
   };
 
@@ -108,7 +108,7 @@ export default function DateInput({
   const handleAndroidChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
     setShowPicker(false);
     if (selectedDate) {
-      onChange(toYMD(selectedDate));
+      onChange(toLocalYMD(selectedDate));
     }
   };
 
@@ -120,36 +120,45 @@ export default function DateInput({
   };
 
   const handleIOSConfirm = () => {
-    onChange(toYMD(tempDate));
+    onChange(toLocalYMD(tempDate));
     setShowPicker(false);
   };
 
   return (
+    // Paper field card matching BookingForm's FieldCard exactly — the label
+    // lives INSIDE the card (mono kicker on inkMute) and the value renders
+    // in italic Fraunces ink. The previous solidText/solidField tokens are
+    // white-on-dark tokens from the old tinted-sheet era and were invisible
+    // on the Signature v2 paper sheet (white label on white card).
     <View style={{ flex: 1 }}>
-      <Text style={[styles.label, { color: colors.solidText }]}>
-        {label}
-      </Text>
-
       <TouchableOpacity
         onPress={handlePress}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`${label.replace(' *', '')}: ${
+          value ? formatDateDisplay(value) : 'Select date'
+        }`}
         style={[
-          styles.button,
+          styles.card,
           {
-            backgroundColor: colors.solidField,
-            borderColor: colors.solidBorderStrong,
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
           },
         ]}
       >
-        <Calendar size={16} color={accentColor} />
-        <Text
-          style={[
-            styles.buttonText,
-            { color: value ? colors.textSecondary : colors.textMuted },
-          ]}
-        >
-          {value ? formatDateDisplay(value) : 'Select date'}
-        </Text>
+        <Text style={[styles.label, { color: colors.inkMute }]}>{label}</Text>
+        <View style={styles.valueRow}>
+          <Calendar size={14} color={accentColor} strokeWidth={2} />
+          <Text
+            style={[
+              styles.valueText,
+              { color: value ? colors.ink : colors.inkFaint },
+            ]}
+            numberOfLines={1}
+          >
+            {value ? formatDateDisplay(value) : 'Select date'}
+          </Text>
+        </View>
       </TouchableOpacity>
 
       {/* Android: native dialog */}
@@ -158,6 +167,7 @@ export default function DateInput({
           value={parseValue(value)}
           mode="date"
           display="default"
+          minimumDate={minimumDate}
           onChange={handleAndroidChange}
         />
       )}
@@ -204,9 +214,9 @@ export default function DateInput({
               >
                 <View style={[styles.modalHeader, { borderBottomColor: colors.lineMid }]}>
                   <TouchableOpacity onPress={() => setShowPicker(false)}>
-                    <Text style={[styles.modalCancel, { color: colors.textMuted }]}>Cancel</Text>
+                    <Text style={[styles.modalCancel, { color: colors.inkMute }]}>Cancel</Text>
                   </TouchableOpacity>
-                  <Text style={[styles.modalTitle, { color: colors.foreground }]}>{label}</Text>
+                  <Text style={[styles.modalTitle, { color: colors.ink }]}>{label}</Text>
                   <TouchableOpacity onPress={handleIOSConfirm}>
                     <Text style={[styles.modalDone, { color: accentColor }]}>Done</Text>
                   </TouchableOpacity>
@@ -215,6 +225,7 @@ export default function DateInput({
                   value={tempDate}
                   mode="date"
                   display="spinner"
+                  minimumDate={minimumDate}
                   onChange={handleIOSChange}
                   style={{ height: 200 }}
                 />
@@ -228,25 +239,36 @@ export default function DateInput({
 }
 
 const styles = StyleSheet.create({
-  label: {
-    fontFamily: FontFamily.condensedMedium,
-    fontSize: FontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
+  // Mirrors BookingForm's fieldCardStyle / labelStyle so date fields are
+  // visually identical to the text fields beside them.
+  card: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  button: {
+  label: {
+    fontFamily: FontFamily.monoMedium,
+    fontSize: 9,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 9 * 0.18,
+  },
+  valueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    marginTop: 6,
   },
-  buttonText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
+  valueText: {
+    flex: 1,
+    fontFamily: FontFamily.displayItalic,
+    fontStyle: 'italic',
+    fontSize: 17,
+    fontWeight: '500',
+    letterSpacing: -17 * 0.014,
+    lineHeight: 22,
   },
   sheetWrap: {
     position: 'absolute',

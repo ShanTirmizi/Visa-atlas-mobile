@@ -1,8 +1,13 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
+/** Deletes EVERY user's trips/messages/bookings/guides. Internal-only (not
+ *  in the client API), and the confirm literal makes a dashboard/CLI
+ *  mis-click impossible — you must type the magic string to run it:
+ *    npx convex run wipeTestData:wipeAll '{"confirm":"WIPE_EVERYTHING"}'
+ */
 export const wipeAll = internalMutation({
-  args: {},
+  args: { confirm: v.literal("WIPE_EVERYTHING") },
   handler: async (ctx) => {
     const tables = ["trips", "tripMessages", "bookings", "visaGuides"] as const;
     for (const table of tables) {

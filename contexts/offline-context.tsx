@@ -30,6 +30,23 @@ const OfflineContext = createContext<OfflineContextValue>({
 });
 
 // ---------------------------------------------------------------------------
+// Queue-change notifications
+// ---------------------------------------------------------------------------
+// The mutation queue is written from useOfflineMutation — plain async code
+// with no access to this provider's state — so without a nudge the
+// "N pending" banner count only refreshed on init and after a sync, never
+// when something was enqueued. A module-scope listener set lets the queue
+// tell the provider to re-read the count the moment a mutation lands.
+
+const queueListeners = new Set<() => void>();
+
+/** Called by useOfflineMutation right after enqueueing while offline so the
+ *  pending-count banner updates immediately. */
+export function notifyMutationQueued(): void {
+  for (const listener of queueListeners) listener();
+}
+
+// ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
@@ -73,6 +90,18 @@ export function OfflineProvider({ children }: { children: React.ReactNode }): Re
     const count = await getPendingMutationCount();
     setPendingMutationCount(count);
   }, []);
+
+  // Re-read the pending count whenever useOfflineMutation enqueues something
+  // (see notifyMutationQueued above) — keeps the banner's "N pending" live.
+  useEffect(() => {
+    const listener = (): void => {
+      void refreshPendingCount();
+    };
+    queueListeners.add(listener);
+    return () => {
+      queueListeners.delete(listener);
+    };
+  }, [refreshPendingCount]);
 
   // ---------------------------------------------------------------------------
   // Internal: performSync

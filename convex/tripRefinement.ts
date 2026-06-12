@@ -7,6 +7,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireAuth } from "./lib/auth";
+import { checkRateLimit, HOUR_MS } from "./lib/rateLimit";
 import type { Id } from "./_generated/dataModel";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -162,6 +163,10 @@ export const startAnalysis = mutation({
     if (trimmed.length > 2000) {
       throw new Error("userNotes exceeds 2000 character limit");
     }
+
+    // After the empty-notes early return (which burns no LLM call) and the
+    // validation throw, so only real analyses count against the window.
+    await checkRateLimit(ctx, userId, "startAnalysis", 10, HOUR_MS);
 
     const sessionId = await ctx.db.insert("refinementSessions", {
       userId,

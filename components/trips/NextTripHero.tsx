@@ -25,7 +25,8 @@ import { Countdown } from '@/components/ui/Countdown';
 import { FlightPath } from '@/components/ui/FlightPath';
 import { Flag } from '@/components/ui/Flag';
 import { TypingDots } from '@/components/ui/TypingDots';
-import { toAlpha2 } from '@/utils/countryCode';
+import { toAlpha2, toAlpha3 } from '@/utils/countryCode';
+import { getFlightHours } from '@/utils/flightTime';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types
@@ -43,7 +44,11 @@ interface NextTripHeroProps {
   status: string;
   /** Destination IATA airport code (stored on the trip doc). */
   iataCode?: string;
-  /** Estimated flight hours — e.g. 18.33 → "18h 20m" */
+  /**
+   * @deprecated Ignored. The stored value was estimated from a US (JFK)
+   * origin regardless of where the user lives. Flight time is now derived
+   * locally from the user's residence via getFlightHours().
+   */
   flightHours?: number;
   /** Daily budget string (e.g. "€120") — used for BUDGET card. */
   dailyBudget?: string;
@@ -99,12 +104,13 @@ function countdownParts(startDate: string | undefined): { d: number; h: number }
   return { d: Math.floor(totalHours / 24), h: totalHours % 24 };
 }
 
-function formatFlightCaption(flightHours: number | undefined): string {
+// Duration only — we have no routing data, so a "direct"/"1 stop" label
+// would be fabricated. Hours come from great-circle distance (flightTime.ts).
+function formatFlightCaption(flightHours: number | null): string {
   if (!flightHours || flightHours <= 0) return '';
   const h = Math.floor(flightHours);
   const m = Math.round((flightHours - h) * 60);
-  const stops = flightHours > 4 ? '1 stop' : 'direct';
-  return `${stops} · ${h}h ${String(m).padStart(2, '0')}m`;
+  return m > 0 ? `~${h}h ${String(m).padStart(2, '0')}m` : `~${h}h`;
 }
 
 function visaLabel(category: string): string {
@@ -208,9 +214,9 @@ function TripWeekStrip({ startDate }: { startDate?: string }) {
               style={[
                 Type.mono9,
                 {
+                  // 9pt floor — 8pt mono was below the legibility minimum.
                   color: isToday ? 'rgba(255,255,255,0.60)' : colors.inkMute,
-                  fontSize: 8,
-                  letterSpacing: 8 * 0.1,
+                  letterSpacing: 9 * 0.1,
                   textAlign: 'center',
                 },
               ]}
@@ -252,8 +258,6 @@ export function NextTripHero({
   duration,
   heroImage,
   status,
-  iataCode,
-  flightHours,
   dailyBudget,
   loggedCost,
 }: NextTripHeroProps) {
@@ -278,10 +282,17 @@ export function NextTripHero({
   // Origin / destination labels for the flight strip — use ISO-2 country
   // codes (e.g. "AT" → "US") rather than airport IATAs the user may not
   // recognize. Origin comes from the user's saved residence; destination
-  // is the trip country.
+  // is the trip country. Without a residence there is no origin to draw —
+  // the whole strip is hidden rather than showing a "—" placeholder.
   const fromCode = residence ? toAlpha2(residence) || residence.slice(0, 2).toUpperCase() : '';
   const toCode = alpha2 || (countryCode || '').slice(0, 2).toUpperCase();
-  const flightCaption = formatFlightCaption(flightHours);
+  // Flight time derived from the user's actual residence (great-circle via
+  // capital coordinates) — never the JFK-based estimate stored on the trip.
+  // Missing residence or an unknown country pair → no time caption at all.
+  const destAlpha3 = toAlpha3(countryCode) || countryCode;
+  const realFlightHours =
+    residence && destAlpha3 ? getFlightHours(residence, destAlpha3) : null;
+  const flightCaption = formatFlightCaption(realFlightHours);
 
   // Budget card
   const pct = budgetPct(loggedCost, dailyBudget, duration);
@@ -415,21 +426,24 @@ export function NextTripHero({
       {/* ── BLOCK 2: Week strip ──────────────────────────────────── */}
       <TripWeekStrip startDate={startDate} />
 
-      {/* ── BLOCK 3: Flight path strip ───────────────────────────── */}
-      <View
-        style={[
-          styles.flightStrip,
-          { backgroundColor: colors.surface },
-        ]}
-      >
-        <FlightPath
-          width={300}
-          height={52}
-          from={fromCode || '—'}
-          to={toCode || '—'}
-          caption={flightCaption}
-        />
-      </View>
+      {/* ── BLOCK 3: Flight path strip — only when we know the origin.
+          A "— → JP" placeholder route is dead UI; no residence, no strip. */}
+      {fromCode ? (
+        <View
+          style={[
+            styles.flightStrip,
+            { backgroundColor: colors.surface },
+          ]}
+        >
+          <FlightPath
+            width={300}
+            height={52}
+            from={fromCode}
+            to={toCode || '—'}
+            caption={flightCaption}
+          />
+        </View>
+      ) : null}
 
       {/* ── BLOCK 4: Dual VISA / BUDGET cards ───────────────────── */}
       <View style={styles.dualRow}>

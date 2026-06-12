@@ -36,11 +36,11 @@ import { Id } from '@/convex/_generated/dataModel';
 import {
   Send,
   Sparkles,
-  CheckCircle2,
   ArrowRight,
   Wand2,
 } from 'lucide-react-native';
 import BackButton from '@/components/ui/BackButton';
+import TopSafeAreaBlur from '@/components/ui/TopSafeAreaBlur';
 import { ItineraryDiffCard, diffItineraries } from '@/components/chat/ItineraryDiffCard';
 import { hapticSelect } from '@/utils/haptics';
 import { useTheme } from '@/contexts/theme-context';
@@ -76,6 +76,7 @@ interface ChatMessage {
 // Travel-themed cycle that runs in place of a static "Thinking…". Cycles
 // every ~2.2s while the AI is composing — matches the rhythm Claude Code
 // and Linear use for streaming status copy.
+const THINK_TICK_MS = 2200;
 const THINKING_PHRASES = [
   'Thinking',
   'Consulting the guidebook',
@@ -238,11 +239,10 @@ export default function ChatScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [failedMessage, setFailedMessage] = useState<string | null>(null);
-  // Index into THINKING_PHRASES for the cycling "Thinking…" status. Bumped
-  // every ~2.2s while a message is in flight; resets to 0 on each send so
-  // the user sees the simplest copy first ("Thinking") before the cycle
-  // moves on to more flavour-text phrases.
-  const [thinkTick, setThinkTick] = useState(0);
+  // Floating-header height — pre-layout estimate, corrected by onLayout on
+  // the first frame (same pattern as app/guide/[id].tsx). Drives the
+  // TopSafeAreaBlur `extra` band and the scroll content's top padding.
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 70);
   // assistant message IDs that triggered a successful itinerary patch this session
   const [updatedMsgIds, setUpdatedMsgIds] = useState<Set<string>>(new Set());
   // assistant message IDs whose photo regeneration is still in flight — shown
@@ -259,20 +259,6 @@ export default function ChatScreen() {
   } | null>(null);
   const updateTripField = useMutation(api.trips.updateTripField);
 
-  // Cycle the thinking phrase while the AI is composing. Reset to 0 on each
-  // new send so it always opens with the plain "Thinking" before drifting
-  // into flavour text — keeps things grounded for fast responses.
-  useEffect(() => {
-    if (!isSending) {
-      setThinkTick(0);
-      return;
-    }
-    const id = setInterval(() => {
-      setThinkTick((t) => t + 1);
-    }, 2200);
-    return () => clearInterval(id);
-  }, [isSending]);
-
   const countryName = trip?.countryName ?? 'your trip';
   const alpha2 = toAlpha2(trip?.countryCode ?? '');
 
@@ -286,14 +272,21 @@ export default function ChatScreen() {
     }
   }, [dayIndex, trip?.itinerary]);
 
-  const displayMessages: ChatMessage[] = (convexMessages ?? []).map((m) => ({
-    id: m._id,
-    role: m.role,
-    content: m.content,
-    timestamp: m.timestamp,
-    userName: m.userName ?? undefined,
-    userId: m.userId ?? undefined,
-  }));
+  // Memoized so message objects keep their identity between unrelated parent
+  // re-renders (keystrokes, focus changes) — that's what lets the
+  // React.memo'd MessageBubble rows below bail out of re-rendering.
+  const displayMessages = useMemo<ChatMessage[]>(
+    () =>
+      (convexMessages ?? []).map((m) => ({
+        id: m._id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+        userName: m.userName ?? undefined,
+        userId: m.userId ?? undefined,
+      })),
+    [convexMessages],
+  );
 
   // The single write path for itinerary updates — used by the silent no-op
   // path in sendChat and by the diff card's "Apply changes". Patches the
@@ -381,14 +374,17 @@ export default function ChatScreen() {
       setIsSending(true);
       setFailedMessage(null);
 
-      // Attribution (userId/userName) is derived server-side in addMessage.
-      await addMessage({
-        tripId: tripId as Id<'trips'>,
-        role: 'user',
-        content: text,
-      });
-
       try {
+        // Attribution (userId/userName) is derived server-side in addMessage.
+        // Inside the try: if this first write fails (socket blip mid-flight),
+        // the catch surfaces the retry banner and `finally` releases the
+        // spinner — outside it, a rejection stranded isSending forever.
+        await addMessage({
+          tripId: tripId as Id<'trips'>,
+          role: 'user',
+          content: text,
+        });
+
         const res = await fetch(endpoints.tripChat, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -465,7 +461,6 @@ export default function ChatScreen() {
       isOffline,
       isSending,
       tripId,
-      currentUser,
       convexMessages,
       trip,
       passports,
@@ -516,207 +511,49 @@ export default function ChatScreen() {
     [sendChat],
   );
 
+  const openTrip = useCallback(() => {
+    router.push(`/trip/${tripId}` as never);
+  }, [router, tripId]);
+
+  // Thin adapter: all rendering lives in the module-level React.memo
+  // MessageBubble so rows bail out unless THEIR props changed. Note
+  // `currentItinerary` is only populated for the row anchoring the pending
+  // diff card — otherwise every itinerary patch would re-render every bubble.
   const renderMessage = useCallback(
     ({ item }: { item: ChatMessage }) => {
-      const isAssistant = item.role === 'assistant';
-      const isOwnMessage = item.userId === currentUser?._id;
-      const isOtherUser = !isAssistant && !isOwnMessage;
-      const wasUpdate = isAssistant && updatedMsgIds.has(item.id);
-      const photosRefreshing = isAssistant && refreshingPhotosFor.has(item.id);
-
-      if (isAssistant) {
-        return (
-          <View style={[styles.aiBubbleWrap]}>
-            <View
-              style={[
-                styles.aiBubble,
-                { backgroundColor: colors.surface, borderColor: colors.line },
-              ]}
-            >
-              <View style={styles.aiHeader}>
-                <View
-                  style={[
-                    styles.aiOrb,
-                    { backgroundColor: colors.coralBg },
-                  ]}
-                >
-                  <Sparkles size={11} color={colors.coralDeep} strokeWidth={2.2} fill={colors.coralDeep} />
-                </View>
-                <Text
-                  style={{
-                    fontFamily: FontFamily.monoMedium,
-                    fontSize: 9,
-                    fontWeight: '700',
-                    letterSpacing: 9 * 0.22,
-                    textTransform: 'uppercase',
-                    color: colors.coralDeep,
-                  }}
-                >
-                  VISA ATLAS AI
-                </Text>
-              </View>
-
-              <Text
-                style={{
-                  fontFamily: FontFamily.regular,
-                  fontSize: 14.5,
-                  lineHeight: 22,
-                  color: colors.ink,
-                }}
-              >
-                {item.content}
-              </Text>
-
-              {wasUpdate ? (
-                <Pressable
-                  onPress={() => router.push(`/trip/${tripId}` as any)}
-                  style={({ pressed }) => [
-                    styles.updateStamp,
-                    {
-                      borderColor: colors.coralDeep,
-                      backgroundColor: colors.coralBg,
-                      opacity: pressed ? 0.85 : 1,
-                    },
-                  ]}
-                >
-                  <View
-                    style={{
-                      width: 26,
-                      height: 26,
-                      borderRadius: 6,
-                      borderWidth: 1.25,
-                      borderColor: colors.coralDeep,
-                      backgroundColor: 'rgba(255,255,255,0.65)',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transform: [{ rotate: '-4deg' }],
-                    }}
-                  >
-                    <Wand2 size={12} color={colors.coralDeep} strokeWidth={2.2} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        fontFamily: FontFamily.monoMedium,
-                        fontSize: 9,
-                        fontWeight: '700',
-                        letterSpacing: 9 * 0.22,
-                        textTransform: 'uppercase',
-                        color: colors.coralDeep,
-                      }}
-                    >
-                      {photosRefreshing ? 'REFRESHING PHOTOS' : 'ITINERARY UPDATED'}
-                    </Text>
-                    <Text
-                      style={{
-                        fontFamily: FontFamily.displayItalic,
-                        fontStyle: 'italic',
-                        fontSize: 15,
-                        letterSpacing: -15 * 0.014,
-                        fontWeight: '500',
-                        color: colors.ink,
-                        marginTop: 2,
-                      }}
-                    >
-                      {photosRefreshing ? 'Catching the visuals up…' : 'Trip refreshed.'}
-                    </Text>
-                  </View>
-                  {photosRefreshing ? (
-                    <ActivityIndicator size="small" color={colors.coralDeep} />
-                  ) : (
-                    <ArrowRight size={14} color={colors.coralDeep} strokeWidth={2.2} />
-                  )}
-                </Pressable>
-              ) : null}
-            </View>
-
-            {/* Pending itinerary proposal — review card anchored under the
-                assistant reply that produced it. Only the changed days are
-                shown; the trip is untouched until "Apply changes". */}
-            {pendingUpdate?.forMessageId === item.id ? (
-              <Animated.View
-                entering={FadeIn.duration(280)}
-                style={{ alignSelf: 'stretch', marginTop: 8 }}
-              >
-                <ItineraryDiffCard
-                  currentItinerary={trip?.itinerary ?? '[]'}
-                  proposedItinerary={pendingUpdate.itinerary}
-                  onApply={acceptPendingUpdate}
-                  onKeep={declinePendingUpdate}
-                />
-              </Animated.View>
-            ) : null}
-          </View>
-        );
-      }
-
+      const pendingForThis =
+        pendingUpdate && pendingUpdate.forMessageId === item.id
+          ? pendingUpdate.itinerary
+          : null;
       return (
-        <View style={styles.userBubbleWrap}>
-          <View
-            style={[
-              styles.userBubble,
-              { backgroundColor: isOwnMessage ? colors.ink : colors.coral },
-            ]}
-          >
-            {isOtherUser && item.userName ? (
-              <Text
-                style={{
-                  fontFamily: FontFamily.monoMedium,
-                  fontSize: 9,
-                  fontWeight: '700',
-                  letterSpacing: 9 * 0.22,
-                  textTransform: 'uppercase',
-                  color: 'rgba(255,255,255,0.7)',
-                  marginBottom: 6,
-                }}
-              >
-                {item.userName.toUpperCase()}
-              </Text>
-            ) : (
-              <Text
-                style={{
-                  fontFamily: FontFamily.monoMedium,
-                  fontSize: 9,
-                  fontWeight: '700',
-                  letterSpacing: 9 * 0.22,
-                  textTransform: 'uppercase',
-                  color: 'rgba(255,255,255,0.7)',
-                  marginBottom: 6,
-                }}
-              >
-                YOU
-              </Text>
-            )}
-            <Text
-              style={{
-                fontFamily: FontFamily.displayItalic,
-                fontStyle: 'italic',
-                fontSize: 17,
-                lineHeight: 22,
-                letterSpacing: -17 * 0.014,
-                fontWeight: '500',
-                color: '#FFFFFF',
-              }}
-            >
-              {item.content}
-            </Text>
-          </View>
-        </View>
+        <MessageBubble
+          message={item}
+          isOwnMessage={item.userId === currentUser?._id}
+          showUpdateStamp={item.role === 'assistant' && updatedMsgIds.has(item.id)}
+          photosRefreshing={item.role === 'assistant' && refreshingPhotosFor.has(item.id)}
+          pendingItinerary={pendingForThis}
+          currentItinerary={pendingForThis !== null ? trip?.itinerary ?? '[]' : ''}
+          onOpenTrip={openTrip}
+          onApplyPending={acceptPendingUpdate}
+          onDeclinePending={declinePendingUpdate}
+        />
       );
     },
     [
-      colors,
-      currentUser,
+      currentUser?._id,
       updatedMsgIds,
       refreshingPhotosFor,
-      router,
-      tripId,
       pendingUpdate,
       trip?.itinerary,
+      openTrip,
       acceptPendingUpdate,
       declinePendingUpdate,
     ],
   );
+
+  const scrollToEnd = useCallback(() => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+  }, []);
 
   return (
     <KeyboardAvoidingView
@@ -729,15 +566,16 @@ export default function ChatScreen() {
       // unconditionally: RNKC KAV is a no-op when behavior is undefined.
       behavior="padding"
     >
-      {/* ── Editorial header ───────────────────────── */}
+      {/* ── Editorial header — floats over the list (Apple Mail pattern,
+          same recipe as app/guide/[id].tsx): messages scroll beneath it and
+          fade out under the TopSafeAreaBlur mounted as the last child below;
+          zIndex 110 keeps the header text crisp above the blur (100).
+          box-none: only the BackButton/title band captures touches — drags
+          on the empty edges fall through to the messages beneath. ── */}
       <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + Spacing.sm,
-            backgroundColor: colors.background,
-          },
-        ]}
+        pointerEvents="box-none"
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+        style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}
       >
         <View style={{ position: 'absolute', left: Spacing.md, top: insets.top + Spacing.sm }}>
           <BackButton />
@@ -795,16 +633,16 @@ export default function ChatScreen() {
         </View>
       </View>
 
-      {/* Hairline divider */}
-      <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.line }} />
-
       {/* ── Messages ───────────────────────────────── */}
       {displayMessages.length === 0 ? (
         // ScrollView (not View) so drag-down dismisses the keyboard
         // interactively, matching the populated FlatList below — iMessage
         // behaves the same on an empty conversation.
         <ScrollView
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[
+            styles.emptyContainer,
+            { paddingTop: headerHeight + 40 },
+          ]}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -946,12 +784,15 @@ export default function ChatScreen() {
           ref={flatListRef}
           data={displayMessages}
           renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          keyExtractor={messageKeyExtractor}
+          contentContainerStyle={[
+            styles.messagesList,
+            { paddingTop: headerHeight + 18 },
+          ]}
+          onContentSizeChange={scrollToEnd}
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
-          ListFooterComponent={isSending ? <ThinkingRow tick={thinkTick} /> : null}
+          ListFooterComponent={isSending ? <ThinkingRow /> : null}
         />
       )}
 
@@ -1062,16 +903,250 @@ export default function ChatScreen() {
           />
         </Animated.View>
       )}
+
+      {/* House chrome — LAST child so it frosts everything painted before
+          it. Scrolled messages fade out under the safe area + header band
+          over an 18px gradient instead of hitting a hard edge. */}
+      <TopSafeAreaBlur extra={Math.max(0, headerHeight - insets.top)} />
     </KeyboardAvoidingView>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Message bubble — module-level + React.memo so the FlatList re-renders only
+// the rows whose props actually changed. The previous inline closure rebuilt
+// every visible bubble on each parent state tick (typing, focus, sending).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Module-scope so the FlatList sees one stable function identity.
+const messageKeyExtractor = (item: ChatMessage) => item.id;
+
+interface MessageBubbleProps {
+  message: ChatMessage;
+  isOwnMessage: boolean;
+  showUpdateStamp: boolean;
+  photosRefreshing: boolean;
+  /** Proposed itinerary JSON when this message anchors the pending diff card. */
+  pendingItinerary: string | null;
+  /** Live itinerary for the diff card — populated only for the anchor row. */
+  currentItinerary: string;
+  onOpenTrip: () => void;
+  onApplyPending: () => void;
+  onDeclinePending: () => void;
+}
+
+const MessageBubble = React.memo(function MessageBubble({
+  message,
+  isOwnMessage,
+  showUpdateStamp,
+  photosRefreshing,
+  pendingItinerary,
+  currentItinerary,
+  onOpenTrip,
+  onApplyPending,
+  onDeclinePending,
+}: MessageBubbleProps) {
+  const { colors } = useTheme();
+  const isAssistant = message.role === 'assistant';
+  const isOtherUser = !isAssistant && !isOwnMessage;
+
+  if (isAssistant) {
+    return (
+      <View style={[styles.aiBubbleWrap]}>
+        <View
+          style={[
+            styles.aiBubble,
+            { backgroundColor: colors.surface, borderColor: colors.line },
+          ]}
+        >
+          <View style={styles.aiHeader}>
+            <View
+              style={[
+                styles.aiOrb,
+                { backgroundColor: colors.coralBg },
+              ]}
+            >
+              <Sparkles size={11} color={colors.coralDeep} strokeWidth={2.2} fill={colors.coralDeep} />
+            </View>
+            <Text
+              style={{
+                fontFamily: FontFamily.monoMedium,
+                fontSize: 9,
+                fontWeight: '700',
+                letterSpacing: 9 * 0.22,
+                textTransform: 'uppercase',
+                color: colors.coralDeep,
+              }}
+            >
+              VISA ATLAS AI
+            </Text>
+          </View>
+
+          <Text
+            style={{
+              fontFamily: FontFamily.regular,
+              fontSize: 14.5,
+              lineHeight: 22,
+              color: colors.ink,
+            }}
+          >
+            {message.content}
+          </Text>
+
+          {showUpdateStamp ? (
+            <Pressable
+              onPress={onOpenTrip}
+              style={({ pressed }) => [
+                styles.updateStamp,
+                {
+                  borderColor: colors.coralDeep,
+                  backgroundColor: colors.coralBg,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 6,
+                  borderWidth: 1.25,
+                  borderColor: colors.coralDeep,
+                  backgroundColor: 'rgba(255,255,255,0.65)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transform: [{ rotate: '-4deg' }],
+                }}
+              >
+                <Wand2 size={12} color={colors.coralDeep} strokeWidth={2.2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.monoMedium,
+                    fontSize: 9,
+                    fontWeight: '700',
+                    letterSpacing: 9 * 0.22,
+                    textTransform: 'uppercase',
+                    color: colors.coralDeep,
+                  }}
+                >
+                  {photosRefreshing ? 'REFRESHING PHOTOS' : 'ITINERARY UPDATED'}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 15,
+                    letterSpacing: -15 * 0.014,
+                    fontWeight: '500',
+                    color: colors.ink,
+                    marginTop: 2,
+                  }}
+                >
+                  {photosRefreshing ? 'Catching the visuals up…' : 'Trip refreshed.'}
+                </Text>
+              </View>
+              {photosRefreshing ? (
+                <ActivityIndicator size="small" color={colors.coralDeep} />
+              ) : (
+                <ArrowRight size={14} color={colors.coralDeep} strokeWidth={2.2} />
+              )}
+            </Pressable>
+          ) : null}
+        </View>
+
+        {/* Pending itinerary proposal — review card anchored under the
+            assistant reply that produced it. Only the changed days are
+            shown; the trip is untouched until "Apply changes". */}
+        {pendingItinerary !== null ? (
+          <Animated.View
+            entering={FadeIn.duration(280)}
+            style={{ alignSelf: 'stretch', marginTop: 8 }}
+          >
+            <ItineraryDiffCard
+              currentItinerary={currentItinerary}
+              proposedItinerary={pendingItinerary}
+              onApply={onApplyPending}
+              onKeep={onDeclinePending}
+            />
+          </Animated.View>
+        ) : null}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.userBubbleWrap}>
+      <View
+        style={[
+          styles.userBubble,
+          { backgroundColor: isOwnMessage ? colors.ink : colors.coral },
+        ]}
+      >
+        {isOtherUser && message.userName ? (
+          <Text
+            style={{
+              fontFamily: FontFamily.monoMedium,
+              fontSize: 9,
+              fontWeight: '700',
+              letterSpacing: 9 * 0.22,
+              textTransform: 'uppercase',
+              color: 'rgba(255,255,255,0.7)',
+              marginBottom: 6,
+            }}
+          >
+            {message.userName.toUpperCase()}
+          </Text>
+        ) : (
+          <Text
+            style={{
+              fontFamily: FontFamily.monoMedium,
+              fontSize: 9,
+              fontWeight: '700',
+              letterSpacing: 9 * 0.22,
+              textTransform: 'uppercase',
+              color: 'rgba(255,255,255,0.7)',
+              marginBottom: 6,
+            }}
+          >
+            YOU
+          </Text>
+        )}
+        <Text
+          style={{
+            fontFamily: FontFamily.displayItalic,
+            fontStyle: 'italic',
+            fontSize: 17,
+            lineHeight: 22,
+            letterSpacing: -17 * 0.014,
+            fontWeight: '500',
+            color: '#FFFFFF',
+          }}
+        >
+          {message.content}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Animated thinking row — three coral dots that pulse in sequence
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ThinkingRow({ tick }: { tick: number }) {
+function ThinkingRow() {
   const { colors } = useTheme();
+  // The 2.2s phrase cycle lives INSIDE this footer so each tick re-renders
+  // only the row — when the interval lived in the screen component, every
+  // tick re-rendered the whole message list. The row unmounts when the send
+  // settles, so each new send naturally restarts at the plain "Thinking"
+  // before drifting into flavour text.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), THINK_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
   const phrase = THINKING_PHRASES[tick % THINKING_PHRASES.length];
   return (
     <View style={[styles.thinkingRow, { backgroundColor: colors.surface, borderColor: colors.line }]}>
@@ -1194,8 +1269,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Header
+  // Header — floats over the message list; zIndex above TopSafeAreaBlur
+  // (100) so the title and BackButton stay crisp on top of the frost.
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 110,
     paddingHorizontal: Spacing.md,
     paddingBottom: 14,
     alignItems: 'center',
@@ -1206,11 +1287,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Empty state — flexGrow (not flex): it's a ScrollView contentContainerStyle
+  // Empty state — flexGrow (not flex): it's a ScrollView contentContainerStyle.
+  // Top padding is applied inline (headerHeight + 40) since the header floats.
   emptyContainer: {
     flexGrow: 1,
     paddingHorizontal: 22,
-    paddingTop: 40,
   },
   suggestions: {
     gap: 10,
@@ -1222,10 +1303,10 @@ const styles = StyleSheet.create({
     borderRadius: 22, // full pill
   },
 
-  // Messages
+  // Messages — top padding is applied inline (headerHeight + 18) since the
+  // header floats over the list.
   messagesList: {
     paddingHorizontal: 16,
-    paddingTop: 18,
     paddingBottom: 12,
     gap: 10,
   },

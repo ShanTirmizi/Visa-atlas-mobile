@@ -12,7 +12,7 @@ import {
   Shield, ChevronLeft, Sparkles,
   Briefcase, Plane, FileX, Calendar as CalendarIcon,
 } from 'lucide-react-native';
-import { useMutation } from 'convex/react';
+import { useMutation, useAction } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -23,10 +23,9 @@ import Animated, {
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import {
-  FontFamily, FontSize, Spacing, Radius, Shadows, type ThemeColors,
+  FontFamily, FontSize, Spacing, Radius, type ThemeColors,
 } from '@/constants/theme';
 import { Type } from '@/constants/typography';
-import { endpoints } from '@/constants/api';
 import type { HeldVisaType } from '@/data/visaData';
 import { TypingDots } from '@/components/ui/TypingDots';
 import { DarkOrb } from '@/components/ui/DarkOrb';
@@ -180,6 +179,7 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
     const [tick, setTick] = useState(0);
 
     const createGuide = useMutation(api.visaGuides.createGuide);
+    const proxyVisaGuide = useAction(api.aiProxy.visaGuide);
     const shieldStyle = useShieldAnimation(step === 'loading');
 
     useEffect(() => {
@@ -211,9 +211,9 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
       setStep('loading');
       setError('');
       try {
-        const res = await fetch(endpoints.visaGuide, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        // Authenticated + rate-limited proxy (convex/aiProxy.ts) — failures
+        // reject into the existing catch → error state + retry, same UX.
+        const guide = (await proxyVisaGuide({
           body: JSON.stringify({
             countryCode,
             countryName,
@@ -225,9 +225,10 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
             passports,
             residence,
           }),
-        });
-        if (!res.ok) throw new Error('Generation failed');
-        const guide = await res.json();
+        })) as {
+          visaType?: string;
+          documents?: Array<{ id: string; label: string; category: string; tip?: string }>;
+        };
 
         const checklist = (guide.documents || []).map(
           (doc: { id: string; label: string; category: string; tip?: string }) => ({
@@ -261,11 +262,12 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
         setError('Failed to generate guide. Please try again.');
         setStep('month');
       }
-    }, [countryCode, countryName, employment, purpose, rejections, travelMonth, heldVisas, passports, residence, createGuide, onGuideCreated]);
+    }, [countryCode, countryName, employment, purpose, rejections, travelMonth, heldVisas, passports, residence, createGuide, proxyVisaGuide, onGuideCreated]);
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.5} />
+        // 0.4 — unified with AppBottomSheet / the booking sheets.
+        <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} />
       ),
       [],
     );

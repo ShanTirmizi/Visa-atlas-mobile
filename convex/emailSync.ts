@@ -2,7 +2,7 @@
 
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { requireAuth } from "./lib/auth";
 
 // ===== Types =====
@@ -475,10 +475,13 @@ export const scanGmail = action({
     // not get a 200-shaped response.
     await requireAuth(ctx);
     try {
-      // 1. Get and verify account
-      const account = await ctx.runQuery(api.emailAccounts.getByProvider, {
-        provider: "gmail",
-      });
+      // 1. Get and verify account — the INTERNAL token-bearing query. The
+      // public getByProvider deliberately strips OAuth tokens (they must
+      // never reach a client), so the scan reads the full row here instead.
+      const account = await ctx.runQuery(
+        internal.emailAccounts._getAccountWithTokens,
+        { provider: "gmail" },
+      );
 
       if (!account) {
         return { imported: 0, reviewed: 0, error: "No Gmail account connected" };
@@ -507,7 +510,7 @@ export const scanGmail = action({
         );
         accessToken = refreshed.accessToken;
 
-        await ctx.runMutation(api.emailAccounts.updateTokens, {
+        await ctx.runMutation(internal.emailAccounts._updateTokens, {
           id: account._id,
           accessToken: refreshed.accessToken,
           tokenExpiry: Date.now() + refreshed.expiresIn * 1000,

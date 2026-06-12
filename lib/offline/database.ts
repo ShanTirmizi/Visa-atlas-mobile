@@ -261,24 +261,49 @@ export async function cacheTripMessages(
   messages: Array<{ _id: string } & Record<string, unknown>>,
 ): Promise<void> {
   const database = await getDatabase();
-  // Delete all existing messages for this trip, then insert the fresh set.
-  await database.runAsync(
-    'DELETE FROM cached_trip_messages WHERE trip_id = ?',
-    tripId,
-  );
   const timestamp = now();
-  await Promise.all(
-    messages.map((message) =>
-      database.runAsync(
-        'INSERT INTO cached_trip_messages (id, trip_id, data, updated_at, synced_at) VALUES (?, ?, ?, ?, ?)',
+  // Upsert inside ONE transaction instead of the old delete-all +
+  // insert-per-row: each chat update re-sends the same N messages plus one,
+  // so rewriting every row churned the WAL on every new message (and a
+  // crash between the DELETE and the INSERTs lost the whole thread).
+  // ON CONFLICT touches only changed rows; the trailing DELETE prunes
+  // messages removed server-side, preserving the old wipe semantics.
+  await database.withTransactionAsync(async () => {
+    for (const message of messages) {
+      // Prefer the message's own timestamp for updated_at so the
+      // chronological read order (ORDER BY updated_at ASC) survives
+      // upserts — write-time stamps would tie across a whole batch.
+      const messageTimestamp =
+        typeof message.timestamp === 'number' ? message.timestamp : timestamp;
+      await database.runAsync(
+        `INSERT INTO cached_trip_messages (id, trip_id, data, updated_at, synced_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           trip_id    = excluded.trip_id,
+           data       = excluded.data,
+           updated_at = excluded.updated_at,
+           synced_at  = excluded.synced_at`,
         message._id,
         tripId,
         serialize(message),
+        messageTimestamp,
         timestamp,
-        timestamp,
-      ),
-    ),
-  );
+      );
+    }
+    if (messages.length === 0) {
+      await database.runAsync(
+        'DELETE FROM cached_trip_messages WHERE trip_id = ?',
+        tripId,
+      );
+    } else {
+      const placeholders = messages.map(() => '?').join(', ');
+      await database.runAsync(
+        `DELETE FROM cached_trip_messages WHERE trip_id = ? AND id NOT IN (${placeholders})`,
+        tripId,
+        ...messages.map((message) => message._id),
+      );
+    }
+  });
 }
 
 export async function getCachedTripMessages(tripId: string): Promise<unknown[]> {

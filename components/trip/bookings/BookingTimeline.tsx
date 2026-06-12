@@ -195,9 +195,9 @@ export function BookingTimeline({
                 style={[
                   Type.kickerSm,
                   {
-                    color: colors.coral,
-                    fontSize: 8,
-                    letterSpacing: 8 * 0.18,
+                    color: colors.coralDeep,
+                    fontSize: 9,
+                    letterSpacing: 9 * 0.18,
                   },
                 ]}
               >
@@ -221,8 +221,8 @@ export function BookingTimeline({
                   Type.kickerSm,
                   {
                     color: colors.inkMute,
-                    fontSize: 8,
-                    letterSpacing: 8 * 0.14,
+                    fontSize: 9,
+                    letterSpacing: 9 * 0.14,
                     marginTop: 4,
                   },
                 ]}
@@ -392,7 +392,9 @@ export function BookingTimeline({
                       fontWeight: '700',
                       letterSpacing: 9 * 0.22,
                       textTransform: 'uppercase',
-                      color: colors.inkFaint,
+                      // inkMute — inkFaint at 9pt is ~1.8:1 contrast,
+                      // unreadable for the weekday rail.
+                      color: colors.inkMute,
                       marginTop: 1,
                     }}
                   >

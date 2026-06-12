@@ -36,6 +36,11 @@ export default function RouteInput({
   const depRef = useRef<React.ComponentRef<typeof BottomSheetTextInput>>(null);
   const arrRef = useRef<React.ComponentRef<typeof BottomSheetTextInput>>(null);
 
+  // IATA codes are exactly three letters — strip everything else so pasted
+  // values like "LHR " or "lhr1" normalise instead of failing validation.
+  const sanitizeIata = (v: string) =>
+    v.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 3);
+
   return (
     <View
       style={[
@@ -91,12 +96,13 @@ export default function RouteInput({
               },
             ]}
             value={departure}
-            onChangeText={(v) => onDepartureChange(v.toUpperCase())}
+            onChangeText={(v) => onDepartureChange(sanitizeIata(v))}
             autoCapitalize="characters"
             autoCorrect={false}
-            maxLength={4}
+            maxLength={3}
             placeholder="—"
             placeholderTextColor={colors.inkFaint}
+            accessibilityLabel="Departure airport code"
             onFocus={() => setDepFocus(true)}
             onBlur={() => setDepFocus(false)}
           />
@@ -163,12 +169,13 @@ export default function RouteInput({
               },
             ]}
             value={arrival}
-            onChangeText={(v) => onArrivalChange(v.toUpperCase())}
+            onChangeText={(v) => onArrivalChange(sanitizeIata(v))}
             autoCapitalize="characters"
             autoCorrect={false}
-            maxLength={4}
+            maxLength={3}
             placeholder="—"
             placeholderTextColor={colors.inkFaint}
+            accessibilityLabel="Arrival airport code"
             onFocus={() => setArrFocus(true)}
             onBlur={() => setArrFocus(false)}
           />

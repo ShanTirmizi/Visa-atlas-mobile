@@ -10,19 +10,30 @@ import { visaData } from "../data/visaData";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 /**
- * True when the (streamed-first, static-fallback) visa category requires
- * the traveler to act ahead of the trip — the only categories worth a
- * deadline reminder. Tolerant matching: the streamed vocabulary is
- * 'e-visa'/'embassy', the static table uses 'evisa'/'visa-required'.
+ * True when the visa category requires the traveler to act ahead of the
+ * trip — the only categories worth a deadline reminder. Tolerant matching:
+ * the streamed vocabulary is 'e-visa'/'embassy', the static table uses
+ * 'evisa'/'visa-required'.
+ *
+ * The streamed category is passport-aware (the generation prompt receives
+ * the traveler's passports), so it's trusted for everyone. The static
+ * data/visaData.ts table is an INDIAN-passport baseline — its category is
+ * only consulted when `allowStaticFallback` is true (i.e. the user's visa
+ * profile says they actually hold an IND passport). For anyone else, an
+ * empty streamed category means "we don't know" → not actionable → no
+ * reminder, rather than a reminder built on the wrong passport's rules.
  */
 export function isActionableVisaCategory(
   streamed: string | undefined,
   countryCode: string,
+  allowStaticFallback: boolean,
 ): boolean {
   const cat =
     streamed && streamed.length > 0
       ? streamed
-      : (visaData.find((c) => c.code === countryCode)?.category ?? "");
+      : allowStaticFallback
+        ? (visaData.find((c) => c.code === countryCode)?.category ?? "")
+        : "";
   const c = cat.toLowerCase();
   return (
     c === "embassy" ||
@@ -30,6 +41,13 @@ export function isActionableVisaCategory(
     c.includes("evisa") ||
     c.includes("e-visa")
   );
+}
+
+/** The static visaData table's base categories/processing times describe an
+ *  Indian passport. They're only honest fallbacks for travelers whose visa
+ *  profile actually lists an IND passport. */
+export function staticVisaDataApplies(passports: string[]): boolean {
+  return passports.includes("IND");
 }
 
 /** Trip owner's push token + display fields, or null when the trip is gone
@@ -55,7 +73,9 @@ export const _getTripReadyPayload = internalQuery({
 });
 
 /** Everything the visa-deadline reminder needs, re-read at FIRE time so
- * deleted trips, changed dates, or a revoked token make it a clean no-op. */
+ * deleted trips, changed dates, or a revoked token make it a clean no-op.
+ * Includes the owner's passports so the action can refuse to fall back to
+ * the IND-only static visa table for non-IND passport holders. */
 export const _getVisaReminderPayload = internalQuery({
   args: { tripId: v.id("trips") },
   handler: async (ctx, { tripId }) => {
@@ -66,6 +86,10 @@ export const _getVisaReminderPayload = internalQuery({
       .withIndex("by_user", (q) => q.eq("userId", trip.userId))
       .unique();
     if (!profile?.pushToken) return null;
+    const visaProfile = await ctx.db
+      .query("visaProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", trip.userId))
+      .unique();
     return {
       pushToken: profile.pushToken,
       countryName: trip.countryName,
@@ -73,6 +97,7 @@ export const _getVisaReminderPayload = internalQuery({
       startDate: trip.startDate,
       visaCategory: trip.visaCategory,
       visaProcessingTime: trip.visaProcessingTime,
+      passports: visaProfile?.passports ?? [],
     };
   },
 });
@@ -91,9 +116,19 @@ export const sendVisaDeadlineReminder = internalAction({
       { tripId },
     );
     if (!p) return;
-    if (!isActionableVisaCategory(p.visaCategory, p.countryCode)) return;
+    // The static visaData table is an Indian-passport baseline — only let
+    // it back any part of this reminder when the traveler actually holds
+    // an IND passport. Otherwise the only trusted inputs are the streamed
+    // (passport-aware) category and the trip doc's own processing time;
+    // when those don't yield a deadline, skip rather than push wrong data.
+    const allowStaticFallback = staticVisaDataApplies(p.passports);
+    if (!isActionableVisaCategory(p.visaCategory, p.countryCode, allowStaticFallback)) {
+      return;
+    }
 
-    const staticEntry = visaData.find((c) => c.code === p.countryCode);
+    const staticEntry = allowStaticFallback
+      ? visaData.find((c) => c.code === p.countryCode)
+      : undefined;
     const info = deriveVisaDeadline({
       startDate: p.startDate,
       processingTime: p.visaProcessingTime,

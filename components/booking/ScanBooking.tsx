@@ -11,10 +11,11 @@ import {
 } from 'react-native';
 import { Camera, ChevronRight } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useAction } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius } from '@/constants/theme';
+import { FontFamily, FontSize, Spacing } from '@/constants/theme';
 import { Type } from '@/constants/typography';
-import { endpoints } from '@/constants/api';
 import { BOOKING_TYPES, type BookingType } from '@/constants/bookings';
 import type { BookingFormData } from './BookingForm';
 
@@ -25,17 +26,17 @@ interface ScanBookingProps {
 export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(false);
+  const proxyScanBooking = useAction(api.aiProxy.scanBooking);
 
   const processImage = useCallback(
     async (base64String: string) => {
       setLoading(true);
       try {
-        const response = await fetch(endpoints.scanBooking, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        // Authenticated + rate-limited proxy (convex/aiProxy.ts) — failures
+        // reject into the existing catch → 'Scan Failed' alert.
+        const result = (await proxyScanBooking({
           body: JSON.stringify({ image: base64String }),
-        });
-        const result = await response.json();
+        })) as { success?: boolean; data?: { type?: unknown } & Partial<BookingFormData> };
 
         // Never trust the server-returned `type` blindly — an unexpected
         // string would crash BookingForm (BOOKING_TYPES[type] lookup).
@@ -46,7 +47,7 @@ export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
           typeof result.data.type === 'string' &&
           Object.prototype.hasOwnProperty.call(BOOKING_TYPES, result.data.type)
         ) {
-          onScanComplete(result.data.type as BookingType, result.data);
+          onScanComplete(result.data.type as BookingType, result.data as Partial<BookingFormData>);
         } else {
           Alert.alert('Scan Failed', 'Could not read booking. Please try again or enter details manually.');
         }
@@ -56,7 +57,7 @@ export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
         setLoading(false);
       }
     },
-    [onScanComplete],
+    [onScanComplete, proxyScanBooking],
   );
 
   const takePhoto = useCallback(async () => {
@@ -133,7 +134,7 @@ export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
           <View
             style={[
               styles.iconBox,
-              { backgroundColor: 'rgba(255,255,255,0.06)' },
+              { backgroundColor: colors.solidOverlayFaint },
             ]}
           >
             <Camera size={22} color="#FFFFFF" strokeWidth={1.7} />
@@ -165,7 +166,7 @@ export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
               style={{
                 fontFamily: FontFamily.regular,
                 fontSize: 12,
-                color: 'rgba(255,255,255,0.65)',
+                color: colors.solidTextMuted,
                 marginTop: 2,
               }}
             >
@@ -173,7 +174,7 @@ export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
             </Text>
           </View>
 
-          <ChevronRight size={18} color="rgba(255,255,255,0.7)" strokeWidth={2} />
+          <ChevronRight size={18} color={colors.solidTextSub} strokeWidth={2} />
         </View>
       )}
     </TouchableOpacity>

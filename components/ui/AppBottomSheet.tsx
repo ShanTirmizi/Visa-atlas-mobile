@@ -84,18 +84,27 @@ interface AppBottomSheetProps {
    */
   onChange?: (index: number) => void;
   /**
+   * Forwards to BottomSheetModal's onDismiss — fires exactly when the close
+   * animation completes (gesture or programmatic). This is the handoff
+   * point for present-another-sheet / navigate-after-dismiss flows
+   * (TripPlannerSheet's pendingTripIdRef recipe); never approximate it
+   * with a setTimeout.
+   */
+  onDismiss?: () => void;
+  /**
    * gorhom keyboard behavior. Defaults to gorhom's "interactive" (sheet
    * shifts up by keyboard height, clamped to its max position). Sheets whose
    * inputs sit low in long scrollable content should pass "extend" so the
    * sheet raises to its top position and the scrollable shrinks above the
-   * keyboard (VisaChatSheet recipe). Only engages for BottomSheetTextInput.
+   * keyboard (the visa-chat screen recipe — app/visa-chat/[guideId].tsx).
+   * Only engages for BottomSheetTextInput.
    */
   keyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
 }
 
 export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
   function AppBottomSheet(
-    { children, backgroundColor, handleColor, onChange, keyboardBehavior },
+    { children, backgroundColor, handleColor, onChange, onDismiss, keyboardBehavior },
     ref,
   ) {
     const insets = useSafeAreaInsets();
@@ -167,7 +176,8 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
         // dismisses (gorhom's default "none" left it stranded lifted), and
         // adjustResize is gorhom's documented Android requirement — the
         // inherited adjustPan default pans the whole window and fights
-        // edge-to-edge. Matches EditDaySheet / VisaChatSheet.
+        // edge-to-edge. Matches EditDaySheet / the visa-chat screen
+        // (app/visa-chat/[guideId].tsx).
         keyboardBehavior={keyboardBehavior}
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
@@ -176,6 +186,7 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
         handleIndicatorStyle={{ backgroundColor: resolvedHandle, width: 36, height: 4 }}
         onAnimate={handleAnimate}
         onChange={handleChange}
+        onDismiss={onDismiss}
       >
         <SheetSettledContext.Provider value={settled}>
           {children}

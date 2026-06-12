@@ -41,6 +41,7 @@ import { Flag } from '@/components/ui/Flag';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { AnimalAvatar, ANIMAL_KINDS } from '@/components/ui/AnimalAvatar';
 import { toAlpha2 } from '@/utils/countryCode';
+import { toLocalYMD } from '@/utils/localDate';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Platform } from 'react-native';
 import { DarkOrb } from '@/components/ui/DarkOrb';
@@ -339,9 +340,13 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         [ctaNaturalHeight.value, 0],
         Extrapolation.CLAMP,
       ),
+      // Opacity reaches 0 by 40% of the keyboard's travel while the height
+      // collapse runs the full range — the label is invisible before the
+      // shrinking container can visibly slice it mid-collapse (the
+      // "Generate itinerary" text was getting guillotined on dismiss).
       opacity: interpolate(
         keyboardProgress.value,
-        [0, 1],
+        [0, 0.4],
         [1, 0],
         Extrapolation.CLAMP,
       ),
@@ -520,8 +525,11 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             activityStyles: [...activeVibes],
             travelParty: travelers > 1 ? party : 'solo',
             companions: travelers > 1 ? JSON.stringify({ party, count: travelers }) : undefined,
-            startDate: dreaming ? undefined : startDate.toISOString().slice(0, 10),
-            endDate: dreaming ? undefined : endDate.toISOString().slice(0, 10),
+            // toLocalYMD, not toISOString().slice(0,10) — ISO serialises the
+            // UTC day, which is the previous/next calendar day for users
+            // east/west of UTC (picker dates are local-midnight).
+            startDate: dreaming ? undefined : toLocalYMD(startDate),
+            endDate: dreaming ? undefined : toLocalYMD(endDate),
             userNotes: notesForAction.trim() || undefined,
             refinementAnswers: refinementAnswers.length ? refinementAnswers : undefined,
           }),
@@ -593,7 +601,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           {...props}
           disappearsOnIndex={-1}
           appearsOnIndex={0}
-          opacity={0.5}
+          // 0.4 — unified with AppBottomSheet / the booking sheets so every
+          // sheet in the app dims the page identically.
+          opacity={0.4}
         />
       ),
       [],
@@ -816,6 +826,8 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                       <TouchableOpacity
                         onPress={() => setDreamNights((n) => Math.max(1, n - 1))}
                         activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel="Decrease nights"
                         style={[s.stepBtn, { borderColor: colors.line }]}
                       >
                         <Text style={[s.stepBtnText, { color: colors.inkMute }]}>−</Text>
@@ -823,6 +835,8 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                       <TouchableOpacity
                         onPress={() => setDreamNights((n) => Math.min(60, n + 1))}
                         activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel="Increase nights"
                         style={[s.stepBtn, { borderColor: colors.line }]}
                       >
                         <Text style={[s.stepBtnText, { color: colors.inkMute }]}>+</Text>
@@ -879,6 +893,8 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                     <TouchableOpacity
                       onPress={() => setTravelers((t) => Math.max(1, t - 1))}
                       activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="Decrease travelers"
                       style={[s.stepBtn, { borderColor: colors.line }]}
                     >
                       <Text style={[s.stepBtnText, { color: colors.inkMute }]}>−</Text>
@@ -886,6 +902,8 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                     <TouchableOpacity
                       onPress={() => setTravelers((t) => Math.min(12, t + 1))}
                       activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="Increase travelers"
                       style={[s.stepBtn, { borderColor: colors.line }]}
                     >
                       <Text style={[s.stepBtnText, { color: colors.inkMute }]}>+</Text>
@@ -1026,7 +1044,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                       >
                         {ready ? 'Generate itinerary' : 'Pick a destination first'}
                         {ready ? (
-                          <Text style={{ color: 'rgba(255,255,255,0.7)' }}>{'  →'}</Text>
+                          <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
                         ) : null}
                       </Text>
                     </TouchableOpacity>
@@ -1211,6 +1229,8 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
             <TouchableOpacity
               onPress={() => setShowPicker(false)}
               hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close country picker"
               style={[s.pickerClose, { backgroundColor: colors.surface, borderColor: colors.line }]}
             >
               <X size={18} color={colors.ink} />
@@ -1229,7 +1249,12 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               autoCorrect={false}
             />
             {pickerSearch.length > 0 && (
-              <TouchableOpacity onPress={() => setPickerSearch('')} hitSlop={8}>
+              <TouchableOpacity
+                onPress={() => setPickerSearch('')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
                 <X size={14} color={colors.inkMute} />
               </TouchableOpacity>
             )}
@@ -1532,7 +1557,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     dateBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: colors.scrim,
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: 24,

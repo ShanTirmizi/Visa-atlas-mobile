@@ -129,8 +129,15 @@ export function CompareCountryCardV2({
                   fontWeight: '500',
                   color: colors.ink,
                   letterSpacing: -13 * 0.01,
+                  // Shrink + ellipsize so long values ("Apr–Jun, Sep–Oct")
+                  // truncate gracefully on small phones instead of being
+                  // hard-clipped by the card's overflow:hidden.
+                  flexShrink: 1,
+                  marginLeft: 8,
+                  textAlign: 'right',
                 }}
                 numberOfLines={1}
+                ellipsizeMode="tail"
               >
                 {value}
               </Text>

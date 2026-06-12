@@ -87,18 +87,20 @@ function DayDotsRow({ total, streamingIndex }: DayDotsRowProps) {
   return (
     <View style={{ alignItems: 'center', marginTop: 10, gap: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        {/* coralDeep at 10pt — coral (#E89B7A) at 9pt on paper bg fails
+            contrast for text this small; coralDeep keeps the brand hue. */}
         <Text
           style={{
-            fontSize: 9,
-            letterSpacing: 0.08 * 9,
+            fontSize: 10,
+            letterSpacing: 0.08 * 10,
             textTransform: 'uppercase',
-            color: colors.coral,
+            color: colors.coralDeep,
             fontFamily: FontFamily.semibold,
           }}
         >
           {completed} of {total} ready · {remaining} more arriving
         </Text>
-        <TypingDots color={colors.coral} size="sm" gap={3} />
+        <TypingDots color={colors.coralDeep} size="sm" gap={3} />
       </View>
       <View style={styles.dotsRowStreaming}>
         {Array.from({ length: total }, (_, i) => {

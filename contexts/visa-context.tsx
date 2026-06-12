@@ -25,6 +25,9 @@ const KEYS = {
   visaMap: '@visa_atlas_visa_map',
   onboarded: '@visa_atlas_onboarded',
   residence: '@visa_atlas_residence',
+  // Last server `updatedAt` this device has observed (pushed or hydrated).
+  // Drives the multi-device conflict check in the push effect.
+  lastSyncedAt: '@visa_atlas_last_synced_at',
 } as const;
 
 // ──────────────────────────────────────────────
@@ -35,6 +38,20 @@ export interface ExpiryDate {
   countryCode: string;
   date: string; // ISO date string
 }
+
+// TODO(convex-contract): a concurrent convex change is adding optional
+// `favorites` / `visited` (string[] of country codes) and `expiryDates`
+// (JSON-string Record<countryCode, ISO date>) to the visaProfiles table
+// AND to saveVisaProfile's args. The table fields have landed in
+// convex/schema.ts; until convex/visaProfiles.ts + the generated types
+// catch up, this alias widens the inferred types on both the read (doc)
+// and write (mutation args) sides. Delete it once `_generated` includes
+// the fields natively.
+type SyncedExtras = {
+  favorites?: string[];
+  visited?: string[];
+  expiryDates?: string;
+};
 
 interface VisaContextValue {
   /** Array of country codes for held visas (e.g., ["US", "UK"]) */
@@ -89,6 +106,20 @@ interface VisaContextValue {
   residence: string | null;
   /** Set residence country code */
   setResidence: (code: string | null) => void;
+
+  /**
+   * Atlas self-heal flag. True for exactly one broken state: the account is
+   * onboarded server-side, but there is NO server visa profile (query loaded
+   * and returned null — an account onboarded before the visaProfiles sync
+   * existed) AND no local visa map (fresh install / post-sign-out wipe). The
+   * atlas renders grey and untappable ("0 ON ATLAS") in that state. The root
+   * layout routes these users back through onboarding; rebuilding the map
+   * clears the flag naturally (local visaMap becomes non-null) and the push
+   * effect persists it server-side so the state can never recur. Guaranteed
+   * false until auth + both profile queries have settled, so it can't
+   * trigger redirect loops mid-load.
+   */
+  needsAtlasRebuild: boolean;
 }
 
 // ──────────────────────────────────────────────
@@ -179,6 +210,18 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
   );
   const saveVisaProfileMutation = useMutation(api.visaProfiles.saveVisaProfile);
 
+  // ── Multi-device sync watermark ─────────────────────────────────────
+  // The last server `updatedAt` this device has observed — set on every
+  // successful push AND on hydration. Lives in a ref + AsyncStorage (not
+  // state): nothing renders it, and keeping it out of the push effect's
+  // deps means watermark bumps can never re-fire the effect (which would
+  // loop under client/server clock skew).
+  const lastSyncedAtRef = useRef(0);
+  const markSynced = useCallback((ts: number) => {
+    lastSyncedAtRef.current = ts;
+    AsyncStorage.setItem(KEYS.lastSyncedAt, String(ts)).catch(() => {});
+  }, []);
+
   // Load all persisted data on mount
   useEffect(() => {
     Promise.all([
@@ -190,7 +233,8 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.getItem(KEYS.visaMap),
       AsyncStorage.getItem(KEYS.onboarded),
       AsyncStorage.getItem(KEYS.residence),
-    ]).then(([h, f, v, e, passportsRaw, visaMapRaw, onboardedRaw, residenceRaw]) => {
+      AsyncStorage.getItem(KEYS.lastSyncedAt),
+    ]).then(([h, f, v, e, passportsRaw, visaMapRaw, onboardedRaw, residenceRaw, lastSyncedRaw]) => {
       setHeldVisasState(h);
       setFavoritesState(f);
       setVisitedState(v);
@@ -204,6 +248,10 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       }
       if (onboardedRaw === 'true') setOnboardedState(true);
       if (residenceRaw) setResidenceState(residenceRaw);
+      if (lastSyncedRaw) {
+        const ts = Number(lastSyncedRaw);
+        if (!Number.isNaN(ts)) lastSyncedAtRef.current = ts;
+      }
 
       setLoaded(true);
     });
@@ -287,7 +335,9 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
   // Fires exactly once per empty-cache session: local `visaMapData === null`
   // is the trigger, and a successful hydrate makes it non-null. Local data,
   // when present, always wins — the server copy is a backup, not a source
-  // of live truth.
+  // of live truth. Favorites / visited / expiry dates follow the same
+  // local-empty rule per slice (functional updaters check `prev`), so a
+  // toggle made this session before the query resolved is never clobbered.
   useEffect(() => {
     if (!loaded || !isAuthenticated) return;
     if (visaMapData !== null) return; // local cache populated — nothing to do
@@ -308,38 +358,235 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       if (remoteVisaProfile.residence) {
         AsyncStorage.setItem(KEYS.residence, remoteVisaProfile.residence);
       }
+
+      // Favorites / visited / expiry dates ride along on the same doc
+      // (optional fields — pre-sync docs simply lack them).
+      const remoteExtras = remoteVisaProfile as typeof remoteVisaProfile &
+        SyncedExtras;
+      if (
+        Array.isArray(remoteExtras.favorites) &&
+        remoteExtras.favorites.length > 0
+      ) {
+        const serverFavorites = remoteExtras.favorites;
+        setFavoritesState((prev) => {
+          if (prev.length > 0) return prev; // local wins — only fill empty
+          persistArray(KEYS.favorites, serverFavorites);
+          return serverFavorites;
+        });
+      }
+      if (
+        Array.isArray(remoteExtras.visited) &&
+        remoteExtras.visited.length > 0
+      ) {
+        const serverVisited = remoteExtras.visited;
+        setVisitedState((prev) => {
+          if (prev.length > 0) return prev;
+          persistArray(KEYS.visited, serverVisited);
+          return serverVisited;
+        });
+      }
+      if (typeof remoteExtras.expiryDates === 'string') {
+        try {
+          const record = JSON.parse(remoteExtras.expiryDates) as unknown;
+          if (
+            record &&
+            typeof record === 'object' &&
+            !Array.isArray(record) &&
+            Object.keys(record).length > 0
+          ) {
+            const serverExpiry = record as Record<string, string>;
+            setExpiryDatesState((prev) => {
+              if (Object.keys(prev).length > 0) return prev;
+              persistRecord(KEYS.expiryDates, serverExpiry);
+              return serverExpiry;
+            });
+          }
+        } catch {
+          // Corrupt expiry record — keep local state.
+        }
+      }
+
+      // This device has now observed this server revision.
+      markSynced(remoteVisaProfile.updatedAt);
     } catch {
       // Corrupt server JSON — leave local state empty; onboarding's
       // validation prevents this from being written in the first place.
     }
-  }, [loaded, isAuthenticated, visaMapData, remoteVisaProfile]);
+  }, [loaded, isAuthenticated, visaMapData, remoteVisaProfile, markSynced]);
+
+  // Mirror the live server doc onto a ref so the push effect can conflict-
+  // check at fire time without taking the doc as a dep (which would re-push
+  // on every remote revision and loop).
+  const remoteVisaProfileRef = useRef(remoteVisaProfile);
+  useEffect(() => {
+    remoteVisaProfileRef.current = remoteVisaProfile;
+  }, [remoteVisaProfile]);
 
   // ── Push local profile → server ─────────────────────────────────────
   // Trailing debounce coalesces bursts (e.g. toggling several held visas
   // in the editor) into one mutation — write-batching, not timing-derived
   // UI logic. Saving the just-hydrated state back once is harmless.
+  //
+  // Multi-device convergence rule: `lastSyncedAt` is the last server
+  // revision THIS device has observed (set on every successful push and
+  // on hydration). If the server doc is newer at push time, another device
+  // wrote since we last synced — blind-pushing would clobber it. Instead:
+  // merge server → local first (arrays: union; scalars: server wins), mark
+  // the revision observed, and let the merged state re-fire this effect so
+  // the next push sends the union. Both devices converge on the same
+  // superset. A no-op merge (local already a superset) falls through and
+  // pushes immediately. The closure values below are always fresh at fire
+  // time: any local change re-runs the effect, and the cleanup cancels the
+  // previous timer before it can fire with stale state.
+  const remoteVisaProfileSettled = remoteVisaProfile !== undefined;
   useEffect(() => {
     if (!loaded || !isAuthenticated) return;
     if (!visaMapData || visaMapData.length === 0) return;
+    // Hold pushes until the server copy has resolved — conflict detection
+    // needs to know whether (and when) another device last wrote.
+    if (!remoteVisaProfileSettled) return;
     const timer = setTimeout(() => {
-      void saveVisaProfileMutation({
+      const remote = remoteVisaProfileRef.current as
+        | (NonNullable<typeof remoteVisaProfile> & SyncedExtras)
+        | null
+        | undefined;
+
+      if (remote && remote.updatedAt > lastSyncedAtRef.current) {
+        // Another device wrote since this device last synced — merge.
+        let changed = false;
+
+        const union = (server: string[], local: string[]): string[] => {
+          const merged = [...server];
+          for (const code of local) {
+            if (!merged.includes(code)) merged.push(code);
+          }
+          return merged;
+        };
+        // Order-insensitive equality: union output keeps server order, so
+        // an order-only difference must not count as a local change.
+        const sameSet = (a: string[], b: string[]): boolean =>
+          a.length === b.length && a.every((x) => b.includes(x));
+
+        const mergedPassports = union(remote.passports, passports);
+        if (!sameSet(mergedPassports, passports)) {
+          setPassportsState(mergedPassports);
+          AsyncStorage.setItem(
+            KEYS.passports,
+            JSON.stringify(mergedPassports),
+          );
+          changed = true;
+        }
+
+        const mergedHeld = union(remote.heldVisas, heldVisas);
+        if (!sameSet(mergedHeld, heldVisas)) {
+          setHeldVisasState(mergedHeld);
+          persistArray(KEYS.heldVisas, mergedHeld);
+          changed = true;
+        }
+
+        const mergedFavorites = union(remote.favorites ?? [], favorites);
+        if (!sameSet(mergedFavorites, favorites)) {
+          setFavoritesState(mergedFavorites);
+          persistArray(KEYS.favorites, mergedFavorites);
+          changed = true;
+        }
+
+        const mergedVisited = union(remote.visited ?? [], visited);
+        if (!sameSet(mergedVisited, visited)) {
+          setVisitedState(mergedVisited);
+          persistArray(KEYS.visited, mergedVisited);
+          changed = true;
+        }
+
+        // Expiry dates: per-key merge, server wins on conflicting keys.
+        let remoteExpiry: Record<string, string> = {};
+        if (typeof remote.expiryDates === 'string') {
+          try {
+            const rec = JSON.parse(remote.expiryDates) as unknown;
+            if (rec && typeof rec === 'object' && !Array.isArray(rec)) {
+              remoteExpiry = rec as Record<string, string>;
+            }
+          } catch {
+            // Corrupt server record — treat as empty.
+          }
+        }
+        const mergedExpiry = { ...expiryDates, ...remoteExpiry };
+        if (JSON.stringify(mergedExpiry) !== JSON.stringify(expiryDates)) {
+          setExpiryDatesState(mergedExpiry);
+          persistRecord(KEYS.expiryDates, mergedExpiry);
+          changed = true;
+        }
+
+        // Scalars: server wins.
+        if (remote.residence !== residence) {
+          setResidenceState(remote.residence);
+          if (remote.residence) {
+            AsyncStorage.setItem(KEYS.residence, remote.residence);
+          } else {
+            AsyncStorage.removeItem(KEYS.residence);
+          }
+          changed = true;
+        }
+        try {
+          const parsedMap = JSON.parse(remote.visaMap) as CountryVisa[];
+          if (
+            Array.isArray(parsedMap) &&
+            parsedMap.length > 0 &&
+            remote.visaMap !== JSON.stringify(visaMapData)
+          ) {
+            setVisaMapState(parsedMap);
+            AsyncStorage.setItem(KEYS.visaMap, remote.visaMap);
+            changed = true;
+          }
+        } catch {
+          // Corrupt server map — keep the local one.
+        }
+
+        markSynced(remote.updatedAt);
+        if (changed) return; // merged state re-fires this effect → pushes the union
+        // No diff: local is already a superset of the server copy — push it.
+      }
+
+      // TODO(convex-contract): favorites/visited/expiryDates are optional
+      // args being added to saveVisaProfile by the concurrent convex change
+      // (expiryDates = JSON-string record). The intersection type keeps
+      // this compiling until `_generated` picks them up — delete
+      // SyncedExtras once it does.
+      const payload: Parameters<typeof saveVisaProfileMutation>[0] &
+        SyncedExtras = {
         passports,
         heldVisas,
         residence,
         visaMap: JSON.stringify(visaMapData),
-      }).catch((err) => {
-        console.warn('visaProfile sync failed', err);
-      });
+        favorites,
+        visited,
+        expiryDates: JSON.stringify(expiryDates),
+      };
+      void saveVisaProfileMutation(payload)
+        .then(() => {
+          // Client/server clock skew is self-healing: if the server stamped
+          // a later updatedAt than Date.now() here, the next push runs one
+          // harmless no-op merge before falling through.
+          markSynced(Date.now());
+        })
+        .catch((err) => {
+          console.warn('visaProfile sync failed', err);
+        });
     }, 1500);
     return () => clearTimeout(timer);
   }, [
     loaded,
     isAuthenticated,
+    remoteVisaProfileSettled,
     visaMapData,
     passports,
     heldVisas,
     residence,
+    favorites,
+    visited,
+    expiryDates,
     saveVisaProfileMutation,
+    markSynced,
   ]);
 
   // Effective `onboarded` — server-truth when authenticated, local cache
@@ -351,6 +598,36 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
     if (remoteProfile === undefined) return onboarded;
     return remoteProfile?.onboarded === true;
   }, [isAuthenticated, remoteProfile, onboarded]);
+
+  // ── Atlas self-heal flag ────────────────────────────────────────────
+  // Accounts onboarded before the visaProfiles sync existed are marked
+  // onboarded server-side but have no server visa profile; after a
+  // reinstall (or the sign-out wipe below) they also have no local visa
+  // map — so the atlas renders grey and untappable. Flag exactly that
+  // state for the root layout, which routes them back through onboarding.
+  // Every input must be SETTLED: `loaded` (AsyncStorage read done),
+  // `remoteProfile !== undefined` (onboarded flag resolved) and
+  // `remoteVisaProfile === null` (profile query resolved AND absent —
+  // `undefined` means still loading). That settledness is the loop guard:
+  // the flag can never flicker true mid-load, and completing onboarding
+  // clears it naturally because setVisaMap makes visaMapData non-null.
+  const needsAtlasRebuild = useMemo(
+    () =>
+      loaded &&
+      isAuthenticated &&
+      remoteProfile !== undefined &&
+      effectiveOnboarded &&
+      remoteVisaProfile === null &&
+      (!visaMapData || visaMapData.length === 0),
+    [
+      loaded,
+      isAuthenticated,
+      remoteProfile,
+      effectiveOnboarded,
+      remoteVisaProfile,
+      visaMapData,
+    ],
+  );
 
   // Sign-out cleanup: when the auth state transitions from authed → not,
   // clear the user-scoped cache so the next account on this device starts
@@ -368,6 +645,7 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
         KEYS.favorites,
         KEYS.visited,
         KEYS.expiryDates,
+        KEYS.lastSyncedAt,
       ]).catch(() => {});
       setPassportsState([]);
       setVisaMapState(null);
@@ -377,6 +655,10 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       setFavoritesState([]);
       setVisitedState([]);
       setExpiryDatesState({});
+      // Reset the sync watermark too — the next account on this device must
+      // not compare its server doc against the previous account's watermark
+      // (a stale high watermark would let it blind-push over newer data).
+      lastSyncedAtRef.current = 0;
     }
     wasAuthedRef.current = isAuthenticated;
   }, [isAuthenticated]);
@@ -443,6 +725,7 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       setOnboarded,
       residence,
       setResidence,
+      needsAtlasRebuild,
     }),
     [
       heldVisas,
@@ -469,6 +752,7 @@ export function VisaProvider({ children }: { children: React.ReactNode }) {
       setOnboarded,
       residence,
       setResidence,
+      needsAtlasRebuild,
     ],
   );
 

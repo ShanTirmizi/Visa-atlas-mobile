@@ -27,11 +27,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, X, RefreshCw, ArrowLeftRight } from 'lucide-react-native';
+import { useAction } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
 import { FontFamily, Shadows } from '@/constants/theme';
 import { Squiggle } from '@/components/ui/Squiggle';
-import { endpoints } from '@/constants/api';
 import {
   visaData,
   resolveCountry,
@@ -406,6 +407,7 @@ export default function CompareScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { heldVisas, residence, passports } = useVisa();
+  const proxyCompare = useAction(api.aiProxy.compare);
   const plannerRef = useRef<TripPlannerSheetRef>(null);
   const [planTarget, setPlanTarget] = useState<'a' | 'b'>('a');
 
@@ -487,33 +489,25 @@ export default function CompareScreen() {
       residence,
     };
 
-    fetch(endpoints.compare, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('API error');
-        return res.json() as Promise<AIComparison>;
-      })
+    // Authenticated + rate-limited proxy (convex/aiProxy.ts). Convex actions
+    // can't be aborted mid-flight, so the controller now acts as a staleness
+    // flag: a newer selection discards this response instead of applying it.
+    proxyCompare({ body: JSON.stringify(payload) })
       .then((data) => {
         if (!controller.signal.aborted) {
-          setAiData(data);
+          setAiData(data as AIComparison);
           setLoading(false);
         }
       })
-      .catch((err: Error) => {
+      .catch(() => {
         if (!controller.signal.aborted) {
-          setError(
-            err.name === 'AbortError' ? null : 'Failed to generate comparison. Tap to retry.',
-          );
+          setError('Failed to generate comparison. Tap to retry.');
           setLoading(false);
         }
       });
 
     return () => controller.abort();
-  }, [countryA, countryB, heldVisasSet, passports, residence, attempt]);
+  }, [countryA, countryB, heldVisasSet, passports, residence, attempt, proxyCompare]);
 
   // ── Swap handler ─────────────────────────────────────────────────────────
   const swap = useCallback(() => {

@@ -320,6 +320,27 @@ export default function TripDetailScreen() {
       : [];
   }, [trip?.itinerary]);
 
+  // ── Streaming-generation derived state ───────────────────
+  // getTabDotIndicators / getCompletedSectionCount / getStreamingDayIndex
+  // each used to re-JSON.parse trip.itinerary (a multi-KB string) on every
+  // render — 3x per render while streaming. Compute them once per trip-doc
+  // change and hand them the already-parsed `itinerary` memo above. Keyed
+  // on `trip` (Convex returns a referentially stable doc between updates),
+  // which covers every field the helpers read: status, itinerary, the five
+  // streamed sections, heroImage, duration, failed/retryingSections.
+  const sectionDerived = useMemo<{
+    dotIndicators: Record<string, boolean>;
+    completedSections: number;
+    streamingDayIndex: number | null;
+  }>(
+    () => ({
+      dotIndicators: trip ? getTabDotIndicators(trip, itinerary) : {},
+      completedSections: trip ? getCompletedSectionCount(trip, itinerary) : 0,
+      streamingDayIndex: trip ? getStreamingDayIndex(trip, itinerary) : null,
+    }),
+    [trip, itinerary],
+  );
+
   const heroImage = useMemo(
     () =>
       safeParse<{ url: string; credit: string; creditUrl: string } | null>(
@@ -438,9 +459,11 @@ export default function TripDetailScreen() {
   const dateRange = formatDateRange(trip.startDate, trip.endDate);
 
   // ── Streaming-generation derived state ───────────────────
+  // dotIndicators / completedSections / streamingDayIndex come from the
+  // `sectionDerived` memo above (computed once per trip-doc change against
+  // the pre-parsed itinerary).
   const generating = isGenerating(trip);
-  const dotIndicators = getTabDotIndicators(trip);
-  const completedSections = getCompletedSectionCount(trip);
+  const { dotIndicators, completedSections, streamingDayIndex } = sectionDerived;
   const totalSections = getTotalSectionCount();
   const issueCount = (trip.failedSections ?? []).length;
 
@@ -653,7 +676,7 @@ export default function TripDetailScreen() {
                   tripHeroImage={heroImage}
                   tripStartDate={trip.startDate}
                   destination={trip.countryName}
-                  streamingDayIndex={getStreamingDayIndex(trip)}
+                  streamingDayIndex={streamingDayIndex}
                   expectedDayCount={trip.duration}
                 />
               )}

@@ -12,13 +12,79 @@ import {
 // BottomSheetTextInput (not a plain RN TextInput) so gorhom's keyboard
 // handling engages on focus — plain TextInputs are invisible to the sheet.
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react-native';
+import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, FontSize, Spacing, Radius, Shadows } from '@/constants/theme';
-import { BOOKING_TYPES, type BookingType, getBookingColor } from '@/constants/bookings';
+import { FontFamily, Spacing } from '@/constants/theme';
+import { BOOKING_TYPES, type BookingType } from '@/constants/bookings';
+import { BackButton } from '@/components/ui/BackButton';
+import { addDaysYMD, fromLocalYMD } from '@/utils/localDate';
 import DateInput from './DateInput';
 import RouteInput from './RouteInput';
 import PillSelector from './PillSelector';
+
+// ──────────────────────────────────────────────
+// Cost parsing
+// ──────────────────────────────────────────────
+
+/** Parse a free-form cost entry ("€450", "1,250.50", "12,50", "$ 1.250,00")
+ *  into a number. Currency symbols and grouping separators are stripped;
+ *  a single trailing comma/dot group of 1–2 digits is treated as the
+ *  decimal part (covers the European "12,50" convention). Returns null
+ *  when no sane non-negative amount can be extracted — callers show an
+ *  inline error instead of persisting "$NaN". */
+export function parseCostInput(raw: string): number | null {
+  const stripped = raw.replace(/[^0-9.,]/g, '');
+  if (!stripped || !/[0-9]/.test(stripped)) return null;
+
+  let normalized: string;
+  const lastDot = stripped.lastIndexOf('.');
+  const lastComma = stripped.lastIndexOf(',');
+
+  if (lastDot !== -1 && lastComma !== -1) {
+    // Both present — whichever comes LAST is the decimal separator,
+    // the other is a grouping separator ("1,250.50" vs "1.250,50").
+    const decimalSep = lastDot > lastComma ? '.' : ',';
+    const groupSep = decimalSep === '.' ? ',' : '.';
+    normalized = stripped
+      .split(groupSep).join('')
+      .replace(decimalSep, '.');
+  } else if (lastComma !== -1) {
+    const parts = stripped.split(',');
+    // A single comma followed by 1–2 digits is a European decimal
+    // ("12,50"); anything else is thousands grouping ("1,250" / "1,250,000").
+    normalized =
+      parts.length === 2 && parts[1].length <= 2 && parts[1].length > 0
+        ? `${parts[0]}.${parts[1]}`
+        : parts.join('');
+  } else if (lastDot !== -1) {
+    const parts = stripped.split('.');
+    // Multiple dots can only be grouping ("1.250.000"); a single dot is the
+    // ordinary decimal point.
+    normalized = parts.length > 2 ? parts.join('') : stripped;
+  } else {
+    normalized = stripped;
+  }
+
+  const value = Number(normalized);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+// ──────────────────────────────────────────────
+// End-date ordering rules
+// ──────────────────────────────────────────────
+
+/** Types with a date range. `minOffsetDays` is how far past the start the
+ *  end must be (hotels need at least one night; car rentals and insurance
+ *  can legitimately start and end the same day). */
+const END_DATE_RULES: Partial<
+  Record<BookingType, { minOffsetDays: number; error: string }>
+> = {
+  hotel: { minOffsetDays: 1, error: 'Check-out must be after check-in.' },
+  car_rental: { minOffsetDays: 0, error: "Drop-off can't be before pickup." },
+  insurance: { minOffsetDays: 0, error: "End date can't be before the start." },
+};
+
+const IATA_RE = /^[A-Z]{3}$/;
 
 // ──────────────────────────────────────────────
 // Types
@@ -65,7 +131,7 @@ export default function BookingForm({
   prefillData,
   isEditing = false,
 }: BookingFormProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const config = BOOKING_TYPES[type];
   // Signature v2 — every form uses the coral signature accent regardless of
   // booking type (no more blue/green/etc per type). The booking type only
@@ -108,25 +174,70 @@ export default function BookingForm({
 
   // ── Derived ────────────────────────────────
   // Flights derive their title from the airport codes — DEP/ARR are the
-  // required signal there. Other types still rely on `title` being filled.
+  // required signal there, and both must be real 3-letter IATA codes
+  // before the form is saveable. Other types still rely on `title`.
+  const depCode = (typeDetails.departure ?? '').trim().toUpperCase();
+  const arrCode = (typeDetails.arrival ?? '').trim().toUpperCase();
+  const routeValid = IATA_RE.test(depCode) && IATA_RE.test(arrCode);
+  // Inline hint once the user has started typing a route but either code
+  // isn't a complete 3-letter IATA code yet.
+  const routeHint =
+    type === 'flight' &&
+    (depCode.length > 0 || arrCode.length > 0) &&
+    !routeValid;
+
   const flightDerivedTitle = (() => {
-    if (type !== 'flight') return '';
-    const dep = (typeDetails.departure ?? '').trim().toUpperCase();
-    const arr = (typeDetails.arrival ?? '').trim().toUpperCase();
-    if (!dep || !arr) return '';
+    if (type !== 'flight' || !routeValid) return '';
     const fn = (typeDetails.flightNumber ?? '').trim();
-    return fn ? `${dep} → ${arr} ${fn}` : `${dep} → ${arr}`;
+    return fn ? `${depCode} → ${arrCode} ${fn}` : `${depCode} → ${arrCode}`;
   })();
   const effectiveTitle = type === 'flight' ? flightDerivedTitle : title.trim();
-  const canSubmit = effectiveTitle.length > 0 && startDate.trim().length > 0;
 
-  const submitShadow = useMemo(
-    () => (canSubmit ? Shadows.glow(typeColor, 0.3) : undefined),
-    [canSubmit, typeColor],
-  );
+  // Date ordering — derived (not state) so it also catches out-of-order
+  // dates arriving via scan/prefill, not just user picks. YYYY-MM-DD
+  // strings compare lexicographically.
+  const endDateRule = END_DATE_RULES[type];
+  const dateOrderError =
+    endDateRule && startDate && endDate && endDate < addDaysYMD(startDate, endDateRule.minOffsetDays)
+      ? endDateRule.error
+      : null;
+
+  // Cost — non-empty but unparseable blocks save with an inline error
+  // (previously parseFloat('€450') saved NaN, rendered as "$NaN").
+  const costError =
+    cost.trim().length > 0 && parseCostInput(cost) == null
+      ? 'Enter an amount like 450 or 1,250.50.'
+      : null;
+
+  const canSubmit =
+    effectiveTitle.length > 0 &&
+    startDate.trim().length > 0 &&
+    !dateOrderError &&
+    !costError;
+
+  // ── Date handlers ──────────────────────────
+  // Moving the start past the end auto-bumps the end to the earliest valid
+  // date — same recipe as TripPlannerSheet's shiftStart. The end-date
+  // pickers also get a minimumDate so an invalid pick can't happen
+  // interactively; dateOrderError above covers prefilled data.
+  const handleStartDateChange = (v: string) => {
+    setStartDate(v);
+    if (endDateRule && endDate && v) {
+      const minEnd = addDaysYMD(v, endDateRule.minOffsetDays);
+      if (endDate < minEnd) setEndDate(minEnd);
+    }
+  };
+
+  const endMinimumDate = useMemo(() => {
+    if (!endDateRule || !startDate) return undefined;
+    return fromLocalYMD(addDaysYMD(startDate, endDateRule.minOffsetDays)) ?? undefined;
+  }, [endDateRule, startDate]);
 
   const handleSubmit = () => {
     if (!canSubmit) return;
+    // Persist the parsed numeric cost, not the raw entry — "€450" and
+    // "1.250,50" land as "450" / "1250.5" so downstream parseFloat is safe.
+    const parsedCost = parseCostInput(cost);
     onSubmit({
       title: effectiveTitle,
       startDate: startDate.trim(),
@@ -134,7 +245,7 @@ export default function BookingForm({
       location: location.trim(),
       countryCode: countryCode.trim(),
       confirmationNumber: confirmationNumber.trim(),
-      cost: cost.trim(),
+      cost: parsedCost != null ? String(parsedCost) : '',
       currency: currency.trim(),
       notes: notes.trim(),
       typeDetails,
@@ -233,6 +344,23 @@ export default function BookingForm({
     />
   );
 
+  // ── Inline validation messages ─────────────
+  // Errors block save (danger ink); hints guide an incomplete entry
+  // (muted ink). Both sit tight under the field they describe.
+  const renderInlineError = (message: string | null, style?: StyleProp<TextStyle>) =>
+    message ? (
+      <Text style={[styles.inlineMessage, { color: colors.danger }, style]}>
+        {message}
+      </Text>
+    ) : null;
+
+  const renderInlineHint = (message: string | null, style?: StyleProp<TextStyle>) =>
+    message ? (
+      <Text style={[styles.inlineMessage, { color: colors.inkMute }, style]}>
+        {message}
+      </Text>
+    ) : null;
+
   // ── Type-specific layouts ──────────────────
 
   const renderFlightFields = () => (
@@ -246,6 +374,12 @@ export default function BookingForm({
           onArrivalChange={(v) => updateDetail('arrival', v)}
           accentColor={typeColor}
         />
+        {renderInlineHint(
+          routeHint ? 'Airport codes are 3 letters — e.g. LHR → NRT.' : null,
+          // Inside a fieldGroup there's no row margin to eat — sit 6px
+          // below the route card instead of overlapping its border.
+          { marginTop: 6, marginBottom: 0 },
+        )}
       </View>
 
       {/* Airline + Flight Number */}
@@ -263,7 +397,7 @@ export default function BookingForm({
         <DateInput
           label="DEPARTURE DATE *"
           value={startDate}
-          onChange={setStartDate}
+          onChange={handleStartDateChange}
           accentColor={typeColor}
         />
       </View>
@@ -292,7 +426,7 @@ export default function BookingForm({
           <DateInput
             label="CHECK-IN *"
             value={startDate}
-            onChange={setStartDate}
+            onChange={handleStartDateChange}
             accentColor={typeColor}
           />
         </View>
@@ -302,9 +436,11 @@ export default function BookingForm({
             value={endDate}
             onChange={setEndDate}
             accentColor={typeColor}
+            minimumDate={endMinimumDate}
           />
         </View>
       </View>
+      {renderInlineError(dateOrderError)}
 
       {/* Room type */}
       <View style={styles.fieldGroup}>
@@ -333,7 +469,7 @@ export default function BookingForm({
           <DateInput
             label="DATE *"
             value={startDate}
-            onChange={setStartDate}
+            onChange={handleStartDateChange}
             accentColor={typeColor}
           />
         </View>
@@ -361,7 +497,7 @@ export default function BookingForm({
         <DateInput
           label="PICKUP DATE *"
           value={startDate}
-          onChange={setStartDate}
+          onChange={handleStartDateChange}
           accentColor={typeColor}
         />
         <View style={{ height: 12 }} />
@@ -376,10 +512,12 @@ export default function BookingForm({
           value={endDate}
           onChange={setEndDate}
           accentColor={typeColor}
+          minimumDate={endMinimumDate}
         />
         <View style={{ height: 12 }} />
         {renderInput('Dropoff Location', typeDetails.dropoffLocation ?? '', (v) => updateDetail('dropoffLocation', v), 'City Centre')}
       </View>
+      {renderInlineError(dateOrderError)}
 
       {/* Car type */}
       <View style={styles.fieldGroup}>
@@ -405,7 +543,7 @@ export default function BookingForm({
           <DateInput
             label="START *"
             value={startDate}
-            onChange={setStartDate}
+            onChange={handleStartDateChange}
             accentColor={typeColor}
           />
         </View>
@@ -415,9 +553,11 @@ export default function BookingForm({
             value={endDate}
             onChange={setEndDate}
             accentColor={typeColor}
+            minimumDate={endMinimumDate}
           />
         </View>
       </View>
+      {renderInlineError(dateOrderError)}
 
       {/* Policy number */}
       {renderInput('Policy Number', typeDetails.policyNumber ?? '', (v) => updateDetail('policyNumber', v), 'POL-123456')}
@@ -438,7 +578,7 @@ export default function BookingForm({
           <DateInput
             label="DATE *"
             value={startDate}
-            onChange={setStartDate}
+            onChange={handleStartDateChange}
             accentColor={typeColor}
           />
         </View>
@@ -496,18 +636,7 @@ export default function BookingForm({
               changed mid-edit (updateBooking has no `type` field), and a stale
               editingId after re-picking a type would overwrite the original
               booking with a mismatched type. */}
-          {!isEditing && (
-            <TouchableOpacity
-              onPress={onBack}
-              hitSlop={12}
-              style={[
-                styles.backBtn,
-                { backgroundColor: colors.surface, borderColor: colors.line },
-              ]}
-            >
-              <ArrowLeft size={18} color={colors.ink} strokeWidth={2} />
-            </TouchableOpacity>
-          )}
+          {!isEditing && <BackButton onPress={onBack} size={36} />}
 
           <View style={styles.headerText}>
             <Text
@@ -604,6 +733,7 @@ export default function BookingForm({
                 {renderInput('Currency', currency, setCurrency, 'USD')}
               </View>
             </View>
+            {renderInlineError(costError)}
 
             {renderInput('Notes', notes, setNotes, 'Any additional notes…', {
               multiline: true,
@@ -640,7 +770,7 @@ export default function BookingForm({
           >
             {canSubmit ? 'Save booking' : 'Fill in the essentials'}
             {canSubmit ? (
-              <Text style={{ color: 'rgba(255,255,255,0.7)' }}>{'  →'}</Text>
+              <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
             ) : null}
           </Text>
         </TouchableOpacity>
@@ -708,14 +838,6 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: Spacing.lg,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerText: {
     flex: 1,
   },
@@ -726,12 +848,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
-    fontFamily: FontFamily.display,
-    fontSize: FontSize.xl,
-    color: '#FFFFFF',
-    flex: 1,
-  },
   fieldGroup: {
     marginBottom: Spacing.md,
   },
@@ -739,6 +855,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: Spacing.md,
+  },
+  // Inline validation line tucked under the field/row it describes —
+  // negative top margin eats part of the row's own bottom margin.
+  inlineMessage: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: -6,
+    marginBottom: Spacing.md,
+    paddingHorizontal: 4,
   },
   rowItem: {
     flex: 1,

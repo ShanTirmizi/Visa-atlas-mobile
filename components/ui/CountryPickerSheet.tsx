@@ -23,7 +23,12 @@ import {
 import { Search, X } from 'lucide-react-native';
 import { AppBottomSheet, useSheetSettled } from '@/components/ui/AppBottomSheet';
 import { useTheme } from '@/contexts/theme-context';
-import { FontFamily, getVisaCategoryColor } from '@/constants/theme';
+import { useVisaData } from '@/contexts/visa-context';
+import {
+  FontFamily,
+  getVisaCategoryColor,
+  getVisaCategoryBgColor,
+} from '@/constants/theme';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
 import {
@@ -42,6 +47,9 @@ export interface CountryPickerSheetRef {
 interface Props {
   /** Called with the selected country's ISO-3 code. */
   onSelect: (code: string, name: string) => void;
+  /** Fires when the sheet has fully dismissed (close animation complete).
+   *  Use this — not a timer — to chain a follow-up sheet presentation. */
+  onDismiss?: () => void;
   /** Optional country codes to exclude from the list. */
   excludeCodes?: string[];
   /** Held visas, used to render the resolved category pill on each row. */
@@ -55,6 +63,9 @@ interface Props {
 interface CountryRowProps {
   item: CountryVisa;
   heldSet: Set<HeldVisaType>;
+  /** Per-user AI-generated visa map keyed by ISO-3 code — the
+   *  passport-aware source of truth for the category pill. */
+  dynamicByCode: Map<string, CountryVisa>;
   onSelectRow: (country: CountryVisa) => void;
 }
 
@@ -65,6 +76,7 @@ interface CountryRowProps {
 const CountryRow = React.memo(function CountryRow({
   item,
   heldSet,
+  dynamicByCode,
   onSelectRow,
 }: CountryRowProps) {
   const { colors } = useTheme();
@@ -75,11 +87,19 @@ const CountryRow = React.memo(function CountryRow({
   // QA-reproduced; see SheetSettledContext in AppBottomSheet.
   const settled = useSheetSettled();
 
-  const resolved = resolveCountry(item, heldSet);
+  // Prefer the user's generated per-passport map for the category pill —
+  // the static visaData baseline is written from an Indian-passport
+  // perspective and shows the wrong category for everyone else. Fall back
+  // to static only when the generated map is missing this country.
+  const source = dynamicByCode.get(item.code) ?? item;
+  const resolved = resolveCountry(source, heldSet);
   const catColor = getVisaCategoryColor(resolved.category, colors);
+  const catBg = getVisaCategoryBgColor(resolved.category, colors);
   const alpha2 = toAlpha2(item.code);
   const label =
-    resolved.category === 'visa-free'
+    resolved.category === 'home'
+      ? 'Home'
+      : resolved.category === 'visa-free'
       ? 'Visa-free'
       : resolved.category === 'visa-on-arrival'
       ? 'On arrival'
@@ -120,7 +140,7 @@ const CountryRow = React.memo(function CountryRow({
       <View
         style={[
           styles.catPill,
-          { backgroundColor: catColor + '1F' },
+          { backgroundColor: catBg },
         ]}
       >
         <Text
@@ -142,6 +162,7 @@ export const CountryPickerSheet = forwardRef<CountryPickerSheetRef, Props>(
   (
     {
       onSelect,
+      onDismiss,
       excludeCodes = [],
       heldVisas,
       title = 'Pick a country',
@@ -152,6 +173,14 @@ export const CountryPickerSheet = forwardRef<CountryPickerSheetRef, Props>(
     const { colors } = useTheme();
     const sheetRef = useRef<BottomSheetModal>(null);
     const [search, setSearch] = useState('');
+    // Per-user generated visa map (passport-aware). Indexed once by code so
+    // each row does an O(1) lookup instead of a per-row array scan.
+    const dynamicVisaData = useVisaData();
+    const dynamicByCode = useMemo(() => {
+      const map = new Map<string, CountryVisa>();
+      for (const c of dynamicVisaData) map.set(c.code, c);
+      return map;
+    }, [dynamicVisaData]);
 
     useImperativeHandle(ref, () => ({
       open: () => {
@@ -190,17 +219,23 @@ export const CountryPickerSheet = forwardRef<CountryPickerSheetRef, Props>(
 
     const renderItem = useCallback(
       ({ item }: { item: CountryVisa }) => (
-        <CountryRow item={item} heldSet={heldSet} onSelectRow={handleSelect} />
+        <CountryRow
+          item={item}
+          heldSet={heldSet}
+          dynamicByCode={dynamicByCode}
+          onSelectRow={handleSelect}
+        />
       ),
-      [heldSet, handleSelect],
+      [heldSet, dynamicByCode, handleSelect],
     );
 
     return (
       // "extend" raises the sheet to its top position on focus so the
       // results list shrinks above the keyboard and stays fully scrollable
-      // while typing (VisaChatSheet recipe; restore/adjustResize come from
+      // while typing (the visa-chat screen recipe —
+      // app/visa-chat/[guideId].tsx; restore/adjustResize come from
       // AppBottomSheet's defaults).
-      <AppBottomSheet ref={sheetRef} keyboardBehavior="extend">
+      <AppBottomSheet ref={sheetRef} keyboardBehavior="extend" onDismiss={onDismiss}>
         <View style={styles.header}>
           <View
             style={{

@@ -37,10 +37,12 @@ export function NextUpCard({
       ]}
     >
       <View style={styles.kickerRow}>
+        {/* coralDeep at 10pt — coral at 9pt on paper bg fails contrast for
+            text this small; coralDeep keeps the brand hue. */}
         <Text
           style={[
             Type.kickerSm,
-            { color: colors.coral, fontSize: 9, letterSpacing: 9 * 0.18 },
+            { color: colors.coralDeep, fontSize: 10, letterSpacing: 10 * 0.18 },
           ]}
         >
           NEXT UP · TODAY

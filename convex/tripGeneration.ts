@@ -3,11 +3,12 @@ import { internalMutation, internalAction, internalQuery, mutation } from "./_ge
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { checkTripPermission, requireAuth } from "./lib/auth";
+import { checkRateLimit, HOUR_MS } from "./lib/rateLimit";
 import type { Doc, Id } from "./_generated/dataModel";
 import { lookupStaticFacts } from "../constants/staticTripFacts";
 import { deriveVisaDeadline } from "../utils/visaDeadline";
 import { visaData } from "../data/visaData";
-import { isActionableVisaCategory } from "./notifications";
+import { isActionableVisaCategory, staticVisaDataApplies } from "./notifications";
 import { SECTION_FIELD_MAP, STREAMING_SECTIONS } from "./lib/sectionFieldMap";
 import {
   buildSystemPrompt,
@@ -158,6 +159,11 @@ export const generateTrip = mutation({
       throw new Error("userNotes exceeds 2000 character limit");
     }
 
+    // After validation so rejected inputs never burn quota; before the
+    // insert so a limited user creates no stub. Each full generation is
+    // 5+ parallel Anthropic streams — the most expensive call in the app.
+    await checkRateLimit(ctx, userId, "generateTrip", 5, HOUR_MS);
+
     const tripId = await ctx.db.insert("trips", {
       userId,
       countryCode: input.countryCode,
@@ -242,6 +248,11 @@ export const patchTripSection = internalMutation({
       // Trip was deleted mid-generation; silently no-op.
       return;
     }
+    // Every write below also stamps lastStreamAt — the zero-content
+    // watchdog reads it to tell a slow-but-live generation apart from a
+    // genuinely stalled one (failure markers count: an erroring stream is
+    // still a *reporting* stream).
+    const lastStreamAt = Date.now();
     if (args.failed) {
       const existing = trip.failedSections ?? [];
       const next = [...existing];
@@ -249,7 +260,7 @@ export const patchTripSection = internalMutation({
         if (!next.includes(key)) next.push(key);
       }
       if (next.length !== existing.length) {
-        await ctx.db.patch(args.tripId, { failedSections: next });
+        await ctx.db.patch(args.tripId, { failedSections: next, lastStreamAt });
       }
       return;
     }
@@ -273,16 +284,20 @@ export const patchTripSection = internalMutation({
         if (!existing.includes("itinerary")) {
           await ctx.db.patch(args.tripId, {
             failedSections: [...existing, "itinerary"],
+            lastStreamAt,
           });
         }
         return;
       }
-      await ctx.db.patch(args.tripId, { itinerary: JSON.stringify(days) });
+      await ctx.db.patch(args.tripId, {
+        itinerary: JSON.stringify(days),
+        lastStreamAt,
+      });
       return;
     }
     // Hero image (set as a JSON string on completion of the image fetch)
     if (args.section === "heroImage") {
-      await ctx.db.patch(args.tripId, { heroImage: args.content });
+      await ctx.db.patch(args.tripId, { heroImage: args.content, lastStreamAt });
       return;
     }
     // Standard section
@@ -292,7 +307,7 @@ export const patchTripSection = internalMutation({
       console.warn(`patchTripSection: unknown section "${args.section}"`);
       return;
     }
-    await ctx.db.patch(args.tripId, { [field]: args.content });
+    await ctx.db.patch(args.tripId, { [field]: args.content, lastStreamAt });
   },
 });
 
@@ -622,8 +637,31 @@ export const completeGeneration = internalMutation({
       // Visa apply-by reminder: scheduled for 09:00 UTC on the derived
       // deadline date. The action recomputes everything at fire time, so
       // deleted trips / moved dates make it a clean no-op.
-      if (isActionableVisaCategory(trip.visaCategory, trip.countryCode)) {
-        const staticEntry = visaData.find((c) => c.code === trip.countryCode);
+      //
+      // Passport gate: the static visaData table is an Indian-passport
+      // baseline. The streamed visaCategory is passport-aware (the prompt
+      // receives the traveler's passports) and trusted for everyone, but
+      // the static category/processing-time fallbacks are only honest for
+      // travelers whose visa profile actually lists an IND passport — for
+      // anyone else, no parseable passport-correct deadline means NO
+      // reminder, never a reminder built on the wrong passport's rules.
+      const ownerVisaProfile = await ctx.db
+        .query("visaProfiles")
+        .withIndex("by_user", (q) => q.eq("userId", trip.userId))
+        .unique();
+      const allowStaticFallback = staticVisaDataApplies(
+        ownerVisaProfile?.passports ?? [],
+      );
+      if (
+        isActionableVisaCategory(
+          trip.visaCategory,
+          trip.countryCode,
+          allowStaticFallback,
+        )
+      ) {
+        const staticEntry = allowStaticFallback
+          ? visaData.find((c) => c.code === trip.countryCode)
+          : undefined;
         const info = deriveVisaDeadline({
           startDate: trip.startDate,
           processingTime: trip.visaProcessingTime,
@@ -696,8 +734,23 @@ export const failGeneration = internalMutation({
 });
 
 /**
- * 60s watchdog. If no sections have streamed any content, the trip is
- * considered totally failed (LLM outage / rate limit / network).
+ * How long a zero-content generation may go without ANY patch activity
+ * before the watchdog declares it stalled. A slow-but-live stream can
+ * legitimately take >60s before its first complete section/day lands
+ * (long prompts, slow first token, a big day-1 JSON) — killing it at 60s
+ * destroyed live generations. Three minutes of total silence, though,
+ * means every parallel stream is dead; the 12-minute finalizer remains
+ * the hard upper bound.
+ */
+const ZERO_CONTENT_STALL_MS = 3 * 60_000;
+
+/**
+ * Zero-content watchdog, first checked at 60s. If no sections have
+ * streamed any content, the trip MAY be totally failed (LLM outage / rate
+ * limit / network) — but it may also just be slow. Before failing, check
+ * the doc's patch activity (`lastStreamAt`, stamped by every
+ * patchTripSection write) against the stall grace window; while inside
+ * it, re-check in another 60s instead of killing a live generation.
  *
  * "Has streamed content" = any of: itinerary array length > 0, OR any
  * STREAMING_SECTIONS field non-empty, OR any failedSections entry.
@@ -717,12 +770,67 @@ export const checkGenerationTimeout = internalMutation({
       itineraryLen > 0 ||
       hasAnyStreamedField ||
       (trip.failedSections ?? []).length > 0;
-    if (!hasAnyContent) {
-      await ctx.db.patch(tripId, { status: "failed" });
-      console.error(`Trip ${tripId} timed out at 60s with no content`);
+    if (hasAnyContent) return;
+    // No content yet — only fail if genuinely stalled. lastStreamAt covers
+    // patch activity; generationStartedAt anchors runs that have never
+    // patched anything.
+    const lastActivity = Math.max(
+      trip.lastStreamAt ?? 0,
+      trip.generationStartedAt ?? 0,
+    );
+    if (lastActivity > 0 && Date.now() - lastActivity < ZERO_CONTENT_STALL_MS) {
+      await ctx.scheduler.runAfter(
+        60_000,
+        internal.tripGeneration.checkGenerationTimeout,
+        { tripId },
+      );
+      return;
     }
+    await ctx.db.patch(tripId, { status: "failed" });
+    console.error(
+      `Trip ${tripId} stalled with no content for ${ZERO_CONTENT_STALL_MS / 1000}s — marked failed`,
+    );
   },
 });
+
+// ── Shared section parsers ───────────────────────────────────────
+// ONE definition each, used by BOTH the main generation run and the
+// per-section retry path — the retry copy had already drifted (no
+// code-fence stripping, no visaCategory patch). Throwing on a parse
+// failure is deliberate: callers catch and mark the section failed,
+// which surfaces the retry card instead of a silently blank section.
+
+/** Budget returns two fields in one JSON; split into patches so
+ * dailyBudget lands in its own schema field rather than getting smuggled
+ * inside the budgetBreakdown JSON blob (which broke the featured-trip
+ * card on the trips home). */
+const budgetTransform = (raw: string): Array<{ section: string; content: string }> => {
+  const parsed = JSON.parse(stripCodeFences(raw));
+  return [
+    { section: "dailyBudget", content: coerceToString(parsed.dailyBudget, "") },
+    { section: "budgetBreakdown", content: coerceToString(parsed.budgetBreakdown, "[]") },
+  ];
+};
+
+/** Visa returns three fields in one JSON; split into patches.
+ * visaCategory is passport-aware (the prompt receives the traveler's
+ * passports), so the client prefers it over the static table's
+ * not-passport-aware category. Only patched when it's a known value —
+ * an off-vocabulary string would break the category-driven UI. */
+const visaTransform = (raw: string): Array<{ section: string; content: string }> => {
+  const parsed = JSON.parse(stripCodeFences(raw));
+  const patches = [
+    { section: "visaNotes", content: coerceToString(parsed.visaNotes, "") },
+    { section: "visaChecklist", content: coerceToString(parsed.visaChecklist, "[]") },
+  ];
+  if (
+    typeof parsed.visaCategory === "string" &&
+    STREAMED_VISA_CATEGORIES.has(parsed.visaCategory)
+  ) {
+    patches.push({ section: "visaCategory", content: parsed.visaCategory });
+  }
+  return patches;
+};
 
 /**
  * Orchestrates 5 parallel Anthropic streaming calls. As each section
@@ -938,43 +1046,8 @@ export const runGenerationStream = internalAction({
       });
     };
 
-    // Budget returns two fields in one JSON; split into patches so
-    // dailyBudget lands in its own schema field rather than getting
-    // smuggled inside the budgetBreakdown JSON blob (which broke the
-    // featured-trip card on the trips home).
-    //
-    // Throwing on a parse failure is deliberate: runSection's catch marks
-    // the bundle failed, which surfaces the retry card. The previous
-    // swallow-and-write-empty left a silently blank Budget section with
-    // no retry affordance whenever the model wrapped its JSON in fences.
-    const budgetTransform = (raw: string): Array<{ section: string; content: string }> => {
-      const parsed = JSON.parse(stripCodeFences(raw));
-      return [
-        { section: "dailyBudget", content: coerceToString(parsed.dailyBudget, "") },
-        { section: "budgetBreakdown", content: coerceToString(parsed.budgetBreakdown, "[]") },
-      ];
-    };
-
-    // Visa returns three fields in one JSON; split into patches.
-    // visaCategory is passport-aware (the prompt receives the traveler's
-    // passports), so the client prefers it over the static table's
-    // not-passport-aware category. Only patched when it's a known value —
-    // an off-vocabulary string would break the category-driven UI.
-    // Throws on parse failure for the same reason as budgetTransform.
-    const visaTransform = (raw: string): Array<{ section: string; content: string }> => {
-      const parsed = JSON.parse(stripCodeFences(raw));
-      const patches = [
-        { section: "visaNotes", content: coerceToString(parsed.visaNotes, "") },
-        { section: "visaChecklist", content: coerceToString(parsed.visaChecklist, "[]") },
-      ];
-      if (
-        typeof parsed.visaCategory === "string" &&
-        STREAMED_VISA_CATEGORIES.has(parsed.visaCategory)
-      ) {
-        patches.push({ section: "visaCategory", content: parsed.visaCategory });
-      }
-      return patches;
-    };
+    // budgetTransform / visaTransform are module-level (shared with the
+    // retry path) — see "Shared section parsers" above.
 
     try {
       const promises: Array<Promise<void>> = [
@@ -1082,7 +1155,7 @@ export const retrySection = mutation({
   handler: async (ctx, { tripId, section }) => {
     // Dining regeneration is deliberately editor-level, matching tweakDay
     // and generateDiningGuide; everything else stays owner-only.
-    await checkTripPermission(
+    const { userId } = await checkTripPermission(
       ctx,
       tripId,
       section === "diningGuide" ? "editor" : "owner",
@@ -1103,6 +1176,9 @@ export const retrySection = mutation({
 
     const retrying = trip.retryingSections ?? [];
     if (retrying.includes(section)) return; // already in flight
+    // After every validation/no-op path so rejected or duplicate taps
+    // never burn quota; each retry is a fresh Anthropic stream.
+    await checkRateLimit(ctx, userId, "retrySection", 10, HOUR_MS);
     await ctx.db.patch(tripId, { retryingSections: [...retrying, section] });
     await ctx.scheduler.runAfter(0, internal.tripGeneration.runRetrySection, {
       tripId,
@@ -1131,7 +1207,7 @@ export const retrySection = mutation({
 export const generateDiningGuide = mutation({
   args: { tripId: v.id("trips") },
   handler: async (ctx, { tripId }) => {
-    await checkTripPermission(ctx, tripId, "editor");
+    const { userId } = await checkTripPermission(ctx, tripId, "editor");
     const trip = await ctx.db.get(tripId);
     if (!trip || trip.deletedAt !== undefined) throw new Error("Trip not found");
     if (trip.status === "generating") return; // the main run will produce it
@@ -1143,6 +1219,9 @@ export const generateDiningGuide = mutation({
     }
     const retrying = trip.retryingSections ?? [];
     if (retrying.includes("diningGuide")) return; // already in flight
+    // Shares the retrySection budget — both routes schedule the same
+    // runRetrySection stream, so neither can be a limit bypass for the other.
+    await checkRateLimit(ctx, userId, "retrySection", 10, HOUR_MS);
     await ctx.db.patch(tripId, {
       retryingSections: [...retrying, "diningGuide"],
     });
@@ -1186,7 +1265,7 @@ export const tweakDay = mutation({
     ),
   },
   handler: async (ctx, { tripId, dayIndex, instruction }) => {
-    await checkTripPermission(ctx, tripId, "editor");
+    const { userId } = await checkTripPermission(ctx, tripId, "editor");
     const trip = await ctx.db.get(tripId);
     if (!trip || trip.deletedAt !== undefined) throw new Error("Trip not found");
     if (!trip.originalInputs) throw new Error("No original inputs stored");
@@ -1197,6 +1276,9 @@ export const tweakDay = mutation({
     const key = `itinerary-day:${dayIndex}`;
     const retrying = trip.retryingSections ?? [];
     if (retrying.includes(key)) return; // already in flight
+    // After every validation/no-op path so rejected or duplicate taps
+    // never burn quota; each tweak is a fresh Anthropic call.
+    await checkRateLimit(ctx, userId, "tweakDay", 15, HOUR_MS);
     await ctx.db.patch(tripId, { retryingSections: [...retrying, key] });
     await ctx.scheduler.runAfter(0, internal.tripGeneration.runDayTweak, {
       tripId,
@@ -1418,22 +1500,57 @@ async function runRetrySectionInner(
     const systemPrompt = buildSystemPrompt(input);
 
     if (section === "itinerary") {
-      // Clear any partial itinerary so re-streamed days land in a clean
-      // array — stale days from the failed run could otherwise linger
-      // past the new day count.
+      // Snapshot the surviving partial days BEFORE clearing. The clean
+      // clear is still needed (stale days from the failed run could
+      // otherwise linger past the new day count), but a retry must never
+      // end up with LESS than it started with — if the re-run delivers
+      // nothing, the snapshot is restored.
+      const previousItinerary = trip.itinerary ?? "";
       await ctx.runMutation(internal.tripGeneration._patchTripField, {
         tripId,
         field: "itinerary",
         value: "",
       });
       await streamItineraryIntoTrip(ctx, tripId, input, apiKey, systemPrompt);
-      // Only clear the failure marker if the re-run actually produced days.
       const after = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
-      const days = after?.itinerary ? safeParseArray(after.itinerary) : [];
-      if (days.length > 0) {
+      if (!after) return; // deleted mid-retry
+      const days = after.itinerary ? safeParseArray(after.itinerary) : [];
+      // filter(Boolean): out-of-order day patches leave null holes — a
+      // hole is not a delivered day (mirrors completeGeneration).
+      const realDays = days.filter(Boolean).length;
+      if (realDays >= after.duration) {
+        // Full delivery — confirmed success, clear the failure marker.
         await ctx.runMutation(internal.tripGeneration._clearFailedSection, {
           tripId,
           section: "itinerary",
+        });
+      } else if (realDays === 0) {
+        // Total failure — restore the pre-retry partial days rather than
+        // leaving the section blank, and re-mark failed so the retry card
+        // persists (patchTripSection dedupes).
+        if (previousItinerary) {
+          await ctx.runMutation(internal.tripGeneration._patchTripField, {
+            tripId,
+            field: "itinerary",
+            value: previousItinerary,
+          });
+        }
+        await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+          tripId,
+          section: "itinerary",
+          content: "",
+          failed: true,
+        });
+      } else {
+        // Partial delivery — the fresh days are kept (they're newer than
+        // the snapshot), but under-delivery is still a failure: keep the
+        // retry card so the user can run it again (same rule as
+        // completeGeneration's realDays < duration check).
+        await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+          tripId,
+          section: "itinerary",
+          content: "",
+          failed: true,
         });
       }
       return;
@@ -1475,46 +1592,74 @@ async function runRetrySectionInner(
         throw new Error(`Cannot retry unknown section: ${section}`);
     }
 
+    // Re-mark the section failed without letting the marker's own failure
+    // escape — keeps the retry card on screen when a retry doesn't pan out.
+    const markFailed = async () => {
+      try {
+        await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+          tripId,
+          section,
+          content: "",
+          failed: true,
+        });
+      } catch (patchErr) {
+        console.error(`Retry ${section} failure marker also failed:`, patchErr);
+      }
+    };
+
     await new Promise<void>((resolve) => {
       streamAnthropic(
         { apiKey, systemPrompt, userPrompt, maxTokens },
         makeWholeSectionBuffer(
           async (full) => {
-            if (section === "highlights") {
-              await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                tripId, section, content: full.trim(),
-              });
-            } else if (section === "budgetBreakdown" || section === "dailyBudget") {
-              try {
-                const parsed = JSON.parse(full);
+            // The failure marker is cleared ONLY on confirmed success —
+            // clearing it after a swallowed parse failure used to erase
+            // the retry card while the section stayed blank.
+            let succeeded = false;
+            try {
+              if (section === "highlights") {
                 await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                  tripId, section: "dailyBudget", content: coerceToString(parsed.dailyBudget, ""),
+                  tripId, section, content: full.trim(),
                 });
-                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                  tripId, section: "budgetBreakdown", content: coerceToString(parsed.budgetBreakdown, "[]"),
-                });
-              } catch {
-                // swallow
+              } else {
+                // Same shared transforms as the main generation run
+                // (module-level budgetTransform / visaTransform) — the
+                // retry path can't drift on fence-stripping or the
+                // visaCategory patch again. Throws on unparseable output.
+                const transform =
+                  section === "visaChecklist" || section === "visaNotes"
+                    ? visaTransform
+                    : budgetTransform;
+                const patches = transform(full);
+                for (const p of patches) {
+                  await ctx.runMutation(internal.tripGeneration.patchTripSection, {
+                    tripId, section: p.section, content: p.content,
+                  });
+                }
               }
-            } else if (section === "visaChecklist" || section === "visaNotes") {
-              try {
-                const parsed = JSON.parse(full);
-                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                  tripId, section: "visaNotes", content: coerceToString(parsed.visaNotes, ""),
-                });
-                await ctx.runMutation(internal.tripGeneration.patchTripSection, {
-                  tripId, section: "visaChecklist", content: coerceToString(parsed.visaChecklist, "[]"),
-                });
-              } catch {
-                // swallow — leave failedSections intact
-              }
+              succeeded = true;
+            } catch (err) {
+              console.error(`Retry section ${section} parse/patch failed:`, err);
             }
-            await ctx.runMutation(internal.tripGeneration._clearFailedSection, { tripId, section });
-            resolve();
+            try {
+              if (succeeded) {
+                await ctx.runMutation(internal.tripGeneration._clearFailedSection, { tripId, section });
+              } else {
+                await markFailed();
+              }
+            } catch (err) {
+              console.error(`Retry section ${section} marker update failed:`, err);
+            } finally {
+              resolve();
+            }
           },
-          (err) => {
+          async (err) => {
             console.error(`Retry section ${section} failed:`, err);
-            resolve();
+            try {
+              await markFailed();
+            } finally {
+              resolve();
+            }
           },
         ),
       );
