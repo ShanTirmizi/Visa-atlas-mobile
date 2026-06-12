@@ -203,6 +203,83 @@ export function spotsForDayMeal(
   );
 }
 
+// ── Stop photos (per trip) ───────────────────────────────────────
+
+/** One resolved photo of a real place — Google Places, resolved by the web
+ *  repo's /api/stop-photos. `thumb` and `url` are the same 1200px file
+ *  today (one media request per photo; expo-image downsamples for strips
+ *  and the lightbox reuses the already-cached file). Both fields stay so
+ *  the shape remains compatible with SharedImage and a future smaller
+ *  thumb pipeline. */
+export interface StopPhoto {
+  url: string;
+  thumb?: string;
+  credit?: string;
+  creditUrl?: string;
+  source?: string;
+}
+
+/** Photos for one (day, stop-name) pair — `trips.stopPhotos` stores a
+ *  JSON-stringified array of these. Lookups match by normalized place
+ *  name, so a renamed/tweaked stop simply shows no photos rather than the
+ *  wrong place's. */
+export interface StopPhotoSet {
+  day: number;
+  stop: string;
+  photos: StopPhoto[];
+}
+
+/** Case/whitespace-insensitive key for place-name lookups — server stop
+ *  names and client stop names both pass through here. */
+export function normalizePlaceName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** Parse `trips.stopPhotos`. Tolerates absence (pre-feature trips, fetch
+ *  still in flight), malformed JSON, and drops entries without a url. */
+export function parseStopPhotos(raw: string | undefined | null): StopPhotoSet[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((s): s is StopPhotoSet => {
+        if (!s || typeof s !== 'object') return false;
+        const set = s as StopPhotoSet;
+        return (
+          typeof set.day === 'number' &&
+          typeof set.stop === 'string' &&
+          Array.isArray(set.photos)
+        );
+      })
+      .map((set) => ({
+        ...set,
+        photos: set.photos.filter(
+          (p): p is StopPhoto =>
+            !!p &&
+            typeof p === 'object' &&
+            typeof (p as StopPhoto).url === 'string' &&
+            (p as StopPhoto).url.length > 0,
+        ),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** Photos for one stop on one 1-based day (normalized name match). */
+export function photosForStop(
+  sets: StopPhotoSet[],
+  dayNumber: number,
+  stopName: string,
+): StopPhoto[] {
+  const key = normalizePlaceName(stopName);
+  const set = sets.find(
+    (s) => s.day === dayNumber && normalizePlaceName(s.stop) === key,
+  );
+  return set?.photos ?? [];
+}
+
 // ── Legacy prose fallback ────────────────────────────────────────
 
 /**

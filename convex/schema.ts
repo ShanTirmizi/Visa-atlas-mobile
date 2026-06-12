@@ -47,6 +47,16 @@ export default defineSchema({
     heroImage: v.optional(v.string()),
     dayImages: v.optional(v.string()),
     activityImages: v.optional(v.string()),
+    // JSON-stringified StopPhotoSet[] (types/itinerary.ts) — up to 4 real
+    // Google Places photos per itinerary stop, keyed by (day, stop name).
+    // Fetched by tripGeneration.fetchStopPhotos once the itinerary settles;
+    // pre-existing trips backfill lazily via ensureStopPhotos the first
+    // time the trip detail screen mounts.
+    stopPhotos: v.optional(v.string()),
+    // ms-epoch when a stop-photos fetch began — in-flight dedup so the
+    // generation hook and the lazy ensure path never double-fetch. Cleared
+    // on failure so a later open retries.
+    stopPhotosStartedAt: v.optional(v.number()),
     localEssentials: v.optional(v.string()),
     localGuide: v.optional(v.string()),
     carRental: v.optional(v.string()),

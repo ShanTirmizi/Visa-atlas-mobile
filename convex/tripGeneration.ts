@@ -406,6 +406,10 @@ function streamItineraryIntoTrip(
             // catches its own errors — never-throw discipline holds.
             await Promise.allSettled(pending);
             await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchAndPatchImages, { tripId });
+            // Per-stop photo galleries need the FULL itinerary (every
+            // day's stop names), so they fetch once, here — not on the
+            // fast Day-1 hero pass above.
+            await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchStopPhotos, { tripId });
           } catch (err) {
             console.error("Itinerary completion hook failed:", err);
           } finally {
@@ -2063,5 +2067,164 @@ export const _patchTripField = internalMutation({
     }> = {};
     patch[field] = value;
     await ctx.db.patch(tripId, patch);
+  },
+});
+
+// ── Per-stop photo galleries ─────────────────────────────────────────
+//
+// Up to 4 real Google Places photos per itinerary stop, stored as
+// JSON-stringified StopPhotoSet[] in trips.stopPhotos (shape lives in
+// types/itinerary.ts). Two schedulers can fire for the same trip — the
+// generation hook after the itinerary settles, and the lazy
+// ensureStopPhotos path when an older trip is opened — so the action
+// gates itself through an atomic begin mutation.
+
+/** A failed fetch may retry after this long; also the in-flight TTL that
+ *  covers an action that died without settling. */
+const STOP_PHOTOS_RETRY_MS = 10 * 60_000;
+/** Places quota guard — galleries cover the first N places per day. */
+const MAX_STOP_PHOTO_PLACES_PER_DAY = 8;
+
+/** Gate a stop-photos fetch: atomically verify nothing is stored or in
+ *  flight, then stamp stopPhotosStartedAt. Returns false when the calling
+ *  action should bail. */
+export const _beginStopPhotosFetch = internalMutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }): Promise<boolean> => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip || trip.deletedAt !== undefined) return false;
+    if (trip.stopPhotos) return false;
+    const startedAt = trip.stopPhotosStartedAt;
+    if (startedAt !== undefined && Date.now() - startedAt < STOP_PHOTOS_RETRY_MS) {
+      return false;
+    }
+    await ctx.db.patch(tripId, { stopPhotosStartedAt: Date.now() });
+    return true;
+  },
+});
+
+/** Settle a stop-photos fetch: store the payload on success, or clear the
+ *  in-flight stamp on failure so a later trip-open can retry. */
+export const _finishStopPhotosFetch = internalMutation({
+  args: { tripId: v.id("trips"), payload: v.optional(v.string()) },
+  handler: async (ctx, { tripId, payload }) => {
+    const trip = await ctx.db.get(tripId);
+    if (!trip) return;
+    if (payload !== undefined) {
+      await ctx.db.patch(tripId, { stopPhotos: payload });
+    } else {
+      await ctx.db.patch(tripId, { stopPhotosStartedAt: undefined });
+    }
+  },
+});
+
+/**
+ * Fetch per-stop photo sets from the Vercel /api/stop-photos endpoint
+ * (Google Places photos resolved server-side, same deployment that owns
+ * /api/trip-images) and patch them into trips.stopPhotos.
+ *
+ * Structured days contribute their stop names; legacy days fall back to
+ * the three slot anchor places so pre-stops trips get galleries too.
+ */
+export const fetchStopPhotos = internalAction({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    const proceed: boolean = await ctx.runMutation(
+      internal.tripGeneration._beginStopPhotosFetch,
+      { tripId },
+    );
+    if (!proceed) return;
+
+    // Clear the in-flight stamp so the next trip-open retries.
+    const fail = async () => {
+      await ctx.runMutation(internal.tripGeneration._finishStopPhotosFetch, { tripId });
+    };
+
+    const trip = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
+    if (!trip?.itinerary) return fail();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let days: any[] = [];
+    try {
+      days = JSON.parse(trip.itinerary);
+    } catch {
+      return fail();
+    }
+    if (!Array.isArray(days) || days.length === 0) return fail();
+
+    // One entry per (day, place), deduped case-insensitively.
+    const stops: Array<{ day: number; name: string }> = [];
+    const seen = new Set<string>();
+    days.forEach((d, idx) => {
+      if (!d || typeof d !== "object") return;
+      const dayNum = typeof d.day === "number" ? d.day : idx + 1;
+      const structured = Array.isArray(d.stops) ? d.stops.filter(isUsableStop) : [];
+      const names: string[] =
+        structured.length > 0
+          ? structured.map((s: { name: string }) => s.name)
+          : [d.morningPlace, d.afternoonPlace, d.eveningPlace].filter(
+              (p: unknown): p is string =>
+                typeof p === "string" && p.trim().length > 0,
+            );
+      for (const name of names.slice(0, MAX_STOP_PHOTO_PLACES_PER_DAY)) {
+        const key = `${dayNum}:${name.trim().toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        stops.push({ day: dayNum, name: name.trim() });
+      }
+    });
+    if (stops.length === 0) return fail();
+
+    try {
+      const res = await fetch("https://visa-atlas.vercel.app/api/stop-photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          countryName: trip.countryName,
+          // The endpoint clamps to 60 too; clamping here as well keeps the
+          // request body honest about what can come back.
+          stops: stops.slice(0, 60),
+        }),
+      });
+      if (!res.ok) return fail();
+      const data = (await res.json()) as { stopPhotos?: unknown[] };
+      const sets = Array.isArray(data.stopPhotos) ? data.stopPhotos : [];
+      if (sets.length === 0) {
+        // Endpoint reachable but nothing resolved — likely a quota blip;
+        // leave the field unset so a later open retries.
+        return fail();
+      }
+      await ctx.runMutation(internal.tripGeneration._finishStopPhotosFetch, {
+        tripId,
+        payload: JSON.stringify(sets),
+      });
+    } catch (err) {
+      console.warn(`Stop photos fetch failed for ${tripId}:`, err);
+      return fail();
+    }
+  },
+});
+
+/**
+ * Lazy backfill: schedule a stop-photos fetch for a trip that's missing
+ * them. Fired by the trip detail screen on mount, so trips that predate
+ * the feature grow galleries the first time they're opened. Cheap no-op
+ * when photos exist, a fetch is in flight, or the trip is still
+ * generating (the generation hook schedules its own fetch).
+ */
+export const ensureStopPhotos = mutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    await checkTripPermission(ctx, tripId, "viewer");
+    const trip = await ctx.db.get(tripId);
+    if (!trip || trip.deletedAt !== undefined) return null;
+    if (trip.stopPhotos || !trip.itinerary) return null;
+    if (trip.status === "generating") return null;
+    const startedAt = trip.stopPhotosStartedAt;
+    if (startedAt !== undefined && Date.now() - startedAt < STOP_PHOTOS_RETRY_MS) {
+      return null;
+    }
+    await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchStopPhotos, { tripId });
+    return null;
   },
 });
