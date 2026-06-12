@@ -45,6 +45,42 @@ describe("buildSharedTripPayload", () => {
     }
   });
 
+  it("strips unknown nested keys injected into days, stops, and dining spots", () => {
+    // Days/stops/spots are client-writable JSON (trips.updateTripField) —
+    // an editor-injected key must never reach the public payload.
+    const t = baseTrip as unknown as Record<string, unknown>;
+    const days = JSON.parse(t.itinerary as string) as Record<string, unknown>[];
+    days[0].secretKey = "SECRET-DAY";
+    (days[0].stops as Record<string, unknown>[])[0].secretStop = "SECRET-STOP";
+    const dining = JSON.parse(t.diningGuide as string) as { spots: Record<string, unknown>[] };
+    dining.spots[0].secretSpot = "SECRET-SPOT";
+    const poisoned = { ...t, itinerary: JSON.stringify(days), diningGuide: JSON.stringify(dining) } as never;
+    const p = buildSharedTripPayload(poisoned);
+    expect(JSON.stringify(p)).not.toContain("SECRET");
+    // The legit nested content still survives the rebuild.
+    expect(p.itinerary[0].title).toBe("Arrival");
+    expect(p.itinerary[0].stops?.[0].name).toBe("Senso-ji");
+    expect(p.diningGuide?.spots[0].name).toBe("Ichiran");
+  });
+
+  it("rejects non-https image urls and unknown image keys", () => {
+    const t = baseTrip as unknown as Record<string, unknown>;
+    const poisoned = {
+      ...t,
+      heroImage: JSON.stringify({ url: "javascript:alert(1)" }),
+      activityImages: JSON.stringify([
+        { url: "https://img/a1.jpg", source: "unsplash" },
+        { url: "http://img/a2.jpg" },
+      ]),
+    } as never;
+    const p = buildSharedTripPayload(poisoned);
+    expect(p.heroImage).toBeNull();
+    expect(p.activityImages).toHaveLength(1);
+    expect(p.activityImages?.[0].url).toBe("https://img/a1.jpg");
+    // `source` is not a SharedImage key — rebuilt entries must not carry it.
+    expect("source" in (p.activityImages?.[0] ?? {})).toBe(false);
+  });
+
   it("tolerates legacy trips: missing dining/images/stops, malformed JSON", () => {
     const legacy = { ...(baseTrip as unknown as Record<string, unknown>), diningGuide: undefined, heroImage: undefined, dayImages: "not-json", localGuide: undefined, localEssentials: undefined, itinerary: JSON.stringify([{ day: 1, title: "Old", morning: "m", afternoon: "a", evening: "e" }]) } as never;
     const p = buildSharedTripPayload(legacy);

@@ -10,8 +10,8 @@ import type { Id } from "../_generated/dataModel";
  * bookings, stranding collaborators' bookings with dangling tripIds.
  *
  * Deletes: tripMessages, tripCollaborators, tripInvites, tripVotes,
- * tripPresence, bookings (linked via by_trip — regardless of which
- * collaborator created them), and finally the trip document.
+ * tripPresence, tripShares, bookings (linked via by_trip — regardless of
+ * which collaborator created them), and finally the trip document.
  */
 export async function cascadeDeleteTrip(
   ctx: MutationCtx,
@@ -56,6 +56,17 @@ export async function cascadeDeleteTrip(
     .collect();
   for (const p of presence) {
     await ctx.db.delete(p._id);
+  }
+
+  // Public share links — requireShareToken already refuses tokens whose
+  // trip is gone, so surviving rows would be pure dangling weight with
+  // tripId references into nothing. Active and revoked alike die here.
+  const shares = await ctx.db
+    .query("tripShares")
+    .withIndex("by_trip", (q) => q.eq("tripId", tripId))
+    .collect();
+  for (const share of shares) {
+    await ctx.db.delete(share._id);
   }
 
   // Bookings linked to this trip — the delete flow's copy has always

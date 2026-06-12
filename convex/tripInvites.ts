@@ -9,7 +9,7 @@ const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 // Invite codes are bearer credentials (anyone holding one can join the trip),
 // so they must come from a CSPRNG — Math.random's state is reconstructable
 // from observed outputs. Same RandomReader + generateRandomString pattern as
-// convex/ResendOTP.ts; the alphabet omits visually ambiguous chars (I/l/O/0/1).
+// convex/ResendOTP.ts; the alphabet omits visually ambiguous chars (I/O/l/o/0/1).
 const INVITE_CODE_ALPHABET =
   "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 

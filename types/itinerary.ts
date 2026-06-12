@@ -70,12 +70,12 @@ export type MealTag = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export const MEAL_TAGS: readonly MealTag[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 export type PriceTier = '$' | '$$' | '$$$' | '$$$$';
-const PRICE_TIERS: readonly PriceTier[] = ['$', '$$', '$$$', '$$$$'];
+export const PRICE_TIERS: readonly PriceTier[] = ['$', '$$', '$$$', '$$$$'];
 
 /** Editorial trust signal — deliberately NOT a fabricated star rating.
  *  Real ratings/reviews live one tap away in Apple Maps. */
 export type CrowdSignal = 'local-favorite' | 'institution' | 'tourist-classic' | 'new-wave';
-const CROWD_SIGNALS: readonly CrowdSignal[] = [
+export const CROWD_SIGNALS: readonly CrowdSignal[] = [
   'local-favorite',
   'institution',
   'tourist-classic',

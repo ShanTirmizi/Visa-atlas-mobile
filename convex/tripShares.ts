@@ -17,8 +17,8 @@ import { generateRandomString } from "@oslojs/crypto/random";
 // generateRandomString pattern as convex/tripInvites.ts. Share links are
 // LONG-LIVED capability URLs (no expiry, revocation is manual), so they
 // get a larger entropy budget than 7-day invite codes: 20 chars over the
-// 57-char alphabet ≈ 116 bits. Alphabet omits visually ambiguous chars
-// (I/l/O/0/1) — these tokens live in URLs people read aloud.
+// 56-char alphabet ≈ 116 bits. Alphabet omits visually ambiguous chars
+// (I/O/l/o/0/1) — these tokens live in URLs people read aloud.
 const SHARE_TOKEN_ALPHABET =
   "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 
@@ -58,6 +58,19 @@ export const createShareLink = mutation({
   },
   handler: async (ctx, args) => {
     const { userId } = await checkTripPermission(ctx, args.tripId, "editor");
+
+    // The share-sheet UI hides sharing for unfinished trips; this is the
+    // belt-and-braces backend check (deep links, stale clients). A trip
+    // mid-generation or failed has nothing worth publishing.
+    const trip = await ctx.db.get(args.tripId);
+    if (trip === null || trip.deletedAt !== undefined) {
+      throw new Error("Trip not found");
+    }
+    if (trip.status === "generating" || trip.status === "failed") {
+      throw new Error(
+        "This trip is still generating — try again when it's ready",
+      );
+    }
 
     const existing = await activeShareForTrip(ctx, args.tripId);
     if (existing !== null) return { token: existing.token };
@@ -102,6 +115,9 @@ export const getShareStatus = query({
     tripId: v.id("trips"),
   },
   handler: async (ctx, args) => {
+    // Viewer-role token exposure is deliberate: viewers already hold full
+    // read access to the trip, and Notion/Wanderlog likewise let viewers
+    // copy the share link.
     await checkTripPermission(ctx, args.tripId, "viewer");
 
     const existing = await activeShareForTrip(ctx, args.tripId);
@@ -145,6 +161,8 @@ export const recordShareView = mutation({
   handler: async (ctx, args) => {
     const res = await requireShareToken(ctx, args.token);
     if (res === null) return;
+    // Deliberately unthrottled: viewCount is a vanity metric, the patch
+    // is OCC-safe, and a token holder can only inflate a counter.
     await ctx.db.patch(res.share._id, {
       viewCount: (res.share.viewCount ?? 0) + 1,
     });
@@ -163,7 +181,9 @@ export const internalCreateShare = internalMutation({
   },
   handler: async (ctx, args) => {
     const trip = await ctx.db.get(args.tripId);
-    if (trip === null) throw new Error("Trip not found");
+    if (trip === null || trip.deletedAt !== undefined) {
+      throw new Error("Trip not found");
+    }
 
     const existing = await activeShareForTrip(ctx, args.tripId);
     if (existing !== null) return { token: existing.token };
