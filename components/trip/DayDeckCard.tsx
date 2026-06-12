@@ -10,7 +10,7 @@ import Animated, {
 import { BorderlessButton } from 'react-native-gesture-handler';
 import { BlurView } from 'expo-blur';
 import { useQuery, useMutation } from 'convex/react';
-import { Pencil, Heart } from 'lucide-react-native';
+import { Pencil, Heart, Images } from 'lucide-react-native';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
@@ -38,6 +38,11 @@ export interface DayDeckCardProps {
    *  (bottom-right of the photo). Vote rows use activityId `day-<index>`,
    *  where index = dayNumber - 1 (the server stamps day = idx + 1). */
   tripId?: string;
+  /** Size of this day's photo album — shows the photos pill (bottom-left
+   *  of the photo) when > 1. The single card photo IS the album at 1. */
+  photoCount?: number;
+  /** Opens the day's full-screen photo album. */
+  onOpenPhotos?: () => void;
 }
 
 // ── Day-vote heart pill ──────────────────────────────────────────────
@@ -136,7 +141,7 @@ function StreamingCursor() {
   );
 }
 
-function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit, showCursor, tripId }: DayDeckCardProps) {
+function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit, showCursor, tripId, photoCount, onOpenPhotos }: DayDeckCardProps) {
   const { colors } = useTheme();
   const dayLabel = String(dayNumber).padStart(2, '0');
 
@@ -202,6 +207,26 @@ function DayDeckCard({ dayNumber, title, place, date, image, stops, onEdit, show
 
         {/* Day-vote heart pill — frosted chip, bottom-right of the photo */}
         {tripId ? <DayVotePill tripId={tripId} dayNumber={dayNumber} /> : null}
+
+        {/* Photos pill — frosted chip, bottom-left, opens the day album.
+            BorderlessButton for the same claim-the-touch reason as the
+            vote pill (a Pressable would race the deck's tap gesture). */}
+        {onOpenPhotos && (photoCount ?? 0) > 1 ? (
+          <BorderlessButton
+            onPress={onOpenPhotos}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${photoCount} photos for Day ${dayNumber}`}
+            style={styles.photosPillWrap}
+          >
+            <BlurView tint="systemMaterial" intensity={80} style={styles.photosPill}>
+              <Images size={13} color={colors.ink} strokeWidth={2.2} />
+              <Text style={[styles.photosPillCount, { color: colors.ink }]}>
+                {photoCount}
+              </Text>
+            </BlurView>
+          </BorderlessButton>
+        ) : null}
       </View>
 
       {/* ── Content region (bottom ~40%) ──────────────────────────── */}
@@ -414,6 +439,28 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   votePillCount: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+
+  // Photos pill (frosted, bottom-left of photo region — mirrors votePill)
+  photosPillWrap: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  photosPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  photosPillCount: {
     fontFamily: FontFamily.semibold,
     fontSize: 11,
     fontWeight: '600',

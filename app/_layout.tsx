@@ -41,6 +41,7 @@ import { VisaProvider, useVisa } from '@/contexts/visa-context';
 import { CalendarProvider } from '@/contexts/calendar-context';
 import { EmailProvider } from '@/contexts/email-context';
 import { ToastProvider } from '@/contexts/toast-context';
+import { PhotoViewerProvider } from '@/components/photos/PhotoViewer';
 import { OfflineProvider, useOffline } from '@/contexts/offline-context';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { MapPrewarm } from '@/components/map/MapPrewarm';
@@ -391,7 +392,11 @@ export default function RootLayout() {
                   <SafeAreaProvider>
                     <ToastProvider>
                       <BottomSheetModalProvider>
-                        <ThemedApp />
+                        {/* Imperative full-screen lightbox — any screen can
+                            usePhotoViewer().openPhotoViewer(album, idx). */}
+                        <PhotoViewerProvider>
+                          <ThemedApp />
+                        </PhotoViewerProvider>
                       </BottomSheetModalProvider>
                     </ToastProvider>
                   </SafeAreaProvider>

@@ -52,7 +52,11 @@ import DayDeck from '@/components/trip/DayDeck';
 
 // ── Food tab — per-trip dining guide ───────────────────────
 import { FoodTab } from '@/components/trip/food/FoodTab';
-import { parseDiningGuide, type ItineraryDay } from '@/types/itinerary';
+import { parseDiningGuide, parseStopPhotos, type ItineraryDay } from '@/types/itinerary';
+
+// ── Photos — full-screen album viewer ──────────────────────
+import { usePhotoViewer } from '@/components/photos/PhotoViewer';
+import { buildTripAlbum } from '@/utils/photoAlbum';
 
 // ── Collaboration — overlapping avatars in the header ──────
 import { CollabStack } from '@/components/trip/CollabStack';
@@ -379,6 +383,26 @@ export default function TripDetailScreen() {
     [trip?.diningGuide],
   );
 
+  // Per-stop Google Places photos — feeds the day-card photo pills and the
+  // day albums. Empty until fetchStopPhotos lands them (reactive).
+  const stopPhotosSets = useMemo(
+    () => parseStopPhotos(trip?.stopPhotos),
+    [trip?.stopPhotos],
+  );
+
+  // Lazy backfill: trips that predate stop photos grow them the first time
+  // they're opened. Server-side guards make this a cheap no-op when photos
+  // exist, a fetch is in flight, or generation is still running.
+  const ensureStopPhotosMutation = useMutation(api.tripGeneration.ensureStopPhotos);
+  const ensureStopPhotosFired = useRef(false);
+  useEffect(() => {
+    if (ensureStopPhotosFired.current) return;
+    if (!trip || trip.stopPhotos || trip.status === 'generating') return;
+    if (itinerary.length === 0) return;
+    ensureStopPhotosFired.current = true;
+    ensureStopPhotosMutation({ tripId: trip._id }).catch(() => {});
+  }, [trip, itinerary.length, ensureStopPhotosMutation]);
+
   // Day number → position in the FILTERED itinerary array. The day route
   // resolves its `idx` param against this same filtered array, so chips and
   // links must navigate by filtered position — `day.day - 1` is wrong the
@@ -427,6 +451,19 @@ export default function TripDetailScreen() {
     : 'Destination';
 
   const cityLabel = trip?.capital ?? destinationLabel;
+
+  // ── Trip-level album behind the overview hero ────────────
+  const { openPhotoViewer } = usePhotoViewer();
+  const tripAlbum = useMemo(
+    () =>
+      buildTripAlbum({
+        heroImage,
+        destination: trip?.countryName ?? destinationLabel,
+        dayImages,
+        days: itinerary,
+      }),
+    [heroImage, trip?.countryName, destinationLabel, dayImages, itinerary],
+  );
 
   // ── Handle booking press ─────────────────────────────────
   function handleBookingPress(data: BookingDetailData) {
@@ -581,6 +618,12 @@ export default function TripDetailScreen() {
                 cityName={cityLabel}
                 heroImageUrl={heroImage?.url}
                 duration={typeof trip.duration === 'number' ? trip.duration : undefined}
+                photoCount={tripAlbum.length}
+                onOpenPhotos={
+                  tripAlbum.length > 0
+                    ? () => openPhotoViewer(tripAlbum, 0)
+                    : undefined
+                }
               />
             ) : generating ? (
               <TripHeroSkeleton />
@@ -681,6 +724,8 @@ export default function TripDetailScreen() {
                   tripId={String(trip._id)}
                   days={itinerary}
                   dayImages={dayImages}
+                  activityImages={activityImages}
+                  stopPhotos={stopPhotosSets}
                   tripHeroImage={heroImage}
                   tripStartDate={trip.startDate}
                   destination={trip.countryName}

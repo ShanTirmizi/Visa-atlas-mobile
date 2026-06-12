@@ -6,7 +6,7 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import DayDetailScreen from '@/components/trip/DayDetailScreen';
 import EditDaySheet, { type EditDaySheetRef } from '@/components/trip/EditDaySheet';
-import { parseDiningGuide, parseItineraryDays } from '@/types/itinerary';
+import { parseDiningGuide, parseItineraryDays, parseStopPhotos } from '@/types/itinerary';
 import { useTheme } from '@/contexts/theme-context';
 
 type DayImage = { url: string; thumb?: string; credit?: string; creditUrl?: string } | null;
@@ -60,6 +60,11 @@ export default function DayDetailRoute() {
   const activityImages = useMemo<ActivityImage[]>(
     () => safeParse<ActivityImage[]>(trip?.activityImages, []),
     [trip?.activityImages],
+  );
+  // Per-stop Google Places photos — feeds the day album + slot strips.
+  const stopPhotos = useMemo(
+    () => parseStopPhotos(trip?.stopPhotos),
+    [trip?.stopPhotos],
   );
 
   // ── Two index domains live on this screen — never mix them. ──
@@ -129,6 +134,7 @@ export default function DayDetailRoute() {
         destination={trip.countryName}
         tripStartDate={trip.startDate}
         diningGuide={diningGuide}
+        stopPhotos={stopPhotos}
         onBack={onBack}
         onShare={onShare}
         onEdit={onEdit}

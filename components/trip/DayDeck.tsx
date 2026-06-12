@@ -19,7 +19,9 @@ import { FontFamily } from '@/constants/theme';
 import { PillButton } from '@/components/ui/PillButton';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { TypingDots } from '@/components/ui/TypingDots';
-import type { ItineraryDay } from '@/types/itinerary';
+import type { ItineraryDay, StopPhotoSet, StopSlot } from '@/types/itinerary';
+import { usePhotoViewer } from '@/components/photos/PhotoViewer';
+import { buildDayAlbum, type AlbumImageSource } from '@/utils/photoAlbum';
 
 /** The deck consumes the shared itinerary-day contract (types/itinerary.ts)
  *  — alias retained for existing import sites. */
@@ -33,6 +35,11 @@ interface DayDeckProps {
    *  render; day labels come from `day.day`, so filtering is safe. */
   days: Array<DayDeckDay | null | undefined>;
   dayImages: DayImage[];
+  /** Parsed `trips.activityImages` (3 per stored day) — slot anchor shots
+   *  for the per-day photo album behind the card's photos pill. */
+  activityImages?: AlbumImageSource[];
+  /** Parsed `trips.stopPhotos` — per-stop Google Places photos. */
+  stopPhotos?: StopPhotoSet[];
   tripHeroImage?: DayImage;
   tripStartDate?: string;
   destination?: string;
@@ -152,6 +159,9 @@ interface DeckCardItemProps {
   /** When true, renders a blinking coral cursor at the end of the title —
    *  used on the day currently being written during streaming generation. */
   showCursor?: boolean;
+  /** Day-album size + opener for the card's photos pill. */
+  photoCount?: number;
+  onOpenPhotos?: () => void;
 }
 
 function DeckCardItem({
@@ -167,6 +177,8 @@ function DeckCardItem({
   onTap,
   numDays,
   showCursor,
+  photoCount,
+  onOpenPhotos,
 }: DeckCardItemProps) {
   // Integer offset from center (computed on JS side for render decisions)
   const offset = dayIdx - activeIdxJS;
@@ -243,6 +255,8 @@ function DeckCardItem({
           image={image}
           showCursor={showCursor}
           tripId={tripId}
+          photoCount={photoCount}
+          onOpenPhotos={onOpenPhotos}
         />
       </Animated.View>
     </GestureDetector>
@@ -254,6 +268,8 @@ function DayDeck({
   tripId,
   days,
   dayImages,
+  activityImages,
+  stopPhotos,
   tripHeroImage,
   tripStartDate,
   destination,
@@ -261,6 +277,7 @@ function DayDeck({
   expectedDayCount,
 }: DayDeckProps) {
   const { colors } = useTheme();
+  const { openPhotoViewer } = usePhotoViewer();
   const [activeIdx, setActiveIdx] = useState(0);
   const dragX = useSharedValue(0);
 
@@ -446,6 +463,24 @@ function DayDeck({
           // array position — identical in the steady state (day === idx+1)
           // but stays aligned when a null hole was filtered out mid-stream.
           const dayOffset = (day.day ?? idx + 1) - 1;
+          // Day album behind the photos pill — same assembly the day
+          // screen uses, so both surfaces open identical galleries. Only
+          // the ≤3 visible cards build one; trivial array work.
+          const slotImageAt = (slotIdx: number): AlbumImageSource =>
+            activityImages?.[dayOffset * 3 + slotIdx] ?? null;
+          const album = buildDayAlbum({
+            day,
+            dayNumber: day.day ?? idx + 1,
+            dayImage: dayImages[dayOffset] ?? null,
+            slotImages: (['morning', 'afternoon', 'evening'] as StopSlot[]).reduce(
+              (acc, slot, slotIdx) => {
+                acc[slot] = slotImageAt(slotIdx);
+                return acc;
+              },
+              {} as Partial<Record<StopSlot, AlbumImageSource>>,
+            ),
+            stopPhotos,
+          });
           return (
             <DeckCardItem
               key={idx}
@@ -468,6 +503,8 @@ function DayDeck({
               onTap={openDay}
               numDays={numDays}
               showCursor={isStreaming && idx === streamingDayIndex}
+              photoCount={album.length}
+              onOpenPhotos={() => openPhotoViewer(album, 0)}
             />
           );
         })}

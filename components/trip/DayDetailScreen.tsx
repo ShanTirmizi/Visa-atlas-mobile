@@ -10,7 +10,7 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, ChevronRight, Pencil, Share, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Images, Pencil, Share, Sparkles } from 'lucide-react-native';
 import { FontFamily } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CircleBtn } from '@/components/ui/CircleBtn';
@@ -30,9 +30,16 @@ import {
   type ItineraryDay,
   type DiningGuide,
   type StopSlot,
+  type StopPhotoSet,
   hasStructuredStops,
   stopsForSlot,
 } from '@/types/itinerary';
+import { usePhotoViewer } from '@/components/photos/PhotoViewer';
+import {
+  buildDayAlbum,
+  firstIndexForSlot,
+  indexOfAlbumPhoto,
+} from '@/utils/photoAlbum';
 
 /** The day screen consumes the shared itinerary contract (types/itinerary.ts)
  *  — alias retained for existing import sites. */
@@ -61,6 +68,10 @@ interface DayDetailScreenProps {
   /** Parsed `trips.diningGuide` — lunch/dinner suggestions woven into the
    *  timeline. null hides the dining inserts entirely. */
   diningGuide: DiningGuide | null;
+  /** Parsed `trips.stopPhotos` — per-stop Google Places photos. Feeds the
+   *  day album (hero tap, photos chip, slot strips). Absent → the photo
+   *  affordances quietly cover whatever images the trip already has. */
+  stopPhotos?: StopPhotoSet[];
   onBack: () => void;
   onShare: () => void;
   onEdit?: () => void;
@@ -181,6 +192,7 @@ function DayDetailScreen({
   destination,
   tripStartDate,
   diningGuide,
+  stopPhotos,
   onBack,
   onShare,
   onEdit,
@@ -255,6 +267,42 @@ function DayDetailScreen({
   const tip = useMemo(() => deriveTip(day), [day]);
   const heroTone = useMemo(() => heroToneFromDestination(destination), [destination]);
 
+  // ── Day photo album: scenic day hero → per-slot anchor + stop photos.
+  // Every photo affordance on this screen (hero tap, photos chip, slot
+  // thumbs, stop strips) opens this ONE album so swiping covers the day.
+  const { openPhotoViewer } = usePhotoViewer();
+  const dayNumber = day.day ?? storedDayIndex + 1;
+  const album = useMemo(
+    () =>
+      buildDayAlbum({
+        day,
+        dayNumber,
+        dayImage: heroImage,
+        slotImages: {
+          morning: morningImage,
+          afternoon: afternoonImage,
+          evening: eveningImage,
+        },
+        stopPhotos,
+      }),
+    [day, dayNumber, heroImage, morningImage, afternoonImage, eveningImage, stopPhotos],
+  );
+  const openAlbum = useCallback(() => {
+    openPhotoViewer(album, 0);
+  }, [openPhotoViewer, album]);
+  const openAlbumAtPhoto = useCallback(
+    (url: string) => {
+      openPhotoViewer(album, indexOfAlbumPhoto(album, url));
+    },
+    [openPhotoViewer, album],
+  );
+  const openSlotPhotos = useCallback(
+    (slot: StopSlot) => {
+      openPhotoViewer(album, firstIndexForSlot(album, slot));
+    },
+    [openPhotoViewer, album],
+  );
+
   return (
     <GestureDetector gesture={swipeGesture}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -288,24 +336,58 @@ function DayDetailScreen({
           />
         )}
 
-        {/* ── Hero bottom: kicker + italic title + coral squiggle ── */}
-        <View style={styles.heroBottom}>
-          {subtitle.length > 0 ? (
-            <Text
-              style={[
-                Type.kickerSm,
-                {
-                  color: 'rgba(255,255,255,0.92)',
-                  fontSize: 10,
-                  letterSpacing: 10 * 0.18,
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {(destination ?? '').toUpperCase()}
-              {destination && subtitle ? ' · ' : ''}
-              {subtitle.split(' · ')[0]?.toUpperCase()}
-            </Text>
+        {/* Whole hero opens the day album — Airbnb / Apple Maps hero
+            behaviour. The horizontal page-swipe pan is unaffected (it only
+            activates past ±20px of travel; a clean tap never reaches it). */}
+        {album.length > 0 ? (
+          <Pressable
+            onPress={openAlbum}
+            accessibilityRole="imagebutton"
+            accessibilityLabel={`View ${album.length} photos for this day`}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : null}
+
+        {/* ── Hero bottom: kicker + italic title + coral squiggle ──
+            box-none so the photos chip stays tappable while the texts
+            let hero taps fall through to the album Pressable. */}
+        <View style={styles.heroBottom} pointerEvents="box-none">
+          {subtitle.length > 0 || album.length > 0 ? (
+            <View style={styles.heroKickerRow} pointerEvents="box-none">
+              <Text
+                style={[
+                  Type.kickerSm,
+                  {
+                    color: 'rgba(255,255,255,0.92)',
+                    fontSize: 10,
+                    letterSpacing: 10 * 0.18,
+                    flex: 1,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {subtitle.length > 0
+                  ? `${(destination ?? '').toUpperCase()}${
+                      destination && subtitle ? ' · ' : ''
+                    }${subtitle.split(' · ')[0]?.toUpperCase()}`
+                  : ''}
+              </Text>
+              {album.length > 0 ? (
+                <Pressable
+                  onPress={openAlbum}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View all ${album.length} photos`}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.photosChip,
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Images size={12} color="#FFFFFF" strokeWidth={2.2} />
+                  <Text style={styles.photosChipText}>{album.length}</Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
           <Text
             style={{
@@ -472,11 +554,15 @@ function DayDetailScreen({
               legacy days fall back to chunked-prose slot rows inside. */}
           <DayTimeline
             day={day}
+            dayNumber={dayNumber}
             diningGuide={diningGuide}
             destination={destination}
             morningImage={morningImage}
             afternoonImage={afternoonImage}
             eveningImage={eveningImage}
+            stopPhotos={stopPhotos}
+            onOpenPhoto={openAlbumAtPhoto}
+            onOpenSlotPhotos={openSlotPhotos}
           />
 
 
@@ -632,6 +718,30 @@ const styles = StyleSheet.create({
     left: 22,
     right: 22,
     bottom: 18,
+  },
+  heroKickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  // Glass photos chip — same chrome vocabulary as the day-nav pill above.
+  photosChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  photosChipText: {
+    fontFamily: FontFamily.semibold,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: -0.1,
   },
 
   // ── Sheet ───

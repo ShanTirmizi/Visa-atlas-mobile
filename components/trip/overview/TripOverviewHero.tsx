@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Sun, MapPin } from 'lucide-react-native';
+import { Sun, MapPin, Images } from 'lucide-react-native';
 import { Photo } from '@/components/ui/Photo';
 import { Type } from '@/constants/typography';
 import { Shadows, FontFamily } from '@/constants/theme';
@@ -13,6 +13,10 @@ interface TripOverviewHeroProps {
   cityName: string;
   heroImageUrl?: string;
   duration?: number;
+  /** Trip-album size — shows the photos pill (under the city pill) when > 1. */
+  photoCount?: number;
+  /** Opens the trip's full-screen photo album (hero tap or pill tap). */
+  onOpenPhotos?: () => void;
 }
 
 /**
@@ -33,6 +37,8 @@ export function TripOverviewHero({
   tripName,
   cityName,
   heroImageUrl,
+  photoCount,
+  onOpenPhotos,
 }: TripOverviewHeroProps) {
   const { colors } = useTheme();
   const temperature = getMonthlyTemperature(cityName);
@@ -58,6 +64,17 @@ export function TripOverviewHero({
         pointerEvents="none"
       />
 
+      {/* Whole hero opens the trip album (Airbnb listing-hero behaviour);
+          the overlay pills are plain Views so taps fall through to this. */}
+      {onOpenPhotos ? (
+        <Pressable
+          onPress={onOpenPhotos}
+          accessibilityRole="imagebutton"
+          accessibilityLabel={`View ${photoCount ?? ''} trip photos`}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+
       {/* Top-left: warm white weather pill with coral sun — real monthly
           average high for the destination. Rendered only when we have data;
           we never fabricate conditions we don't know. */}
@@ -79,7 +96,7 @@ export function TripOverviewHero({
         </View>
       )}
 
-      {/* Top-right: glass city pill */}
+      {/* Top-right: glass city pill, photos pill stacked beneath it */}
       <View style={styles.topRight}>
         <View style={styles.cityPill}>
           <MapPin size={12} color="#FFFFFF" />
@@ -94,6 +111,27 @@ export function TripOverviewHero({
             {cityName}
           </Text>
         </View>
+        {onOpenPhotos && (photoCount ?? 0) > 1 ? (
+          <Pressable
+            onPress={onOpenPhotos}
+            accessibilityRole="button"
+            accessibilityLabel={`View all ${photoCount} trip photos`}
+            hitSlop={6}
+            style={({ pressed }) => [styles.photosPill, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Images size={12} color="#FFFFFF" strokeWidth={2.2} />
+            <Text
+              style={{
+                fontFamily: FontFamily.semibold,
+                fontSize: 11,
+                fontWeight: '600',
+                color: '#FFFFFF',
+              }}
+            >
+              {photoCount}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {/* Bottom: kicker + italic destination + coral period */}
@@ -155,6 +193,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
+    alignItems: 'flex-end',
+    gap: 6,
   },
   weatherPill: {
     flexDirection: 'row',
@@ -169,6 +209,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  photosPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,

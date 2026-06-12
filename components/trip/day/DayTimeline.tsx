@@ -7,13 +7,16 @@ import {
   type ItineraryDay,
   type ItineraryStop,
   type StopSlot,
+  type StopPhotoSet,
   type DiningGuide,
   type DiningSpot,
   stopsForSlot,
   hasStructuredStops,
   spotsForDayMeal,
+  photosForStop,
   chunkProse,
 } from '@/types/itinerary';
+import { StopPhotoStrip, type StripPhoto } from '@/components/trip/day/StopPhotoStrip';
 import { openInMaps } from '@/utils/maps';
 import { hapticSelect } from '@/utils/haptics';
 
@@ -45,6 +48,8 @@ export type SlotImage = {
 
 interface DayTimelineProps {
   day: ItineraryDay;
+  /** Authoritative 1-based day number (`day.day`) — the stopPhotos key. */
+  dayNumber: number;
   /** Parsed `trips.diningGuide` — lunch/dinner inserts hide entirely when
    *  null or when no spot matches this day+meal (no empty headers). */
   diningGuide: DiningGuide | null;
@@ -54,6 +59,13 @@ interface DayTimelineProps {
   morningImage: SlotImage;
   afternoonImage: SlotImage;
   eveningImage: SlotImage;
+  /** Parsed `trips.stopPhotos` — drives the per-slot photo strips. Absent
+   *  (pre-feature trip, fetch in flight) → strips simply don't render. */
+  stopPhotos?: StopPhotoSet[];
+  /** Open the day album at a tapped strip photo (matched by url). */
+  onOpenPhoto?: (url: string) => void;
+  /** Open the day album at a slot's first photo (header thumb tap). */
+  onOpenSlotPhotos?: (slot: StopSlot) => void;
 }
 
 // Legacy fixed times — the pre-structured-stops day screen hardcoded
@@ -239,11 +251,14 @@ function DiningInsert({
 function SlotHeader({
   kicker,
   thumbUri,
+  onPressThumb,
   colors,
   children,
 }: {
   kicker: string;
   thumbUri?: string;
+  /** When given, the thumb opens the day album at this slot's photos. */
+  onPressThumb?: () => void;
   colors: ThemeColors;
   children?: React.ReactNode;
 }) {
@@ -265,7 +280,19 @@ function SlotHeader({
         {children}
       </View>
       {thumbUri ? (
-        <Image source={{ uri: thumbUri }} style={styles.slotThumb} />
+        onPressThumb ? (
+          <Pressable
+            onPress={onPressThumb}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="View photos for this part of the day"
+            hitSlop={6}
+            style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+          >
+            <Image source={{ uri: thumbUri }} style={styles.slotThumb} />
+          </Pressable>
+        ) : (
+          <Image source={{ uri: thumbUri }} style={styles.slotThumb} />
+        )
       ) : null}
     </View>
   );
@@ -275,11 +302,15 @@ function SlotHeader({
 
 export function DayTimeline({
   day,
+  dayNumber,
   diningGuide,
   destination,
   morningImage,
   afternoonImage,
   eveningImage,
+  stopPhotos,
+  onOpenPhoto,
+  onOpenSlotPhotos,
 }: DayTimelineProps) {
   const { colors } = useTheme();
   const structured = hasStructuredStops(day);
@@ -313,13 +344,41 @@ export function DayTimeline({
     const thumb = slotImages[slot];
     const thumbUri = thumb?.thumb || thumb?.url || undefined;
 
+    // Real place photos for this slot's stops (legacy days: the slot's
+    // anchor place), in stop order — the Apple Maps place-card photo row.
+    const stripPhotos: StripPhoto[] =
+      stopPhotos && stopPhotos.length > 0
+        ? (stops.length > 0 ? stops.map((s) => s.name) : place ? [place] : []).flatMap(
+            (name) =>
+              photosForStop(stopPhotos, dayNumber, name).map((p) => ({
+                url: p.url,
+                thumb: p.thumb,
+                name,
+              })),
+          )
+        : [];
+    const strip =
+      stripPhotos.length > 0 && onOpenPhoto ? (
+        <StopPhotoStrip
+          photos={stripPhotos}
+          insetLeft={CONTENT_INSET}
+          onOpenPhoto={onOpenPhoto}
+        />
+      ) : null;
+    const onPressThumb = onOpenSlotPhotos ? () => onOpenSlotPhotos(slot) : undefined;
+
     if (structured && (stops.length > 0 || prose.length > 0)) {
       // Header time comes from the slot's first stop; days whose stops
       // carry no times fall back to the legacy fixed times.
       const headerTime = stops[0]?.time?.trim() || fallbackTime;
       sections.push(
         <View key={slot} style={styles.slotSection}>
-          <SlotHeader kicker={`${label} · ${headerTime}`} thumbUri={thumbUri} colors={colors}>
+          <SlotHeader
+            kicker={`${label} · ${headerTime}`}
+            thumbUri={thumbUri}
+            onPressThumb={onPressThumb}
+            colors={colors}
+          >
             {prose ? (
               <Text style={[Type.body13, { color: colors.inkSoft, marginTop: 4 }]}>
                 {prose}
@@ -334,6 +393,7 @@ export function DayTimeline({
               colors={colors}
             />
           ))}
+          {strip}
         </View>,
       );
     } else if (!structured && (prose.length > 0 || place.length > 0)) {
@@ -345,7 +405,12 @@ export function DayTimeline({
       const paragraphs = prose === place ? [] : chunkProse(prose, 2);
       sections.push(
         <View key={slot} style={styles.slotSection}>
-          <SlotHeader kicker={`${label} · ${fallbackTime}`} thumbUri={thumbUri} colors={colors}>
+          <SlotHeader
+            kicker={`${label} · ${fallbackTime}`}
+            thumbUri={thumbUri}
+            onPressThumb={onPressThumb}
+            colors={colors}
+          >
             <Text style={[Type.title17, { color: colors.ink, marginTop: 2 }]}>
               {title}
             </Text>
@@ -365,6 +430,7 @@ export function DayTimeline({
               </Text>
             ))}
           </SlotHeader>
+          {strip}
         </View>,
       );
     }
