@@ -13,7 +13,7 @@
 // every visa* field, budgetBreakdown, dailyBudget, costLevel,
 // packingSuggestions, accommodationTips, visaChecklist,
 // checklistProgress, highlights, status, iataCode, vibeTag, companions,
-// surpriseMe, flightHours, legs.
+// surpriseMe, flightHours, legs, stopPhotosStartedAt.
 //
 // The visa-atlas WEB repo mirrors SharedTripPayload by hand
 // (src/lib/share/types.ts there) — any change to the shapes below must
@@ -41,6 +41,16 @@ export interface SharedImage {
   thumb?: string;
   credit?: string;
   creditUrl?: string;
+}
+
+/** Photos for one (day, stop-name) pair — the public projection of
+ *  trips.stopPhotos (types/itinerary.ts StopPhotoSet). `source` is
+ *  deliberately not a SharedImage key, so it's dropped here like any
+ *  unknown image field. */
+export interface SharedStopPhotoSet {
+  day: number;
+  stop: string;
+  photos: SharedImage[];
 }
 
 export interface SharedLocalGuide {
@@ -77,6 +87,7 @@ export interface SharedTripPayload {
   heroImage: SharedImage | null;
   dayImages: SharedImage[] | null;
   activityImages: SharedImage[] | null;
+  stopPhotos: SharedStopPhotoSet[] | null;
   itinerary: ItineraryDay[];
   diningGuide: DiningGuide | null;
   localGuide: SharedLocalGuide | null;
@@ -154,6 +165,53 @@ function parseSharedImageArray(raw: string | undefined): SharedImage[] | null {
   } catch {
     return null;
   }
+}
+
+// Bounds on the public stop-photo projection — a hostile/bloated
+// trips.stopPhotos value can't balloon the anonymous payload past
+// ~80 × 4 images.
+const MAX_SHARED_STOP_SETS = 80;
+const MAX_SHARED_PHOTOS_PER_STOP = 4;
+
+/** Rebuild trips.stopPhotos entry-by-entry: day must be a positive
+ *  integer, stop a string, and every photo passes toSharedImage (https
+ *  urls only, known keys only). Empty sets are dropped; empty → null. */
+function parseSharedStopPhotos(
+  raw: string | undefined,
+): SharedStopPhotoSet[] | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const sets = parsed
+    .map((value): SharedStopPhotoSet | null => {
+      if (!value || typeof value !== "object") return null;
+      const s = value as Record<string, unknown>;
+      const day = s.day;
+      const stop = str(s.stop);
+      if (
+        typeof day !== "number" ||
+        !Number.isInteger(day) ||
+        day < 1 ||
+        stop === undefined
+      ) {
+        return null;
+      }
+      const photos = Array.isArray(s.photos)
+        ? (s.photos as unknown[])
+            .map(toSharedImage)
+            .filter((img): img is SharedImage => img !== null)
+            .slice(0, MAX_SHARED_PHOTOS_PER_STOP)
+        : [];
+      return photos.length > 0 ? { day, stop, photos } : null;
+    })
+    .filter((s): s is SharedStopPhotoSet => s !== null)
+    .slice(0, MAX_SHARED_STOP_SETS);
+  return sets.length > 0 ? sets : null;
 }
 
 /** Pick ONLY the SharedLocalGuide fields out of trips.localGuide. */
@@ -381,6 +439,7 @@ export function buildSharedTripPayload(trip: Doc<"trips">): SharedTripPayload {
     heroImage: parseSharedImage(trip.heroImage),
     dayImages: parseSharedImageArray(trip.dayImages),
     activityImages: parseSharedImageArray(trip.activityImages),
+    stopPhotos: parseSharedStopPhotos(trip.stopPhotos),
     itinerary: parseItineraryDays(trip.itinerary).map(toSharedItineraryDay),
     diningGuide: toSharedDiningGuide(parseDiningGuide(trip.diningGuide)),
     localGuide: parseSharedLocalGuide(trip.localGuide),

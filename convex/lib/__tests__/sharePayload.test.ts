@@ -87,6 +87,51 @@ describe("buildSharedTripPayload", () => {
     expect(p.diningGuide).toBeNull();
     expect(p.heroImage).toBeNull();
     expect(p.dayImages).toBeNull();
+    expect(p.stopPhotos).toBeNull();
     expect(p.itinerary[0].title).toBe("Old");
+  });
+
+  it("projects stopPhotos: valid sets survive, junk and non-https are dropped", () => {
+    const t = baseTrip as unknown as Record<string, unknown>;
+    const withPhotos = {
+      ...t,
+      stopPhotos: JSON.stringify([
+        {
+          day: 1,
+          stop: "Senso-ji",
+          photos: [
+            { url: "https://g/p1", thumb: "https://g/p1", credit: "Ann", creditUrl: "https://c1", source: "google", secretPhotoKey: "SECRET-PHOTO" },
+            { url: "javascript:alert(1)" },
+          ],
+        },
+        // Invalid shapes: bad day, missing stop, photo-less — all dropped.
+        { day: 0, stop: "Bad day", photos: [{ url: "https://g/x" }] },
+        { day: 2, photos: [{ url: "https://g/y" }] },
+        { day: 2, stop: "No photos", photos: [{ url: "http://insecure" }] },
+        "junk",
+      ]),
+    } as never;
+    const p = buildSharedTripPayload(withPhotos);
+    expect(p.stopPhotos).toHaveLength(1);
+    expect(p.stopPhotos?.[0]).toEqual({
+      day: 1,
+      stop: "Senso-ji",
+      photos: [{ url: "https://g/p1", thumb: "https://g/p1", credit: "Ann", creditUrl: "https://c1" }],
+    });
+    // Unknown nested keys (source, injected junk) never cross the boundary.
+    expect(JSON.stringify(p)).not.toContain("SECRET-PHOTO");
+    expect(JSON.stringify(p)).not.toContain("source");
+  });
+
+  it("caps stopPhotos at 80 sets × 4 photos", () => {
+    const t = baseTrip as unknown as Record<string, unknown>;
+    const big = Array.from({ length: 90 }, (_, i) => ({
+      day: 1,
+      stop: `Stop ${i}`,
+      photos: Array.from({ length: 6 }, (_, j) => ({ url: `https://g/${i}-${j}` })),
+    }));
+    const p = buildSharedTripPayload({ ...t, stopPhotos: JSON.stringify(big) } as never);
+    expect(p.stopPhotos).toHaveLength(80);
+    expect(p.stopPhotos?.[0].photos).toHaveLength(4);
   });
 });
