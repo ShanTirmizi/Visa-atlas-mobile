@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import {
   query,
   mutation,
@@ -66,13 +66,16 @@ export const createShareLink = mutation({
     if (trip === null || trip.deletedAt !== undefined) {
       throw new Error("Trip not found");
     }
+    // ConvexError data survives prod redaction; plain Error doesn't (prod
+    // collapses Error messages to "Server Error", breaking the share
+    // sheet's user-facing copy matcher).
     if (trip.status === "generating") {
-      throw new Error(
+      throw new ConvexError(
         "This trip is still generating — try again when it's ready",
       );
     }
     if (trip.status === "failed") {
-      throw new Error(
+      throw new ConvexError(
         "This trip didn't finish generating — retry it before sharing",
       );
     }

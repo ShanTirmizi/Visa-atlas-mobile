@@ -18,6 +18,7 @@ import { BottomSheetView, type BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useConvexAuth } from 'convex/react';
+import { ConvexError } from 'convex/values';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -72,9 +73,12 @@ export interface ShareTripSheetRef {
 }
 
 /** Surface the backend's generation-guard messages faithfully; collapse
- *  everything else (network blips, request-id noise) to one calm line. */
+ *  everything else (network blips, request-id noise) to one calm line.
+ *  The guards throw ConvexError because its `data` survives prod redaction —
+ *  plain Error messages collapse to "Server Error" on prod deployments. */
 function shareErrorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : '';
+  const raw =
+    err instanceof ConvexError ? String(err.data) : err instanceof Error ? err.message : '';
   // Widened to plain 'generating' so BOTH backend guards (still-generating
   // and didn't-finish/failed) surface their copy verbatim.
   if (raw.includes('generating')) {
