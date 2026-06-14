@@ -4,7 +4,6 @@ import React, {
   useCallback,
   useContext,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { Dimensions } from 'react-native';
@@ -16,7 +15,6 @@ import {
 } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/theme-context';
-import { useKeyboardRestore } from '@/hooks/useKeyboardRestore';
 
 // ──────────────────────────────────────────────
 // AppBottomSheet
@@ -95,15 +93,16 @@ interface AppBottomSheetProps {
    */
   onDismiss?: () => void;
   /**
-   * gorhom keyboard behavior. DEFAULTS to "extend" (the safe form default —
-   * gorhom's own "interactive" default over-lifts a short dynamic sheet and
-   * leaves a keyboard-height dead band; "extend" raises the sheet to its top
-   * position with the scrollable shrinking above the keyboard). For a
-   * multi-field FORM with a primary CTA, pass "fillParent" AND a
-   * `footerComponent` holding that CTA — gorhom pins the footer flush on the
-   * keyboard and the sheet expands to the Dynamic Island with zero dead band
-   * (the verified TripPlannerSheet / AddBookingSheet recipe). Only engages for
-   * a focused BottomSheetTextInput.
+   * gorhom keyboard behavior. DEFAULTS to "extend" — and "extend" is the ONLY
+   * value any form sheet should use. Per gorhom's source (BottomSheet.tsx:640,
+   * 815-846), "extend" is the only behavior that NEVER applies a keyboard offset
+   * to the sheet position AND never sets isInTemporaryPosition. With a single
+   * dynamic content detent it is a position no-op: the sheet does not move for
+   * the keyboard, so there is nothing to restore and the float-on-blur is
+   * impossible by construction. "interactive"/"fillParent" both move the sheet
+   * into a temporary position that mis-restores against the keyboard-era dynamic
+   * detent — that was the float bug; do NOT use them. Pin a primary CTA to the
+   * keyboard with a `footerComponent` (gorhom's animatedFooterPosition).
    */
   keyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
   /**
@@ -140,26 +139,9 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
     // index. onChange(-1) on dismiss resets it for the next present.
     const [settled, setSettled] = useState(false);
 
-    // Internal ref merged with the forwarded one so the keyboard-restore guard
-    // can call snapToIndex(0) on this modal (see useKeyboardRestore).
-    const modalRef = useRef<BottomSheetModal>(null);
-    const setRefs = useCallback(
-      (node: BottomSheetModal | null) => {
-        modalRef.current = node;
-        if (typeof ref === 'function') ref(node);
-        else if (ref) (ref as React.MutableRefObject<BottomSheetModal | null>).current = node;
-      },
-      [ref],
-    );
-    const { handleAnimateForRestore } = useKeyboardRestore(modalRef);
-
-    const handleAnimate = useCallback(
-      (fromIndex: number, toIndex: number) => {
-        setSettled(false);
-        handleAnimateForRestore(fromIndex, toIndex);
-      },
-      [handleAnimateForRestore],
-    );
+    const handleAnimate = useCallback(() => {
+      setSettled(false);
+    }, []);
 
     const handleChange = useCallback(
       (index: number) => {
@@ -188,7 +170,7 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
 
     return (
       <BottomSheetModal
-        ref={setRefs}
+        ref={ref}
         enableDynamicSizing
         maxDynamicContentSize={maxDynamicContentSize}
         // topInset clamps the sheet's POSITION — maxDynamicContentSize only

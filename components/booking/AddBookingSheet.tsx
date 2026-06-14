@@ -21,7 +21,6 @@ import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { type Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
-import { useKeyboardRestore } from '@/hooks/useKeyboardRestore';
 import { Spacing, FontFamily } from '@/constants/theme';
 import { type BookingType } from '@/constants/bookings';
 import { findMatchingTrip } from '@/utils/tripMatcher';
@@ -71,8 +70,6 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
-    // Deterministic restore on keyboard hide — sheet can never stay floated.
-    const { handleAnimateForRestore } = useKeyboardRestore(bottomSheetRef);
 
     // The form's submit lives in the pinned footer; drive it via this handle
     // and mirror the form's validity so the footer CTA enables/disables.
@@ -272,7 +269,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
 
     // ── Pinned footer — the primary CTA. gorhom drives it up to sit flush on
     // the keyboard (animatedFooterPosition), so on focus it hugs the keys with
-    // ZERO dead band while keyboardBehavior="interactive" raises the sheet to
+    // ZERO dead band while keyboardBehavior="extend" raises the sheet to
     // the Dynamic Island. Only shown on the form step; the type picker has no
     // CTA. Fires the form's submit via the imperative handle. ───────────────
     const renderFooter = useCallback(
@@ -331,7 +328,6 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
-        onAnimate={handleAnimateForRestore}
         enableDynamicSizing={true}
         maxDynamicContentSize={maxSheetHeight}
         // topInset is what actually CLAMPS the sheet's top position below the
@@ -341,16 +337,16 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         topInset={insets.top + 10}
         stackBehavior="push"
         backdropComponent={renderBackdrop}
-        // KEYBOARD: the premium "expand to the Dynamic Island" recipe (verified
-        // in-sim against every alternative — see TripPlannerSheet's top-of-file
-        // note). "fillParent" raises the sheet to topInset on focus; the
-        // primary CTA rides the BottomSheetFooter below, which gorhom pins
-        // flush on top of the keyboard (animatedFooterPosition) — ZERO dead
-        // band, no second keyboard owner (the old KAW + "interactive" combo
-        // double-counted and stranded short forms above the keys). "restore"
-        // returns the sheet to its detent on dismiss; adjustResize is gorhom's
-        // documented Android requirement.
-        keyboardBehavior="interactive"
+        // KEYBOARD: "extend" — the only behavior that never moves the sheet into
+        // a temporary position (gorhom BottomSheet.tsx:640,815-846), so the
+        // float-on-blur is impossible at the source (no snapToIndex hack). The
+        // primary CTA rides a BottomSheetFooter that gorhom pins flush on the
+        // keyboard via animatedFooterPosition — no dead band. (NOTE: this is a
+        // multi-input body; the focused field's visibility under the keyboard
+        // is bounded by the content detent — see TripPlannerSheet's top-of-file
+        // note for the full rationale.) "restore" returns to the detent on
+        // dismiss; adjustResize is gorhom's documented Android requirement.
+        keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         // Kill the ~80pt over-drag band below the content at rest.

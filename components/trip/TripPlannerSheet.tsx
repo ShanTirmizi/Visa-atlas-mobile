@@ -20,7 +20,6 @@ import {
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
 import { Sparkles } from 'lucide-react-native';
-import { useKeyboardRestore } from '@/hooks/useKeyboardRestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -61,24 +60,28 @@ const COMPANION_OPTIONS = ['solo', 'partner', 'friends', 'family'];
 // Avatar tones for traveler stack — warm, forest, sunset palette
 const AVATAR_TONES = ['#C4A882', '#6B8F71', '#C97B4B'] as const;
 
-// Keyboard handling on this sheet — the "Anything else?" notes input + the
-// primary CTA live in a gorhom BottomSheetFooter, NOT in the scroll body.
-// gorhom drives the footer up to sit flush on top of the keyboard via its
-// animatedFooterPosition, so the focused input hugs the keys with zero gap —
-// the one mechanism that actually works here. The scroll body holds only the
-// non-input fields (destination → vibes) and reserves paddingBottom equal to
-// the measured footer height so nothing hides behind it at rest.
+// Keyboard handling — the canonical, no-hack recipe (verified against gorhom's
+// own source, BottomSheet.tsx:640 + 815-846):
 //
-// Why a footer and not a keyboard-aware scroller: this is a TALL form, and
-// every scroller approach failed in the simulator —
-//   • KAW (RNKC) + "interactive"/"fillParent": gorhom's keyboard offset
-//     fights the KAW scroll → input stranded a fixed band above the keys.
-//   • plain scroller + "interactive": the last field hid BEHIND the keyboard.
-//   • KAW + "extend": no gorhom offset, but the KAW under-scrolls inside the
-//     translated sheet and leaves the input floating ~a sheet-transform above
-//     the keyboard.
-// The footer sidesteps all of it: gorhom positions it, no scroll math.
-// keyboardBehavior="extend" keeps the sheet body from ALSO shifting.
+//   keyboardBehavior="extend" is the ONLY behavior that never applies a
+//   keyboard offset to the sheet AND never sets gorhom's isInTemporaryPosition
+//   flag. With a single dynamic content detent it is a position NO-OP: the
+//   sheet does not move when the keyboard opens. Because the sheet never enters
+//   a temporary position, there is nothing to "restore" on blur — so the
+//   float-on-blur (a stranded/gapped sheet after the keyboard dismisses) is
+//   IMPOSSIBLE by construction, with no snapToIndex workaround.
+//
+//   The "Anything else?" notes input + the primary CTA live in a gorhom
+//   BottomSheetFooter (NOT the scroll body). gorhom drives ONLY the footer up
+//   to sit flush on the keyboard via animatedFooterPosition — the sheet stays
+//   put, the footer rides the keys with zero gap. The scroll body holds the
+//   non-input fields and reserves paddingBottom = measured footer height.
+//
+// History (do not reintroduce): "fillParent"/"interactive" move the sheet into
+// a temporary position (isInTemporaryPosition) that mis-restores against the
+// keyboard-era dynamic detent → the sheet floated/gapped on blur. A
+// snapToIndex(0)-on-keyboardDidHide guard was tried to paper over it — that is
+// the hack this recipe removes. "extend" fixes it at the source.
 //
 // Modals (date picker, country picker) are rendered OUTSIDE this sheet
 // so they don't pollute the contentContainer measurement.
@@ -227,9 +230,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // model guessing a nationality per run.
     const { passports } = useVisa();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
-    // Deterministic restore: force the sheet back to its content detent on
-    // keyboard hide so it can never stay floated (see useKeyboardRestore).
-    const { handleAnimateForRestore } = useKeyboardRestore(bottomSheetRef);
     const refinementSheetRef = useRef<TripRefinementSheetHandle>(null);
 
     // ── Core state ──────────────────────────────────────────────
@@ -688,7 +688,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       <>
       <BottomSheetModal
         ref={bottomSheetRef}
-        onAnimate={handleAnimateForRestore}
         enableDynamicSizing={true}
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         // CRITICAL: maxDynamicContentSize caps the sheet's HEIGHT, but the
@@ -704,11 +703,17 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         // visible empty band below the CTA at rest.
         overDragResistanceFactor={0}
         backdropComponent={renderBackdrop}
-        // The notes input + CTA ride in this footer, which gorhom lifts to sit
-        // flush on the keyboard (see top-of-file recipe). "extend" keeps the
-        // scroll BODY from also shifting while the footer rises.
+        // The notes input + CTA ride in this footer; gorhom drives it flush onto
+        // the keyboard via animatedFooterPosition. keyboardBehavior="extend" is
+        // the ONLY behavior that never sets gorhom's isInTemporaryPosition flag
+        // and never applies a keyboard offset to the sheet (BottomSheet.tsx:640,
+        // 815-824) — so gorhom does NOT reposition the sheet for the keyboard,
+        // which means there is nothing to "restore" and the float-on-blur is
+        // impossible at the source. (interactive/fillParent DO set the temporary
+        // position and mis-restore against the keyboard-era dynamic detent —
+        // that was the float bug.)
         footerComponent={renderFooter}
-        keyboardBehavior="interactive"
+        keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         // gorhom's documented Android requirement for interactive keyboard
         // handling — the inherited adjustPan default pans the whole window

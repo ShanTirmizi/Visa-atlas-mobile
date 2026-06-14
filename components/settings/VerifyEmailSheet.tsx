@@ -148,7 +148,7 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
     }, [code, verifyCode, onVerified]);
 
     // ── Pinned footer — CTA + Resend. gorhom lifts it flush onto the keyboard
-    // on the code step; keyboardBehavior="interactive" raises the sheet to the
+    // on the code step; keyboardBehavior="extend" raises the sheet to the
     // Dynamic Island so the code field has Apple-2FA breathing room above the
     // pinned action — no dead band. ──────────────────────────────────────────
     const renderFooter = useCallback(
@@ -227,7 +227,7 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
     return (
       <AppBottomSheet
         ref={sheetRef}
-        keyboardBehavior="interactive"
+        keyboardBehavior="extend"
         overDragResistanceFactor={0}
         footerComponent={renderFooter}
       >
