@@ -200,9 +200,11 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
         enableDynamicSizing
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         topInset={insets.top + 10}
-        // "interactive" is gorhom's default (there is no "none") — set
-        // explicitly because keyboard avoidance is shared with RNKC's KAW;
-        // see the comment block near the top of this file.
+        // "interactive" + the KAW scroller below: gorhom shifts the sheet,
+        // RNKC scrolls the focused field above the keyboard. (NOTE: if this
+        // sheet's short configs ever show the keyboard-gap that the planner
+        // had, the fix is the planner's — drop the KAW for a plain
+        // BottomSheetScrollView so gorhom is the sole handler.)
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"

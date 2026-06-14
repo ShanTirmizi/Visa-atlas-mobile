@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import { MapPin } from 'lucide-react-native';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { FontFamily, type ThemeColors } from '@/constants/theme';
@@ -16,7 +17,11 @@ import {
   photosForStop,
   chunkProse,
 } from '@/types/itinerary';
-import { StopPhotoStrip, type StripPhoto } from '@/components/trip/day/StopPhotoStrip';
+import {
+  StopPhotoStrip,
+  StopPhotoStripSkeleton,
+  type StripPhoto,
+} from '@/components/trip/day/StopPhotoStrip';
 import { openInMaps } from '@/utils/maps';
 import { hapticSelect } from '@/utils/haptics';
 
@@ -62,6 +67,10 @@ interface DayTimelineProps {
   /** Parsed `trips.stopPhotos` — drives the per-slot photo strips. Absent
    *  (pre-feature trip, fetch in flight) → strips simply don't render. */
   stopPhotos?: StopPhotoSet[];
+  /** True while the trip's stop photos are still being fetched (the trip is
+   *  loaded, not generating, but `stopPhotos` hasn't landed). Slots with
+   *  places show a shimmer skeleton instead of a bare gap. */
+  photosLoading?: boolean;
   /** Open the day album at a tapped strip photo (matched by url). */
   onOpenPhoto?: (url: string) => void;
   /** Open the day album at a slot's first photo (header thumb tap). */
@@ -72,12 +81,13 @@ interface DayTimelineProps {
 // these on its three rows; legacy days keep them so nothing regresses.
 const SLOT_META: {
   slot: StopSlot;
+  /** Editorial section title (title-case) — the scannable "chapter" header. */
   label: string;
   fallbackTime: string;
 }[] = [
-  { slot: 'morning', label: 'MORNING', fallbackTime: '09:30' },
-  { slot: 'afternoon', label: 'AFTERNOON', fallbackTime: '13:00' },
-  { slot: 'evening', label: 'EVENING', fallbackTime: '18:30' },
+  { slot: 'morning', label: 'Morning', fallbackTime: '09:30' },
+  { slot: 'afternoon', label: 'Afternoon', fallbackTime: '13:00' },
+  { slot: 'evening', label: 'Evening', fallbackTime: '18:30' },
 ];
 
 const SLOT_PLACE: Record<StopSlot, 'morningPlace' | 'afternoonPlace' | 'eveningPlace'> = {
@@ -115,6 +125,8 @@ function StopRow({
     .filter(Boolean)
     .join(' · ');
   const note = stop.note.trim();
+  const area = (stop.area ?? '').trim();
+  const tip = (stop.tip ?? '').trim();
 
   return (
     <Pressable
@@ -135,15 +147,63 @@ function StopRow({
         <Text style={[Type.title17, { color: colors.ink, marginTop: 2 }]}>
           {stop.name}
         </Text>
+        {/* Specific micro-location — reads as a real address hint, the
+            "where exactly" the user asked for. */}
+        {area ? (
+          <View style={styles.areaRow}>
+            <MapPin size={11} color={colors.inkMute} strokeWidth={2} />
+            <Text
+              style={[Type.meta11, { color: colors.inkMute, flex: 1 }]}
+              numberOfLines={1}
+            >
+              {area}
+            </Text>
+          </View>
+        ) : null}
         {note ? (
           <Text
             style={[
               Type.body12_5,
-              { color: colors.inkMute, lineHeight: 18, marginTop: 3 },
+              { color: colors.inkMute, lineHeight: 18, marginTop: 4 },
             ]}
           >
             {note}
           </Text>
+        ) : null}
+        {/* One concrete, actionable tip — the named dish / gate / viewpoint. */}
+        {tip ? (
+          <View style={styles.tipRow}>
+            <Text
+              style={[
+                Type.kickerSm,
+                { color: colors.coralDeep, fontSize: 8, letterSpacing: 8 * 0.14, marginTop: 3 },
+              ]}
+            >
+              TIP
+            </Text>
+            <Text
+              style={[
+                Type.body12_5,
+                { color: colors.inkSoft, lineHeight: 18, flex: 1 },
+              ]}
+            >
+              {tip}
+            </Text>
+          </View>
+        ) : null}
+        {/* Soft pill per house rule — same-token text on a matching bg tint,
+            no leading dot. Mirrors the dining "RESERVE AHEAD" pill. */}
+        {stop.reserveAhead ? (
+          <View style={[styles.reservePill, { backgroundColor: colors.goldSoft }]}>
+            <Text
+              style={[
+                Type.kickerSm,
+                { color: colors.gold, fontSize: 8, letterSpacing: 8 * 0.14 },
+              ]}
+            >
+              RESERVE AHEAD
+            </Text>
+          </View>
         ) : null}
       </View>
       {/* Same trailing-affordance vocabulary as DayMapStrip's rows and the
@@ -249,13 +309,17 @@ function DiningInsert({
 // ── Slot header (shared by structured + legacy sections) ─────────
 
 function SlotHeader({
-  kicker,
+  label,
+  time,
   thumbUri,
   onPressThumb,
   colors,
   children,
 }: {
-  kicker: string;
+  /** Title-case section title, e.g. "Morning". */
+  label: string;
+  /** 24h start time for the section, e.g. "10:00". */
+  time: string;
   thumbUri?: string;
   /** When given, the thumb opens the day album at this slot's photos. */
   onPressThumb?: () => void;
@@ -274,9 +338,18 @@ function SlotHeader({
         ]}
       />
       <View style={{ flex: 1 }}>
-        <Text style={[Type.kicker, { color: colors.coralDeep, fontSize: 10 }]}>
-          {kicker}
-        </Text>
+        {/* Editorial chapter header — Fraunces italic title + coral period,
+            with a quiet mono time accent. Makes Morning / Afternoon / Evening
+            scan as distinct sections instead of small mono kickers. */}
+        <View style={styles.slotTitleRow}>
+          <Text style={[styles.slotTitle, { color: colors.ink }]}>
+            {label}
+            <Text style={{ color: colors.coral }}>.</Text>
+          </Text>
+          <Text style={[Type.kicker, { color: colors.coralDeep, fontSize: 9.5, marginLeft: 8 }]}>
+            {time}
+          </Text>
+        </View>
         {children}
       </View>
       {thumbUri ? (
@@ -309,6 +382,7 @@ export function DayTimeline({
   afternoonImage,
   eveningImage,
   stopPhotos,
+  photosLoading,
   onOpenPhoto,
   onOpenSlotPhotos,
 }: DayTimelineProps) {
@@ -357,6 +431,7 @@ export function DayTimeline({
               })),
           )
         : [];
+    const slotHasPlaces = stops.length > 0 || place.length > 0;
     const strip =
       stripPhotos.length > 0 && onOpenPhoto ? (
         <StopPhotoStrip
@@ -364,6 +439,10 @@ export function DayTimeline({
           insetLeft={CONTENT_INSET}
           onOpenPhoto={onOpenPhoto}
         />
+      ) : photosLoading && slotHasPlaces ? (
+        // Photos still fetching — shimmer in place so the slot reads as
+        // loading rather than empty.
+        <StopPhotoStripSkeleton insetLeft={CONTENT_INSET} />
       ) : null;
     const onPressThumb = onOpenSlotPhotos ? () => onOpenSlotPhotos(slot) : undefined;
 
@@ -374,16 +453,28 @@ export function DayTimeline({
       sections.push(
         <View key={slot} style={styles.slotSection}>
           <SlotHeader
-            kicker={`${label} · ${headerTime}`}
+            label={label}
+            time={headerTime}
             thumbUri={thumbUri}
             onPressThumb={onPressThumb}
             colors={colors}
           >
-            {prose ? (
-              <Text style={[Type.body13, { color: colors.inkSoft, marginTop: 4 }]}>
-                {prose}
-              </Text>
-            ) : null}
+            {/* Chunk the connective prose into ≤2-sentence paragraphs (same
+                treatment legacy days already get) so the slot intro reads as
+                breathable blocks, not one dense run. */}
+            {prose
+              ? chunkProse(prose, 2).map((p, i) => (
+                  <Text
+                    key={i}
+                    style={[
+                      Type.body13,
+                      { color: colors.inkSoft, marginTop: i === 0 ? 4 : 8 },
+                    ]}
+                  >
+                    {p}
+                  </Text>
+                ))
+              : null}
           </SlotHeader>
           {stops.map((stop, i) => (
             <StopRow
@@ -406,7 +497,8 @@ export function DayTimeline({
       sections.push(
         <View key={slot} style={styles.slotSection}>
           <SlotHeader
-            kicker={`${label} · ${fallbackTime}`}
+            label={label}
+            time={fallbackTime}
             thumbUri={thumbUri}
             onPressThumb={onPressThumb}
             colors={colors}
@@ -489,7 +581,34 @@ const styles = StyleSheet.create({
     width: 2,
   },
   slotSection: {
-    paddingVertical: 8,
+    // More air between Morning / Afternoon / Evening so they read as
+    // distinct chapters, not one continuous column.
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  slotTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 1,
+  },
+  slotTitle: {
+    fontFamily: FontFamily.displayItalic,
+    fontStyle: 'italic',
+    fontSize: 19,
+    fontWeight: '500',
+    letterSpacing: -19 * 0.014,
+  },
+  areaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 5,
+    alignItems: 'flex-start',
   },
   slotHeaderRow: {
     flexDirection: 'row',
@@ -517,7 +636,7 @@ const styles = StyleSheet.create({
   stopRow: {
     flexDirection: 'row',
     gap: ROW_GAP,
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   stopDotCol: {
     width: DOT_COL,

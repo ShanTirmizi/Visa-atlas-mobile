@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ActivityIndicator, Share, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useQuery, useConvexAuth } from 'convex/react';
+import { useQuery, useMutation, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import DayDetailScreen from '@/components/trip/DayDetailScreen';
@@ -66,6 +66,37 @@ export default function DayDetailRoute() {
     () => parseStopPhotos(trip?.stopPhotos),
     [trip?.stopPhotos],
   );
+
+  // Lazy backfill: deep-linking straight to a day (skipping trip detail)
+  // still kicks off the stop-photos fetch. Cheap server-side no-op once
+  // photos exist / a fetch is in flight / the trip is still generating.
+  const ensureStopPhotos = useMutation(api.tripGeneration.ensureStopPhotos);
+  const ensuredRef = useRef(false);
+  useEffect(() => {
+    if (ensuredRef.current) return;
+    if (!trip || trip.stopPhotos || trip.status === 'generating') return;
+    ensuredRef.current = true;
+    ensureStopPhotos({ tripId }).catch(() => {});
+  }, [trip, tripId, ensureStopPhotos]);
+
+  // Photos are still being fetched when the trip is loaded (not generating)
+  // but `stopPhotos` hasn't landed. The server deliberately leaves the field
+  // unset on a failed/empty fetch so a later open can retry — which would
+  // otherwise shimmer forever. So we TIME-BOX the skeleton: it self-cancels
+  // after a window longer than a normal fetch, leaving the slot simply empty
+  // (the correct "no photos" state) rather than a perpetual loading shimmer.
+  const photosUnresolved = !!trip && !trip.stopPhotos && trip.status !== 'generating';
+  const [photosTimedOut, setPhotosTimedOut] = useState(false);
+  useEffect(() => {
+    if (!photosUnresolved) {
+      setPhotosTimedOut(false);
+      return;
+    }
+    setPhotosTimedOut(false);
+    const t = setTimeout(() => setPhotosTimedOut(true), 18_000);
+    return () => clearTimeout(t);
+  }, [photosUnresolved]);
+  const photosLoading = photosUnresolved && !photosTimedOut;
 
   // ── Two index domains live on this screen — never mix them. ──
   //
@@ -135,6 +166,7 @@ export default function DayDetailRoute() {
         tripStartDate={trip.startDate}
         diningGuide={diningGuide}
         stopPhotos={stopPhotos}
+        photosLoading={photosLoading}
         onBack={onBack}
         onShare={onShare}
         onEdit={onEdit}

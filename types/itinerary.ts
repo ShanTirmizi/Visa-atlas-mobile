@@ -36,13 +36,24 @@ export interface ItineraryStop {
   slot: StopSlot;
   /** Real place name — also feeds the Apple Maps search deep link. */
   name: string;
-  /** ONE editorial sentence: what you do there and why it earns its slot. */
+  /** 1-2 sentences: the SPECIFIC thing to do here (a named dish/room/work,
+   *  a viewpoint, a route) and why it earns its slot — never "explore". */
   note: string;
   kind?: StopKind;
   /** 24h local start time, e.g. "09:00". Plausible, not booked. */
   time?: string;
   /** Human-form dwell time, e.g. "1½ hrs". */
   duration?: string;
+  /** Specific neighbourhood / street / micro-area, e.g.
+   *  "Trastevere, by Piazza di Santa Maria". Sharpens the Maps search and
+   *  reads as a real address hint, not a city name. */
+  area?: string;
+  /** ONE concrete, actionable tip — a named dish to order, the specific
+   *  gate/entrance/platform, the exact viewpoint or trail, what to see
+   *  first. The "Order the carbonara" pattern, mirrored from DiningSpot. */
+  tip?: string;
+  /** True when the stop needs a reservation / timed ticket booked ahead. */
+  reserveAhead?: boolean;
 }
 
 export interface ItineraryDay {
@@ -370,6 +381,51 @@ export function mergeStopsIntoProposal(
     if (keptStops.length === 0) return proposed;
     return { ...proposed, stops: keptStops };
   });
+}
+
+/**
+ * Normalize a chat/refinement proposal into the FULL ordered itinerary.
+ *
+ * The trip-chat endpoint returns either the complete new plan (`replaceAll`
+ * — used when the day count or order changed) or ONLY the days it edited
+ * (`replaceAll === false` — the common "tweak day 2 / add an evening
+ * activity" case, kept small so the model emits a fraction of the tokens and
+ * the reply lands fast). Both normalize here into one ItineraryDay[] the
+ * rest of the apply path (diff card, mergeStopsIntoProposal, updateTripField)
+ * treats uniformly. A partial proposal replaces the matching `day` number and
+ * leaves every other day untouched; a proposed day whose number doesn't exist
+ * yet is appended in order. Without this, a partial proposal would read as
+ * "every other day removed" to the diff card.
+ */
+export function mergeDayUpdates(
+  current: ItineraryDay[],
+  proposed: ItineraryDay[],
+  replaceAll: boolean,
+): ItineraryDay[] {
+  if (replaceAll) return proposed;
+  if (proposed.length === 0) return current;
+
+  const proposedByDay = new Map<number, ItineraryDay>();
+  for (const d of proposed) {
+    if (d && typeof d.day === 'number') proposedByDay.set(d.day, d);
+  }
+
+  const merged: ItineraryDay[] = current.map((d) =>
+    d && typeof d.day === 'number' && proposedByDay.has(d.day)
+      ? (proposedByDay.get(d.day) as ItineraryDay)
+      : d,
+  );
+
+  // Tolerate (don't lose) a day the model added through the partial channel,
+  // even though replaceAll is the intended path for structural changes.
+  const currentDayNums = new Set(
+    current.map((d) => d?.day).filter((n): n is number => typeof n === 'number'),
+  );
+  const added = proposed
+    .filter((d) => typeof d?.day === 'number' && !currentDayNums.has(d.day))
+    .sort((a, b) => a.day - b.day);
+
+  return added.length > 0 ? [...merged, ...added] : merged;
 }
 
 // ── Server-side dining normalization ─────────────────────────────

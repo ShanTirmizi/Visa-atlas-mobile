@@ -323,16 +323,17 @@ function safeParseArray(raw: string): any[] {
 
 /**
  * Output-token budget for the itinerary stream, scaled to trip length.
- * A generated day now runs ~750–1100 output tokens (the prose plus 4-7
- * structured stops at ~350 extra tokens/day); a flat 8192 cap silently
- * truncated long itineraries, which then completed as 'planned' with
- * missing days. Sonnet supports 64k output tokens, so trips up to ~52
- * days stay fully inside the cap; longer trips can truncate at the
- * ceiling, where completeGeneration's realDays < duration check marks
- * 'itinerary' failed so the retry card surfaces.
+ * A generated day now runs ~1300–1700 output tokens (the prose plus 4-7
+ * structured stops carrying area + a concrete tip + reserveAhead at
+ * ~120-180 extra tokens/stop); a flat 8192 cap silently truncated long
+ * itineraries, which then completed as 'planned' with missing days. Sonnet
+ * supports 64k output tokens, so trips up to ~36 days stay fully inside the
+ * cap; longer trips can truncate at the ceiling, where completeGeneration's
+ * realDays < duration check marks 'itinerary' failed so the retry card
+ * surfaces.
  */
 const itineraryMaxTokens = (duration: number) =>
-  Math.min(64_000, Math.max(8_192, 2_048 + duration * 1150));
+  Math.min(64_000, Math.max(8_192, 2_048 + duration * 1700));
 
 /**
  * Stream the itinerary (day-by-day) into the trip doc. Shared by the main
@@ -1324,11 +1325,11 @@ ${JSON.stringify(day)}
 
 ${guidance}
 
-Keep the exact same JSON shape (same keys), keep "day": ${dayIndex + 1}, recommend real places by name. When the day object contains a "stops" array, rewrite it to match the new plan — 4-7 stops across morning/afternoon/evening with the same per-stop keys (slot, time, name, note, kind, duration) — keeping the prose and the stops telling the same story. Output ONLY the JSON object — no fences, no commentary.`;
+Keep the exact same JSON shape (same keys), keep "day": ${dayIndex + 1}, recommend real places by name. When the day object contains a "stops" array, rewrite it to match the new plan — 4-7 stops across morning/afternoon/evening with the same per-stop keys (slot, time, name, note, kind, duration, area, tip, reserveAhead) — every stop a real NAMED place with a specific "area" (street/micro-neighbourhood) and a concrete "tip" (named dish / gate / viewpoint), keeping the prose and the stops telling the same story. Output ONLY the JSON object — no fences, no commentary.`;
 
       await new Promise<void>((resolve) => {
         streamAnthropic(
-          { apiKey, systemPrompt, userPrompt, maxTokens: 2048 },
+          { apiKey, systemPrompt, userPrompt, maxTokens: 4096 },
           makeWholeSectionBuffer(
             async (full) => {
               try {
@@ -1738,9 +1739,12 @@ Output a JSON object with this exact shape:
           "slot": "morning" | "afternoon" | "evening",
           "time": "09:00",
           "name": "Real place name — exact enough to find in Apple Maps",
-          "note": "ONE editorial sentence: what you do there and why it earns its slot.",
+          "note": "1-2 sentences naming what specifically to do here — never generic 'explore the area'.",
           "kind": "landmark" | "museum" | "gallery" | "market" | "nature" | "walk" | "neighborhood" | "experience" | "cafe" | "viewpoint" | "beach" | "shopping",
-          "duration": "1½ hrs"
+          "duration": "1½ hrs",
+          "area": "Specific neighbourhood or street, e.g. 'Trastevere, by Piazza di Santa Maria'",
+          "tip": "Optional ONE concrete action — a named dish, the specific gate/entrance, the exact viewpoint. Omit if nothing concrete to add.",
+          "reserveAhead": true
         }
       ]
     }
@@ -1750,7 +1754,7 @@ Output a JSON object with this exact shape:
 Rules:
 - Cover EXACTLY the days listed above — no more, no fewer.
 - 4-7 stops per day, spread across the three slots (each slot gets at least one). Times are plausible 24h local starts in chronological order.
-- Every stop is a real, currently-operating place CONSISTENT WITH THE EXISTING PROSE — extract and structure what the prose already describes; only invent a stop when a slot's prose names no place.
+- Every stop is a real, currently-operating, NAMED place CONSISTENT WITH THE EXISTING PROSE — extract and structure what the prose already describes; only invent a stop when a slot's prose names no place. Set "area" to a specific street/micro-neighbourhood, "tip" to the concrete signature action, and "reserveAhead": true when a booking is needed.
 
 Output ONLY the JSON object. No preamble, no markdown fences.`;
 
@@ -1816,6 +1820,9 @@ Output ONLY the JSON object. No preamble, no markdown fences.`;
                       ...(typeof s.kind === "string" ? { kind: s.kind } : {}),
                       ...(typeof s.time === "string" ? { time: s.time } : {}),
                       ...(typeof s.duration === "string" ? { duration: s.duration } : {}),
+                      ...(typeof s.area === "string" ? { area: s.area } : {}),
+                      ...(typeof s.tip === "string" ? { tip: s.tip } : {}),
+                      ...(typeof s.reserveAhead === "boolean" ? { reserveAhead: s.reserveAhead } : {}),
                     })),
                   });
                 }
@@ -1868,6 +1875,9 @@ export const _mergeBackfilledStops = internalMutation({
             kind: v.optional(v.string()),
             time: v.optional(v.string()),
             duration: v.optional(v.string()),
+            area: v.optional(v.string()),
+            tip: v.optional(v.string()),
+            reserveAhead: v.optional(v.boolean()),
           }),
         ),
       }),

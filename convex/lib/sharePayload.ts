@@ -306,6 +306,8 @@ function toSharedStop(stop: ItineraryStop): ItineraryStop {
   const kind = oneOf(s.kind, STOP_KINDS);
   const time = str(s.time);
   const duration = str(s.duration);
+  const area = str(s.area);
+  const tip = str(s.tip);
   return {
     slot: stop.slot,
     name: stop.name,
@@ -313,6 +315,9 @@ function toSharedStop(stop: ItineraryStop): ItineraryStop {
     ...(kind !== undefined ? { kind } : {}),
     ...(time !== undefined ? { time } : {}),
     ...(duration !== undefined ? { duration } : {}),
+    ...(area !== undefined ? { area } : {}),
+    ...(tip !== undefined ? { tip } : {}),
+    ...(s.reserveAhead === true ? { reserveAhead: true } : {}),
   };
 }
 

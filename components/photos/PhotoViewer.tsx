@@ -25,6 +25,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -116,6 +117,11 @@ function PhotoViewerModal({
 }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  // react-native-zoom-toolkit's Gallery measures each page from its
+  // renderItem child's onLayout and feeds that size into the pan/zoom math.
+  // The child therefore MUST carry a concrete size — an absolutely-filled
+  // image measures 0×0 and collapses to nothing (the black-screen bug).
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const { photos, startIndex } = session;
 
   const [index, setIndex] = useState(startIndex);
@@ -177,19 +183,23 @@ function PhotoViewerModal({
 
   const renderItem = useCallback(
     (item: AlbumPhoto, itemIndex: number) => (
-      <ExpoImage
-        source={{ uri: item.url }}
-        // Strip thumbs are the same cached 1200px file, so this is usually
-        // an instant cache hit; distinct thumbs paint low-res first.
-        placeholder={item.thumb && item.thumb !== item.url ? { uri: item.thumb } : undefined}
-        contentFit="contain"
-        transition={120}
-        recyclingKey={`${item.url}-${itemIndex}`}
-        style={StyleSheet.absoluteFill}
-        accessibilityLabel={item.title ?? 'Trip photo'}
-      />
+      // Full-screen, explicitly sized box (black, so 'contain' letterboxes on
+      // true black like iOS Photos). The size is what the Gallery measures.
+      <View style={{ width: screenW, height: screenH, backgroundColor: '#000000' }}>
+        <ExpoImage
+          source={{ uri: item.url }}
+          // Strip thumbs are the same cached 1200px file, so this is usually
+          // an instant cache hit; distinct thumbs paint low-res first.
+          placeholder={item.thumb && item.thumb !== item.url ? { uri: item.thumb } : undefined}
+          contentFit="contain"
+          transition={120}
+          recyclingKey={`${item.url}-${itemIndex}`}
+          style={{ width: screenW, height: screenH }}
+          accessibilityLabel={item.title ?? 'Trip photo'}
+        />
+      </View>
     ),
-    [],
+    [screenW, screenH],
   );
 
   const keyExtractor = useCallback(

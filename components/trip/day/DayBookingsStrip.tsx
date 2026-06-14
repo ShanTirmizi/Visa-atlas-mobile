@@ -44,6 +44,16 @@ const TYPE_ICONS: Record<
   restaurant: UtensilsCrossed,
 };
 
+// Types that legitimately span a date range (the end date is meaningful).
+// Everything else is point-in-time and matches ONLY its start day, even if a
+// stale endDate is present on the doc — this defends the day view against
+// legacy bookings written by the old whole-trip-range prefill bug.
+const RANGED_TYPES: ReadonlySet<BookingType> = new Set([
+  'hotel',
+  'car_rental',
+  'insurance',
+]);
+
 // Compact kickers — "FLIGHT" not "BOARDING PASS"; these are at-a-glance
 // rows woven into the day, not full booking cards.
 const TYPE_KICKER: Record<BookingType, string> = {
@@ -101,9 +111,15 @@ export function DayBookingsStrip({
       .filter((b) => {
         const startKey = b.startDate.slice(0, 10);
         const endKey = b.endDate?.slice(0, 10);
-        // Ranged bookings cover every day in [start, end]; point-in-time
-        // bookings only their start day. YYYY-MM-DD compares lexically.
-        return endKey ? startKey <= dayKey && dayKey <= endKey : startKey === dayKey;
+        // A booking spans multiple days ONLY when it's a ranged type AND the
+        // end date is strictly after the start. A flight/dinner with a bogus
+        // endDate (or a degenerate endDate === startDate) collapses to its
+        // start day. YYYY-MM-DD compares lexically.
+        const hasRealRange =
+          RANGED_TYPES.has(b.type) && !!endKey && endKey > startKey;
+        return hasRealRange
+          ? startKey <= dayKey && dayKey <= (endKey as string)
+          : startKey === dayKey;
       })
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
   }, [bookings, dayKey]);

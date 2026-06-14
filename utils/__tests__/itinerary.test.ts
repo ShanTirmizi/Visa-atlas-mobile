@@ -9,6 +9,7 @@ import {
   spotsForDayMeal,
   normalizeDiningGuide,
   mergeStopsIntoProposal,
+  mergeDayUpdates,
   type ItineraryDay,
   type ItineraryStop,
   type DiningGuide,
@@ -414,5 +415,59 @@ describe('normalizeDiningGuide', () => {
       { dish: 'Cacio e pepe', note: 'The benchmark.' },
     ]);
     expect(result!.spots[0].name.length).toBeLessThanOrEqual(80);
+  });
+});
+
+// ── mergeDayUpdates (chat partial/full proposals) ────────────────
+describe('mergeDayUpdates', () => {
+  const days = (...nums: number[]): ItineraryDay[] =>
+    nums.map((n) => baseDay({ day: n, title: `Day ${n}` }));
+
+  it('replaceAll=true returns the proposal verbatim (structural changes)', () => {
+    const current = days(1, 2, 3, 4);
+    const proposal = days(1, 2, 3); // shortened to 3 days
+    expect(mergeDayUpdates(current, proposal, true)).toEqual(proposal);
+  });
+
+  it('replaceAll=false replaces only the matching day, leaving others intact', () => {
+    const current = days(1, 2, 3);
+    const edited = baseDay({ day: 2, title: 'Relaxed Day 2', evening: 'New plan' });
+    const merged = mergeDayUpdates(current, [edited], false);
+    expect(merged).toHaveLength(3);
+    expect(merged[0].title).toBe('Day 1');
+    expect(merged[1]).toEqual(edited); // day 2 swapped
+    expect(merged[2].title).toBe('Day 3');
+  });
+
+  it('preserves current order when the partial proposal is out of order', () => {
+    const current = days(1, 2, 3);
+    const merged = mergeDayUpdates(
+      current,
+      [baseDay({ day: 3, title: 'X' }), baseDay({ day: 1, title: 'Y' })],
+      false,
+    );
+    expect(merged.map((d) => d.day)).toEqual([1, 2, 3]);
+    expect(merged[0].title).toBe('Y');
+    expect(merged[2].title).toBe('X');
+  });
+
+  it('empty partial proposal is a no-op', () => {
+    const current = days(1, 2);
+    expect(mergeDayUpdates(current, [], false)).toEqual(current);
+  });
+
+  it('appends a genuinely new day number from the partial channel', () => {
+    const current = days(1, 2);
+    const merged = mergeDayUpdates(current, [baseDay({ day: 3, title: 'Added' })], false);
+    expect(merged.map((d) => d.day)).toEqual([1, 2, 3]);
+  });
+
+  it('carries structured stops through (so chat edits actually render)', () => {
+    const stop: ItineraryStop = { slot: 'evening', name: 'Yarra River walk', note: 'Stroll' };
+    const current = days(1, 2);
+    const edited = baseDay({ day: 1, stops: [stop] });
+    const merged = mergeDayUpdates(current, [edited], false);
+    expect(hasStructuredStops(merged[0])).toBe(true);
+    expect(merged[0].stops?.[0].name).toBe('Yarra River walk');
   });
 });

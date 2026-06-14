@@ -230,6 +230,11 @@ export function ExploreSheet({
       index={0}
       snapPoints={snapPoints}
       topInset={sheetTopInset}
+      // Detent-driven (explicit snapPoints), so opt OUT of v5's default
+      // content-measured dynamic sizing — otherwise filtering the search list
+      // shrinks the measured content and churns/re-sorts the detent array on
+      // every keystroke (the gorhom dynamic-sizing-search landmine).
+      enableDynamicSizing={false}
       backgroundStyle={[
         styles.sheetBackground,
         { backgroundColor: colors.background },

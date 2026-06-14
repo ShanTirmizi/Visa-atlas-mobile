@@ -109,7 +109,6 @@ export interface BookingFormProps {
   onSubmit: (data: BookingFormData) => void;
   defaultCountryCode?: string;
   defaultStartDate?: string;
-  defaultEndDate?: string;
   prefillData?: Partial<BookingFormData>;
   /** Editing an existing booking — hides the back-to-type-picker arrow
    *  (changing a booking's type mid-edit is unsupported: the updateBooking
@@ -127,7 +126,6 @@ export default function BookingForm({
   onSubmit,
   defaultCountryCode = '',
   defaultStartDate = '',
-  defaultEndDate = '',
   prefillData,
   isEditing = false,
 }: BookingFormProps) {
@@ -142,7 +140,9 @@ export default function BookingForm({
   // ── State ──────────────────────────────────
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState(defaultStartDate);
-  const [endDate, setEndDate] = useState(defaultEndDate);
+  // End date is never seeded from a default (a booking only gets one the user
+  // picks); it arrives via prefillData for scans/edits.
+  const [endDate, setEndDate] = useState('');
   const [location, setLocation] = useState('');
   const [countryCode, setCountryCode] = useState(defaultCountryCode);
   const [confirmationNumber, setConfirmationNumber] = useState('');
@@ -241,6 +241,11 @@ export default function BookingForm({
     onSubmit({
       title: effectiveTitle,
       startDate: startDate.trim(),
+      // endDate is submitted as-is: ranged types (hotel/car/insurance) use it
+      // as a check-out/drop-off, and flights legitimately carry it as the
+      // ARRIVAL datetime (scan-imported). The whole-trip-range bug is fixed at
+      // the source — AddBookingSheet no longer seeds it from trip.endDate —
+      // and the day view (DayBookingsStrip) only treats ranged types as spans.
       endDate: endDate.trim(),
       location: location.trim(),
       countryCode: countryCode.trim(),

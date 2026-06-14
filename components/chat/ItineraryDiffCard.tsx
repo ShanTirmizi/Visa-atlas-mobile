@@ -17,7 +17,8 @@ import { useTheme } from '@/contexts/theme-context';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { hapticImpact, hapticSelect } from '@/utils/haptics';
 import { FontFamily } from '@/constants/theme';
-import type { ItineraryDay } from '@/types/itinerary';
+import type { ItineraryDay, StopSlot } from '@/types/itinerary';
+import { stopsForSlot } from '@/types/itinerary';
 
 // Diff-tolerant view of the shared day contract — AI proposals may carry
 // partial days, so everything except the matching key is optional.
@@ -71,12 +72,22 @@ export function diffItineraries(
   const proposedDayNumbers = new Set(proposed.map((d) => d.day));
   const diffs: DayDiff[] = [];
 
-  const slots: { slot: SlotChange['slot']; key: keyof DiffDay & ('title' | 'morning' | 'afternoon' | 'evening') }[] = [
-    { slot: 'Title', key: 'title' },
+  // Title compares plainly; each slot compares its connective prose AND its
+  // structured stops, so a chat edit that swaps a stop (same prose) still
+  // surfaces a review hunk instead of silently applying.
+  const proseSlots: { slot: Exclude<SlotChange['slot'], 'Title'>; key: 'morning' | 'afternoon' | 'evening' }[] = [
     { slot: 'Morning', key: 'morning' },
     { slot: 'Afternoon', key: 'afternoon' },
     { slot: 'Evening', key: 'evening' },
   ];
+
+  // "Stop A · Stop B" — the slot's stop names in order, the human-legible
+  // signal of what changed when the prose itself didn't move.
+  const stopNames = (d: DiffDay, slot: StopSlot): string =>
+    stopsForSlot(d, slot)
+      .map((s) => s.name.trim())
+      .filter(Boolean)
+      .join(' · ');
 
   for (const next of proposed) {
     const prev = currentByDay.get(next.day);
@@ -90,11 +101,30 @@ export function diffItineraries(
       continue;
     }
     const changes: SlotChange[] = [];
-    for (const { slot, key } of slots) {
-      const from = (prev[key] ?? '').toString().trim();
-      const to = (next[key] ?? '').toString().trim();
-      if (from !== to) changes.push({ slot, from, to });
+
+    const titleFrom = (prev.title ?? '').toString().trim();
+    const titleTo = (next.title ?? '').toString().trim();
+    if (titleFrom !== titleTo) {
+      changes.push({ slot: 'Title', from: titleFrom, to: titleTo });
     }
+
+    for (const { slot, key } of proseSlots) {
+      const stopSlot = key as StopSlot;
+      const proseFrom = (prev[key] ?? '').toString().trim();
+      const proseTo = (next[key] ?? '').toString().trim();
+      if (proseFrom !== proseTo) {
+        changes.push({ slot, from: proseFrom, to: proseTo });
+        continue;
+      }
+      // Prose unchanged — fall back to the structured stops so a swapped
+      // venue (the modern chat-edit shape) still registers as a change.
+      const stopsFrom = stopNames(prev, stopSlot);
+      const stopsTo = stopNames(next, stopSlot);
+      if (stopsFrom !== stopsTo) {
+        changes.push({ slot, from: stopsFrom, to: stopsTo });
+      }
+    }
+
     if (changes.length > 0) {
       diffs.push({
         day: next.day,

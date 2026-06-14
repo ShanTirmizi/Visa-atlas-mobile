@@ -7,7 +7,11 @@ import { useTheme } from '@/contexts/theme-context';
 interface NextUpCardProps {
   title: string;
   meta: string;
+  /** Optional real time — only shown when provided. Never fabricated: the
+   *  itinerary carries no per-activity time, so the call site omits it. */
   timeLabel?: string;
+  /** Kicker label, defaults to a neutral "NEXT UP" (no fabricated "TODAY"). */
+  kicker?: string;
   imageUri?: string;
   onPress?: () => void;
 }
@@ -15,7 +19,8 @@ interface NextUpCardProps {
 export function NextUpCard({
   title,
   meta,
-  timeLabel = '09:30',
+  timeLabel,
+  kicker = 'NEXT UP',
   onPress,
 }: NextUpCardProps) {
   const { colors } = useTheme();
@@ -45,11 +50,13 @@ export function NextUpCard({
             { color: colors.coralDeep, fontSize: 10, letterSpacing: 10 * 0.18 },
           ]}
         >
-          NEXT UP · TODAY
+          {kicker}
         </Text>
-        <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
-          {timeLabel}
-        </Text>
+        {timeLabel ? (
+          <Text style={[Type.kickerSm, { color: colors.inkMute, fontSize: 9 }]}>
+            {timeLabel}
+          </Text>
+        ) : null}
       </View>
 
       <Text

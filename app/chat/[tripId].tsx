@@ -38,9 +38,13 @@ import {
   Sparkles,
   ArrowRight,
   Wand2,
+  SquarePen,
+  History,
 } from 'lucide-react-native';
 import BackButton from '@/components/ui/BackButton';
 import TopSafeAreaBlur from '@/components/ui/TopSafeAreaBlur';
+import { MarkdownText } from '@/components/ui/MarkdownText';
+import ChatHistorySheet, { type ChatHistorySheetRef } from '@/components/chat/ChatHistorySheet';
 import { ItineraryDiffCard, diffItineraries } from '@/components/chat/ItineraryDiffCard';
 import { hapticSelect } from '@/utils/haptics';
 import { useTheme } from '@/contexts/theme-context';
@@ -51,6 +55,7 @@ import { toAlpha2 } from '@/utils/countryCode';
 import { endpoints } from '@/constants/api';
 import {
   mergeStopsIntoProposal,
+  mergeDayUpdates,
   parseItineraryDays,
   type ItineraryDay,
 } from '@/types/itinerary';
@@ -228,9 +233,44 @@ export default function ChatScreen() {
   const { isOffline } = useOffline();
 
   const { isAuthenticated } = useConvexAuth();
+
+  // Active conversation thread. Resolved on mount via ensureActiveSession
+  // (which also lazily migrates a trip's pre-sessions messages). Until it
+  // resolves we skip the message query — a sub-second blank that the empty
+  // state covers — so we never briefly flash the whole-trip thread.
+  const [sessionId, setSessionId] = useState<Id<'tripChatSessions'> | null>(null);
+  const ensureActiveSession = useMutation(api.trips.ensureActiveSession);
+  const createChatSession = useMutation(api.trips.createChatSession);
+  const historyRef = useRef<ChatHistorySheetRef>(null);
+  // Mirror of the active session for use inside async send closures — lets a
+  // resolving send detect that the user switched threads mid-flight and avoid
+  // patching the itinerary / stranding the spinner on the wrong thread.
+  const sessionRef = useRef<Id<'tripChatSessions'> | null>(null);
+  useEffect(() => {
+    sessionRef.current = sessionId;
+  }, [sessionId]);
+  // Which session a send is in flight for — the ThinkingRow only shows on that
+  // thread, so switching away mid-send doesn't strand a spinner.
+  const [sendingSession, setSendingSession] = useState<Id<'tripChatSessions'> | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !tripId || sessionId) return;
+    let cancelled = false;
+    ensureActiveSession({ tripId: tripId as Id<'trips'> })
+      .then((id) => {
+        if (!cancelled) setSessionId(id);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, tripId, sessionId, ensureActiveSession]);
+
   const convexMessages = useQuery(
     api.trips.getMessages,
-    isAuthenticated ? { tripId: tripId as Id<'trips'> } : 'skip',
+    isAuthenticated && sessionId
+      ? { tripId: tripId as Id<'trips'>, sessionId }
+      : 'skip',
   );
   const addMessage = useMutation(api.trips.addMessage);
   const currentUser = useQuery(api.trips.getCurrentUser, isAuthenticated ? {} : 'skip');
@@ -371,7 +411,12 @@ export default function ChatScreen() {
       if (isOffline) return;
       if (!text || isSending) return;
 
+      // The thread this send belongs to — captured once so a mid-send
+      // session switch can't misroute the reply or its side-effects.
+      const sendSession = sessionId;
+
       setIsSending(true);
+      setSendingSession(sendSession);
       setFailedMessage(null);
 
       try {
@@ -383,6 +428,7 @@ export default function ChatScreen() {
           tripId: tripId as Id<'trips'>,
           role: 'user',
           content: text,
+          sessionId: sendSession ?? undefined,
         });
 
         const res = await fetch(endpoints.tripChat, {
@@ -417,6 +463,9 @@ export default function ChatScreen() {
         const data = (await res.json()) as {
           reply?: string;
           itineraryUpdate?: string | null;
+          // false → `itineraryUpdate` holds only the changed days (merge by
+          // day number); true/absent → it's the complete new itinerary.
+          replaceAll?: boolean;
         };
 
         if (!data.reply) {
@@ -427,25 +476,40 @@ export default function ChatScreen() {
           tripId: tripId as Id<'trips'>,
           role: 'assistant',
           content: data.reply,
+          sessionId: sendSession ?? undefined,
         });
 
         if (data.itineraryUpdate) {
           const stampId = newMessageId ? String(newMessageId) : null;
-          // Never auto-apply a real edit. Diff the proposal against what the
-          // user has now: a no-op (or an unparseable payload we can't render
-          // a diff for) goes through the legacy silent-apply path, anything
-          // else is held in pendingUpdate for an explicit accept/decline via
-          // the ItineraryDiffCard under the assistant's reply.
-          const diffs = diffItineraries(
-            trip?.itinerary ?? '[]',
-            data.itineraryUpdate,
+          // The endpoint may return only the days it changed (fast path).
+          // Normalize to the FULL itinerary before diffing/applying — a
+          // partial array would otherwise read as "every other day removed".
+          const fullProposal = JSON.stringify(
+            mergeDayUpdates(
+              parseItineraryDays(trip?.itinerary),
+              parseItineraryDays(data.itineraryUpdate),
+              data.replaceAll !== false,
+            ),
           );
-          if (diffs === null || diffs.length === 0 || !stampId) {
-            await applyItineraryUpdate(data.itineraryUpdate, stampId);
+          const diffs = diffItineraries(trip?.itinerary ?? '[]', fullProposal);
+          // The user may have switched to a different thread while this send
+          // was in flight — never write the itinerary out from under them.
+          const stillActive = sessionRef.current === sendSession;
+          if (diffs !== null && diffs.length === 0) {
+            // True no-op: the proposal matches what the user already has.
+            // Don't write, don't regenerate photos, don't show a misleading
+            // "Itinerary updated" stamp.
+          } else if (diffs === null || !stampId) {
+            // Unparseable proposal (or no anchor row) — legacy verbatim apply,
+            // but only on the originating thread to avoid a silent background
+            // write after the user moved on.
+            if (stillActive) await applyItineraryUpdate(fullProposal, stampId);
           } else {
-            // A newer proposal replaces any previous pending one.
+            // A real edit — held for explicit accept/decline. Safe to set even
+            // if the user switched away: the card surfaces when they return to
+            // this thread, and nothing is written until they tap "Apply".
             setPendingUpdate({
-              itinerary: data.itineraryUpdate,
+              itinerary: fullProposal,
               forMessageId: stampId,
             });
           }
@@ -455,12 +519,14 @@ export default function ChatScreen() {
         setFailedMessage(text);
       } finally {
         setIsSending(false);
+        setSendingSession(null);
       }
     },
     [
       isOffline,
       isSending,
       tripId,
+      sessionId,
       convexMessages,
       trip,
       passports,
@@ -468,6 +534,32 @@ export default function ChatScreen() {
       addMessage,
       applyItineraryUpdate,
     ],
+  );
+
+  // New chat — spin up a fresh empty thread and switch to it. The previous
+  // conversation stays accessible from the history sheet.
+  const startNewChat = useCallback(() => {
+    if (!tripId) return;
+    hapticSelect();
+    setPendingUpdate(null);
+    setFailedMessage(null);
+    createChatSession({ tripId: tripId as Id<'trips'> })
+      .then((id) => setSessionId(id))
+      .catch(() => {});
+  }, [tripId, createChatSession]);
+
+  const openHistory = useCallback(() => {
+    hapticSelect();
+    historyRef.current?.present();
+  }, []);
+
+  const onSelectSession = useCallback(
+    (id: Id<'tripChatSessions'>) => {
+      setPendingUpdate(null);
+      setFailedMessage(null);
+      setSessionId(id);
+    },
+    [],
   );
 
   // Diff-card actions. Accept clears the card immediately (the "Itinerary
@@ -631,6 +723,43 @@ export default function ChatScreen() {
             </Text>
           ) : null}
         </View>
+
+        {/* History + New chat — ChatGPT / Claude pattern. New chat spins up a
+            fresh thread; history browses past ones. */}
+        <View
+          style={{
+            position: 'absolute',
+            right: Spacing.md,
+            top: insets.top + Spacing.sm,
+            flexDirection: 'row',
+            gap: 8,
+          }}
+        >
+          <Pressable
+            onPress={openHistory}
+            accessibilityRole="button"
+            accessibilityLabel="Chat history"
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.headerBtn,
+              { backgroundColor: colors.surface, borderColor: colors.line, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <History size={17} color={colors.ink} strokeWidth={2} />
+          </Pressable>
+          <Pressable
+            onPress={startNewChat}
+            accessibilityRole="button"
+            accessibilityLabel="New chat"
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.headerBtn,
+              { backgroundColor: colors.surface, borderColor: colors.line, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <SquarePen size={17} color={colors.ink} strokeWidth={2} />
+          </Pressable>
+        </View>
       </View>
 
       {/* ── Messages ───────────────────────────────── */}
@@ -792,7 +921,9 @@ export default function ChatScreen() {
           onContentSizeChange={scrollToEnd}
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
-          ListFooterComponent={isSending ? <ThinkingRow /> : null}
+          ListFooterComponent={
+            isSending && sendingSession === sessionId ? <ThinkingRow /> : null
+          }
         />
       )}
 
@@ -908,6 +1039,15 @@ export default function ChatScreen() {
           it. Scrolled messages fade out under the safe area + header band
           over an 18px gradient instead of hitting a hard edge. */}
       <TopSafeAreaBlur extra={Math.max(0, headerHeight - insets.top)} />
+
+      {/* Chat history — browse past conversations for this trip. */}
+      <ChatHistorySheet
+        ref={historyRef}
+        tripId={tripId as Id<'trips'>}
+        activeSessionId={sessionId}
+        onSelect={onSelectSession}
+        onNewChat={startNewChat}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -953,6 +1093,9 @@ const MessageBubble = React.memo(function MessageBubble({
   if (isAssistant) {
     return (
       <View style={[styles.aiBubbleWrap]}>
+        {/* Plain View (not Pressable) so the native iOS long-press →
+            Copy / Select All menu works on the selectable text below — a
+            Pressable wrapper would swallow the selection gesture. */}
         <View
           style={[
             styles.aiBubble,
@@ -982,16 +1125,21 @@ const MessageBubble = React.memo(function MessageBubble({
             </Text>
           </View>
 
-          <Text
-            style={{
+          {/* selectable → long-press to select + Copy, the standard chat
+              copy affordance the user asked for. */}
+          <MarkdownText
+            text={message.content}
+            baseStyle={{
               fontFamily: FontFamily.regular,
               fontSize: 14.5,
               lineHeight: 22,
               color: colors.ink,
             }}
-          >
-            {message.content}
-          </Text>
+            accentColor={colors.coralDeep}
+            mutedColor={colors.inkMute}
+            codeBg={colors.surfaceMuted}
+            selectable
+          />
 
           {showUpdateStamp ? (
             <Pressable
@@ -1084,36 +1232,21 @@ const MessageBubble = React.memo(function MessageBubble({
           { backgroundColor: isOwnMessage ? colors.ink : colors.coral },
         ]}
       >
-        {isOtherUser && message.userName ? (
-          <Text
-            style={{
-              fontFamily: FontFamily.monoMedium,
-              fontSize: 9,
-              fontWeight: '700',
-              letterSpacing: 9 * 0.22,
-              textTransform: 'uppercase',
-              color: 'rgba(255,255,255,0.7)',
-              marginBottom: 6,
-            }}
-          >
-            {message.userName.toUpperCase()}
-          </Text>
-        ) : (
-          <Text
-            style={{
-              fontFamily: FontFamily.monoMedium,
-              fontSize: 9,
-              fontWeight: '700',
-              letterSpacing: 9 * 0.22,
-              textTransform: 'uppercase',
-              color: 'rgba(255,255,255,0.7)',
-              marginBottom: 6,
-            }}
-          >
-            YOU
-          </Text>
-        )}
         <Text
+          style={{
+            fontFamily: FontFamily.monoMedium,
+            fontSize: 9,
+            fontWeight: '700',
+            letterSpacing: 9 * 0.22,
+            textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.7)',
+            marginBottom: 6,
+          }}
+        >
+          {isOtherUser && message.userName ? message.userName.toUpperCase() : 'YOU'}
+        </Text>
+        <Text
+          selectable
           style={{
             fontFamily: FontFamily.displayItalic,
             fontStyle: 'italic',
@@ -1279,6 +1412,14 @@ const styles = StyleSheet.create({
     zIndex: 110,
     paddingHorizontal: Spacing.md,
     paddingBottom: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

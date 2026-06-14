@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireAuth, checkTripPermission } from "./lib/auth";
 import { cascadeDeleteTrip } from "./lib/tripCascade";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
 // How long a soft-deleted trip stays recoverable before the scheduled hard
 // delete cascades it away. The client's Undo toast lasts 6s — comfortably
@@ -362,9 +362,24 @@ export const getCurrentUser = query({
 // ===== Chat Messages =====
 
 export const getMessages = query({
-  args: { tripId: v.id("trips") },
+  args: {
+    tripId: v.id("trips"),
+    // When present, return only that session's thread. Absent → the whole
+    // trip thread (legacy callers / pre-sessions behaviour).
+    sessionId: v.optional(v.id("tripChatSessions")),
+  },
   handler: async (ctx, args) => {
     await checkTripPermission(ctx, args.tripId, "viewer");
+    if (args.sessionId) {
+      // Don't leak another trip's session by id.
+      const session = await ctx.db.get(args.sessionId);
+      if (!session || session.tripId !== args.tripId) return [];
+      const sid = args.sessionId;
+      return await ctx.db
+        .query("tripMessages")
+        .withIndex("by_session", (q) => q.eq("sessionId", sid))
+        .collect();
+    }
     return await ctx.db
       .query("tripMessages")
       .withIndex("by_trip", (q) => q.eq("tripId", args.tripId))
@@ -377,6 +392,7 @@ export const addMessage = mutation({
     tripId: v.id("trips"),
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
+    sessionId: v.optional(v.id("tripChatSessions")),
   },
   handler: async (ctx, args) => {
     // Both roles require viewer access: assistant replies are inserted by
@@ -386,13 +402,123 @@ export const addMessage = mutation({
     const { userId } = await checkTripPermission(ctx, args.tripId, "viewer");
     const user = args.role === "user" ? await ctx.db.get(userId) : null;
 
-    return await ctx.db.insert("tripMessages", {
+    // Only honour a sessionId that actually belongs to this trip.
+    let sessionId = args.sessionId;
+    if (sessionId) {
+      const session = await ctx.db.get(sessionId);
+      if (!session || session.tripId !== args.tripId) sessionId = undefined;
+    }
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("tripMessages", {
       tripId: args.tripId,
+      sessionId,
       role: args.role,
       content: args.content,
-      timestamp: Date.now(),
+      timestamp: now,
       userId: args.role === "user" ? userId : undefined,
       userName: args.role === "user" ? (user?.name ?? undefined) : undefined,
     });
+
+    // Keep the session fresh (drives history ordering), title it from the
+    // first user turn, and maintain the denormalized message count.
+    if (sessionId) {
+      const session = await ctx.db.get(sessionId);
+      if (session) {
+        const patch: { lastMessageAt: number; title?: string; messageCount: number } = {
+          lastMessageAt: now,
+          messageCount: (session.messageCount ?? 0) + 1,
+        };
+        if (!session.title && args.role === "user") {
+          patch.title = args.content.trim().slice(0, 80);
+        }
+        await ctx.db.patch(sessionId, patch);
+      }
+    }
+
+    return messageId;
+  },
+});
+
+// ===== Chat Sessions =====
+
+/** Sessions for a trip's copilot, newest-active first, with a preview label
+ *  and message count for the history list. */
+export const listChatSessions = query({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    await checkTripPermission(ctx, tripId, "viewer");
+    // Reads straight off the session rows — title and messageCount are
+    // denormalized on write (addMessage / ensureActiveSession), so this never
+    // scans tripMessages.
+    const sessions = await ctx.db
+      .query("tripChatSessions")
+      .withIndex("by_trip", (q) => q.eq("tripId", tripId))
+      .order("desc")
+      .collect();
+    return sessions.map((s) => ({
+      _id: s._id,
+      title: s.title ?? null,
+      createdAt: s.createdAt,
+      lastMessageAt: s.lastMessageAt,
+      messageCount: s.messageCount ?? 0,
+    }));
+  },
+});
+
+/** Start a brand-new, empty conversation thread. */
+export const createChatSession = mutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }) => {
+    const { userId } = await checkTripPermission(ctx, tripId, "viewer");
+    const now = Date.now();
+    return await ctx.db.insert("tripChatSessions", {
+      tripId,
+      userId,
+      messageCount: 0,
+      createdAt: now,
+      lastMessageAt: now,
+    });
+  },
+});
+
+/**
+ * Resume the most-recent session, or create the first one — lazily migrating
+ * a trip's pre-sessions messages onto it so the existing conversation isn't
+ * orphaned. Called by the copilot on open; doubles as the per-trip migration
+ * (no global backfill needed).
+ */
+export const ensureActiveSession = mutation({
+  args: { tripId: v.id("trips") },
+  handler: async (ctx, { tripId }): Promise<Id<"tripChatSessions">> => {
+    const { userId } = await checkTripPermission(ctx, tripId, "viewer");
+
+    const latest = await ctx.db
+      .query("tripChatSessions")
+      .withIndex("by_trip", (q) => q.eq("tripId", tripId))
+      .order("desc")
+      .first();
+    if (latest) return latest._id;
+
+    // No sessions yet — adopt any pre-sessions messages into a default one.
+    const legacy = await ctx.db
+      .query("tripMessages")
+      .withIndex("by_trip", (q) => q.eq("tripId", tripId))
+      .collect();
+    const sessionless = legacy.filter((m) => m.sessionId === undefined);
+    const now = Date.now();
+    const firstUser = sessionless.find((m) => m.role === "user");
+    const sessionId = await ctx.db.insert("tripChatSessions", {
+      tripId,
+      userId,
+      title: firstUser?.content.trim().slice(0, 80),
+      messageCount: sessionless.length,
+      createdAt: sessionless[0]?.timestamp ?? now,
+      lastMessageAt: sessionless[sessionless.length - 1]?.timestamp ?? now,
+    });
+    for (const m of sessionless) {
+      await ctx.db.patch(m._id, { sessionId });
+    }
+    return sessionId;
   },
 });

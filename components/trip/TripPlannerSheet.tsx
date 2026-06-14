@@ -12,15 +12,13 @@ import Animated, {
   withSequence,
   withTiming,
   Easing,
-  interpolate,
-  Extrapolation,
 } from 'react-native-reanimated';
 import {
-  BottomSheetModal, BottomSheetBackdrop,
+  BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView,
+  BottomSheetFooter,
   type BottomSheetBackdropProps,
+  type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
-import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
-import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
@@ -62,25 +60,24 @@ const COMPANION_OPTIONS = ['solo', 'partner', 'friends', 'family'];
 // Avatar tones for traveler stack — warm, forest, sunset palette
 const AVATAR_TONES = ['#C4A882', '#6B8F71', '#C97B4B'] as const;
 
-// Keyboard handling on this sheet — same recipe as AddBookingSheet and
-// EditDaySheet, the two QA-proven siblings:
+// Keyboard handling on this sheet — the "Anything else?" notes input + the
+// primary CTA live in a gorhom BottomSheetFooter, NOT in the scroll body.
+// gorhom drives the footer up to sit flush on top of the keyboard via its
+// animatedFooterPosition, so the focused input hugs the keys with zero gap —
+// the one mechanism that actually works here. The scroll body holds only the
+// non-input fields (destination → vibes) and reserves paddingBottom equal to
+// the measured footer height so nothing hides behind it at rest.
 //
-//   1. BottomSheetKeyboardAwareScrollView (RNKC) scrolls the focused
-//      input above the keyboard with the right delta — the Apple Mail
-//      "scroll BY delta" algorithm, no hand-rolled math.
-//   2. enableDynamicSizing + maxDynamicContentSize cap the height;
-//      topInset clamps the position below the Dynamic Island.
-//   3. Default keyboardBehavior ("interactive") + keyboardBlurBehavior
-//      "restore" — gorhom shifts the sheet, RNKC scrolls the field.
-//   4. The CTA collapses (height → 0) while the keyboard is up, driven
-//      by useReanimatedKeyboardAnimation, so the notes field is the
-//      bottom-most element while typing.
-//
-// History, so nobody reinvents this: a custom keyboard-height spacer +
-// scrollToEnd-on-settle was tried here and shipped a giant blank void
-// between the notes field and the keyboard (scrollToEnd scrolled past
-// the field to the spacer's end). Per CLAUDE.md, the library pattern
-// wins — the booking form proves KAW works with this exact sheet config.
+// Why a footer and not a keyboard-aware scroller: this is a TALL form, and
+// every scroller approach failed in the simulator —
+//   • KAW (RNKC) + "interactive"/"fillParent": gorhom's keyboard offset
+//     fights the KAW scroll → input stranded a fixed band above the keys.
+//   • plain scroller + "interactive": the last field hid BEHIND the keyboard.
+//   • KAW + "extend": no gorhom offset, but the KAW under-scrolls inside the
+//     translated sheet and leaves the input floating ~a sheet-transform above
+//     the keyboard.
+// The footer sidesteps all of it: gorhom positions it, no scroll math.
+// keyboardBehavior="extend" keeps the sheet body from ALSO shifting.
 //
 // Modals (date picker, country picker) are rendered OUTSIDE this sheet
 // so they don't pollute the contentContainer measurement.
@@ -322,36 +319,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     const generateTripMutation = useMutation(api.tripGeneration.generateTrip);
     const setPushTokenMutation = useMutation(api.userProfiles.setPushToken);
     const sparkleStyle = usePlaneAnimation(isLoading);
-
-    // Keyboard progress (0 = closed, 1 = open). Used to collapse the CTA
-    // when the keyboard appears so the input ends up just above the
-    // keyboard after gorhom's interactive sheet shift. See top-of-file.
-    const { progress: keyboardProgress } = useReanimatedKeyboardAnimation();
-    // Natural height of the CTA block, measured at layout (button height +
-    // its 18pt marginTop from s.ctaButton). The previous hardcoded 70 was
-    // ~5pt shorter than the real button, and the overflow:'hidden' wrapper
-    // sliced the italic descenders — "Generate itinerary" rendered as
-    // "…itinerarv". Measured-at-layout, like the floating tab bar.
-    const ctaNaturalHeight = useSharedValue(80);
-    const ctaAnimatedStyle = useAnimatedStyle(() => ({
-      height: interpolate(
-        keyboardProgress.value,
-        [0, 1],
-        [ctaNaturalHeight.value, 0],
-        Extrapolation.CLAMP,
-      ),
-      // Opacity reaches 0 by 40% of the keyboard's travel while the height
-      // collapse runs the full range — the label is invisible before the
-      // shrinking container can visibly slice it mid-collapse (the
-      // "Generate itinerary" text was getting guillotined on dismiss).
-      opacity: interpolate(
-        keyboardProgress.value,
-        [0, 0.4],
-        [1, 0],
-        Extrapolation.CLAMP,
-      ),
-      overflow: 'hidden',
-    }));
 
     // ── Days derived from dates (or the dreaming nights stepper) ───
     const days = useMemo(() => {
@@ -611,6 +578,108 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
 
     const s = useMemo(() => makeStyles(colors), [colors]);
 
+    // ── Footer (notes input + CTA, pinned above the keyboard) ──────
+    // Measured at layout so the scroll body can reserve exactly this much
+    // paddingBottom — nothing hides behind the footer at rest.
+    const [footerHeight, setFooterHeight] = useState(0);
+    const renderFooter = useCallback(
+      (props: BottomSheetFooterProps) => {
+        if (isLoading) return null;
+        const ready = !!effective || !!(country && meta && travel && resolved);
+        return (
+          <BottomSheetFooter {...props} bottomInset={0}>
+            <View
+              onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+              style={{
+                paddingHorizontal: Spacing.lg,
+                paddingTop: 14,
+                paddingBottom: Math.max(insets.bottom, 14),
+                // Opaque so the scroll body slides cleanly underneath it.
+                backgroundColor: colors.surface,
+              }}
+            >
+              {/* "Anything else?" — free-form notes that flow into the
+                  generation prompt as userNotes (Task 8). */}
+              <TripPlannerNotesField
+                value={userNotes}
+                onChangeText={setUserNotes}
+              />
+
+              {/* Error */}
+              {error !== '' && (
+                <View style={[s.errorCard, {
+                  borderColor: colors.danger,
+                  backgroundColor: colors.dangerBg,
+                }]}>
+                  <Text style={[s.errorText, { color: colors.danger }]}>{error}</Text>
+                  <TouchableOpacity
+                    onPress={() => setError('')}
+                    style={[s.errorRetry, { borderColor: colors.danger }]}
+                  >
+                    <Text style={[s.errorRetryText, { color: colors.danger }]}>Dismiss</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Primary CTA — italic Fraunces with coral period when ready,
+                  paper hint when waiting for a destination. */}
+              <TouchableOpacity
+                onPress={ready ? generate : undefined}
+                activeOpacity={ready ? 0.85 : 1}
+                disabled={!ready}
+                style={[
+                  s.ctaButton,
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    paddingVertical: 18,
+                    borderRadius: 999,
+                    backgroundColor: ready ? colors.coral : colors.surface,
+                    borderWidth: 1,
+                    borderColor: ready ? colors.coral : colors.line,
+                    shadowColor: ready ? colors.coral : 'transparent',
+                    shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: ready ? 0.35 : 0,
+                    shadowRadius: 16,
+                    elevation: ready ? 6 : 0,
+                  },
+                ]}
+              >
+                <Sparkles
+                  size={16}
+                  color={ready ? '#FFFFFF' : colors.inkMute}
+                  fill={ready ? '#FFFFFF' : 'transparent'}
+                />
+                <Text
+                  style={{
+                    fontFamily: FontFamily.displayItalic,
+                    fontStyle: 'italic',
+                    fontSize: 17,
+                    fontWeight: '500',
+                    letterSpacing: -17 * 0.014,
+                    // Italic Fraunces descenders need explicit room.
+                    lineHeight: 24,
+                    color: ready ? '#FFFFFF' : colors.inkMute,
+                  }}
+                >
+                  {ready ? 'Generate itinerary' : 'Pick a destination first'}
+                  {ready ? (
+                    <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
+                  ) : null}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </BottomSheetFooter>
+        );
+      },
+      [
+        isLoading, effective, country, meta, travel, resolved,
+        userNotes, error, generate, colors, s, insets.bottom,
+      ],
+    );
+
     return (
       <>
       <BottomSheetModal
@@ -630,10 +699,11 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         // visible empty band below the CTA at rest.
         overDragResistanceFactor={0}
         backdropComponent={renderBackdrop}
-        // Default keyboardBehavior ("interactive") shifts the sheet up
-        // by keyboard height. keyboardBlurBehavior="restore" puts it
-        // back when the keyboard dismisses. The CTA collapse below
-        // shrinks the form so the input ends up just above the keyboard.
+        // The notes input + CTA ride in this footer, which gorhom lifts to sit
+        // flush on the keyboard (see top-of-file recipe). "extend" keeps the
+        // scroll BODY from also shifting while the footer rises.
+        footerComponent={renderFooter}
+        keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         // gorhom's documented Android requirement for interactive keyboard
         // handling — the inherited adjustPan default pans the whole window
@@ -661,14 +731,14 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           }
         }}
       >
-        <BottomSheetKeyboardAwareScrollView
-          contentContainerStyle={s.scrollContent}
+        <BottomSheetScrollView
+          // Reserve room for the pinned footer (notes + CTA) so the last
+          // scroll field isn't hidden behind it at rest.
+          contentContainerStyle={[s.scrollContent, { paddingBottom: footerHeight }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           // iMessage-style interactive drag-to-dismiss for the keyboard.
           keyboardDismissMode="interactive"
-          // Breathing room between the focused input and the keyboard top.
-          bottomOffset={24}
         >
           {/* ── MAIN FORM ──────────────────────────────────────── */}
           {!isLoading && (
@@ -957,100 +1027,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                   })}
                 </View>
               </View>
-
-              {/* "Anything else?" — free-form notes that flow into the
-                  generation prompt as userNotes (Task 8). KAW measures the
-                  focused TextInput itself and scrolls it above the keyboard
-                  — including when the keyboard is already open at focus
-                  time — so no manual scroll wiring is needed here. */}
-              <View style={{ marginTop: 18 }}>
-                <TripPlannerNotesField
-                  value={userNotes}
-                  onChangeText={setUserNotes}
-                />
-              </View>
-
-              {/* Error */}
-              {error !== '' && (
-                <View style={[s.errorCard, {
-                  borderColor: colors.danger,
-                  backgroundColor: colors.dangerBg,
-                }]}>
-                  <Text style={[s.errorText, { color: colors.danger }]}>{error}</Text>
-                  <TouchableOpacity
-                    onPress={() => setError('')}
-                    style={[s.errorRetry, { borderColor: colors.danger }]}
-                  >
-                    <Text style={[s.errorRetryText, { color: colors.danger }]}>Dismiss</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Primary CTA — italic Fraunces with coral period when ready,
-                  paper hint when waiting for a destination. Wrapped in an
-                  Animated.View whose height collapses to 0 when the
-                  keyboard is up — this makes the input the bottom-most
-                  visual element so it lands just above the keyboard. */}
-              {(() => {
-                const ready = !!effective || !!(country && meta && travel && resolved);
-                return (
-                  <Animated.View style={ctaAnimatedStyle}>
-                    <TouchableOpacity
-                      onPress={ready ? generate : undefined}
-                      activeOpacity={ready ? 0.85 : 1}
-                      disabled={!ready}
-                      // +18 = s.ctaButton's marginTop, which layout height
-                      // doesn't include.
-                      onLayout={(e) => {
-                        ctaNaturalHeight.value = e.nativeEvent.layout.height + 18;
-                      }}
-                      style={[
-                        s.ctaButton,
-                        {
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 10,
-                          paddingVertical: 18,
-                          borderRadius: 999,
-                          backgroundColor: ready ? colors.coral : colors.surface,
-                          borderWidth: 1,
-                          borderColor: ready ? colors.coral : colors.line,
-                          shadowColor: ready ? colors.coral : 'transparent',
-                          shadowOffset: { width: 0, height: 8 },
-                          shadowOpacity: ready ? 0.35 : 0,
-                          shadowRadius: 16,
-                          elevation: ready ? 6 : 0,
-                        },
-                      ]}
-                    >
-                      <Sparkles
-                        size={16}
-                        color={ready ? '#FFFFFF' : colors.inkMute}
-                        fill={ready ? '#FFFFFF' : 'transparent'}
-                      />
-                      <Text
-                        style={{
-                          fontFamily: FontFamily.displayItalic,
-                          fontStyle: 'italic',
-                          fontSize: 17,
-                          fontWeight: '500',
-                          letterSpacing: -17 * 0.014,
-                          // Italic Fraunces descenders need explicit room —
-                          // the default line box trims the "y" tail.
-                          lineHeight: 24,
-                          color: ready ? '#FFFFFF' : colors.inkMute,
-                        }}
-                      >
-                        {ready ? 'Generate itinerary' : 'Pick a destination first'}
-                        {ready ? (
-                          <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
-                        ) : null}
-                      </Text>
-                    </TouchableOpacity>
-                  </Animated.View>
-                );
-              })()}
+              {/* The "Anything else?" notes input + primary CTA live in the
+                  BottomSheetFooter (renderFooter) so gorhom can lift them
+                  flush onto the keyboard — see the top-of-file recipe. */}
             </View>
           )}
 
@@ -1083,7 +1062,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               </Text>
             </View>
           )}
-        </BottomSheetKeyboardAwareScrollView>
+        </BottomSheetScrollView>
       </BottomSheetModal>
 
       {/* ── Date picker — calendar grid (iOS) / native dialog (Android) ──

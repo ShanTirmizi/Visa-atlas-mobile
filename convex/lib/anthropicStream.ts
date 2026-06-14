@@ -58,7 +58,7 @@ The user's trip:
 - Visas already held: ${input.heldVisas.join(", ") || "none"}
 ${input.startDate && input.endDate ? `- Dates: ${input.startDate} → ${input.endDate}` : "- Dates: flexible (\"dreaming\" mode)"}
 
-Tone: editorial, specific, never generic. Recommend real places by name. Avoid clichés ("hidden gem", "must-see", "off the beaten path"). Write the way the New York Times Travel section does — confident, particular, warm.${userNotesBlock}
+Tone: editorial, specific, never generic. Recommend real places by name. Be concrete and actionable — name the specific dish, room, gate, street, or viewpoint, never the generic category. A reader should be able to act on every recommendation without a second search. Avoid clichés ("hidden gem", "must-see", "off the beaten path") and never write "explore", "wander", or "discover the area". Write the way the New York Times Travel section does — confident, particular, warm.${userNotesBlock}
 
 Output: emit ONLY valid JSON for the requested section, no preamble, no markdown fences, no explanation. Match the schema exactly.`;
 }
@@ -90,14 +90,17 @@ export function buildItineraryUserPrompt(input: GenerateInput): string {
       "slot": "morning" | "afternoon" | "evening",
       "time": "09:00",
       "name": "Real place name — exact enough to find in Apple Maps",
-      "note": "ONE editorial sentence: what you do there and why it earns its slot.",
+      "note": "1-2 sentences naming what specifically to do here (a named dish, a named room/work, a specific viewpoint or route) — never generic 'explore the area'.",
       "kind": "landmark" | "museum" | "gallery" | "market" | "nature" | "walk" | "neighborhood" | "experience" | "cafe" | "viewpoint" | "beach" | "shopping",
-      "duration": "1½ hrs"
+      "duration": "1½ hrs",
+      "area": "Specific neighbourhood or street, e.g. 'Trastevere, by Piazza di Santa Maria'",
+      "tip": "Optional ONE concrete action — a named dish to order, the specific gate/entrance/platform, the exact viewpoint or trail, or what to see first. Omit if you have nothing concrete to add.",
+      "reserveAhead": true
     }
   ]
 }
 
-Rules for "stops": 4-7 per day spread across the three slots (each slot gets at least one). Times are plausible 24h local starts in chronological order. Every stop is a real, currently-operating place. The morning/afternoon/evening prose must narrate the same plan the stops describe.
+Rules for "stops": 4-7 per day spread across the three slots (each slot gets at least one). Times are plausible 24h local starts in chronological order. Every stop is a real, currently-operating, NAMED place — never a category or a vague area. Set "area" to a specific micro-neighbourhood or street, not the city name. Use "tip" to name the signature thing to do (the dish to order, the room/work to see, the exact viewpoint, the gate to enter). Set "reserveAhead": true for anything needing a reservation or timed ticket. The morning/afternoon/evening prose must narrate the same plan the stops describe.
 
 Emit ONLY the JSON array. No surrounding object, no preamble.${userNotesReminder}`;
 }

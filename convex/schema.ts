@@ -188,12 +188,35 @@ export default defineSchema({
   // ── Trip Messages ──
   tripMessages: defineTable({
     tripId: v.id("trips"),
+    // Conversation thread within a trip's copilot. Optional for back-compat
+    // with pre-sessions rows; ensureActiveSession lazily backfills them onto
+    // a default session the first time the trip's copilot is opened.
+    sessionId: v.optional(v.id("tripChatSessions")),
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
     timestamp: v.number(),
     userId: v.optional(v.id("users")),
     userName: v.optional(v.string()),
-  }).index("by_trip", ["tripId", "timestamp"]),
+  })
+    .index("by_trip", ["tripId", "timestamp"])
+    .index("by_session", ["sessionId", "timestamp"]),
+
+  // ── Trip copilot sessions ── one row per conversation thread. A trip can
+  // hold many; the copilot resumes the most recent and offers "New chat" + a
+  // browsable history (ChatGPT / Claude pattern), instead of one endless
+  // thread per trip.
+  tripChatSessions: defineTable({
+    tripId: v.id("trips"),
+    userId: v.id("users"),
+    // First user message (trimmed) — the history-list label. Absent until the
+    // session receives its first user turn.
+    title: v.optional(v.string()),
+    // Denormalized count maintained on write, so the history list never has to
+    // scan every message of every session to render a count.
+    messageCount: v.optional(v.number()),
+    createdAt: v.number(),
+    lastMessageAt: v.number(),
+  }).index("by_trip", ["tripId", "lastMessageAt"]),
 
   // ── Visa Guide Messages ──
   visaGuideMessages: defineTable({

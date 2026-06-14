@@ -272,12 +272,14 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         stackBehavior="push"
         backdropComponent={renderBackdrop}
         // Keyboard handling lives in BottomSheetKeyboardAwareScrollView
-        // (RNKC) below — same shape as EditDaySheet. "interactive" is
-        // gorhom's default (there is no "none") — set explicitly because
-        // keyboard avoidance is shared with RNKC's KAW. "restore" returns the
-        // sheet to its detent when the keyboard dismisses; adjustResize is
-        // gorhom's documented Android requirement (the inherited adjustPan
-        // default pans the whole window and fights edge-to-edge).
+        // (RNKC) below — same shape as EditDaySheet. "interactive" lets gorhom
+        // shift the sheet while the KAW scrolls the focused field above the
+        // keyboard. "restore" returns the sheet to its detent on dismiss;
+        // adjustResize is gorhom's documented Android requirement (the inherited
+        // adjustPan default pans the whole window and fights e2e). (NOTE: a
+        // short booking — e.g. a flight with few fields — could show the same
+        // keyboard-gap the planner had; the fix there is dropping the KAW for a
+        // plain BottomSheetScrollView so gorhom is the sole keyboard handler.)
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
@@ -317,7 +319,12 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
               onSubmit={handleSubmit}
               defaultCountryCode={prelinkedTrip?.countryCode}
               defaultStartDate={prelinkedTrip?.startDate}
-              defaultEndDate={prelinkedTrip?.endDate}
+              // Deliberately NOT seeding the end date from the trip window.
+              // A booking should only get an end date the user actually picked
+              // (a hotel check-out, a car drop-off) — inheriting trip.endDate
+              // made every booking a whole-trip range that rendered on EVERY
+              // day of the trip (esp. flights, which have no end-date field to
+              // correct). Start date stays as a convenience anchor.
               prefillData={prefillData}
             />
           )}

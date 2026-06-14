@@ -4,11 +4,12 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  ScrollView,
   ImageBackground,
+  useWindowDimensions,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS } from 'react-native-reanimated';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, ChevronRight, Images, Pencil, Share, Sparkles } from 'lucide-react-native';
 import { FontFamily } from '@/constants/theme';
@@ -72,6 +73,9 @@ interface DayDetailScreenProps {
    *  day album (hero tap, photos chip, slot strips). Absent → the photo
    *  affordances quietly cover whatever images the trip already has. */
   stopPhotos?: StopPhotoSet[];
+  /** True while the trip's stop photos are still being fetched — drives the
+   *  per-slot shimmer skeletons so a freshly opened day doesn't look bare. */
+  photosLoading?: boolean;
   onBack: () => void;
   onShare: () => void;
   onEdit?: () => void;
@@ -90,8 +94,11 @@ interface DayDetailScreenProps {
   bookings?: DayStripBooking[];
 }
 
-const HERO_HEIGHT = 280;
-const SHEET_TOP = 260;
+// Apple Maps place-card detents: a "peek" that leaves the day's photo as the
+// hero, and a near-full read that tucks just below the Dynamic Island (the
+// topInset clamp does that). Percentages are heights from the bottom.
+const SHEET_COLLAPSED_RATIO = 0.46;
+const SHEET_SNAP_POINTS = ['46%', '92%'];
 
 // Swipe-to-page commit thresholds — UIScrollView paging semantics: a
 // decisive flick commits even on short travel, otherwise distance decides.
@@ -193,6 +200,7 @@ function DayDetailScreen({
   tripStartDate,
   diningGuide,
   stopPhotos,
+  photosLoading,
   onBack,
   onShare,
   onEdit,
@@ -204,6 +212,12 @@ function DayDetailScreen({
 }: DayDetailScreenProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: screenH } = useWindowDimensions();
+  const sheetRef = useRef<BottomSheet>(null);
+  // The day title floats on the photo just above the collapsed sheet's top
+  // edge — so it reads like an Apple Maps place-card title that the card
+  // slides up over as you expand to read the full plan.
+  const heroTitleBottom = screenH * SHEET_COLLAPSED_RATIO + 14;
 
   // ── Day paging: one handler shared by header chevrons + horizontal swipe.
   // Clamped no-op at the first/last day; selection haptic only when the day
@@ -304,17 +318,15 @@ function DayDetailScreen({
   );
 
   return (
-    <GestureDetector gesture={swipeGesture}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* ── HERO (fixed, not scrollable) ────────────────────────────── */}
-      <View style={styles.hero}>
-        {/* Day media + title page with the swipe (keyed remount per day);
-            the top bar stays mounted — Apple Books pattern: chrome is
-            fixed, page content slides. */}
+      {/* ── HERO — full-screen photo layer behind the sheet. Horizontal
+          swipe pages between days (keyed remount → directional fade-slide);
+          the sheet owns all vertical drag, so the gestures never fight. ── */}
+      <GestureDetector gesture={swipeGesture}>
         <Animated.View
           key={`hero-${dayIndex}`}
           entering={dayEntering}
-          style={StyleSheet.absoluteFill}
+          style={styles.hero}
         >
         {heroImage?.url ? (
           <ImageBackground
@@ -348,10 +360,32 @@ function DayDetailScreen({
           />
         ) : null}
 
+        {/* Localized scrim behind the title band — the hero fills the screen
+            so the title floats over the mid-photo where the main scrim is
+            transparent; this soft dark band guarantees legibility over bright
+            images (snow, white architecture) the way Apple Maps/Photos anchor
+            overlaid titles. */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.42)', 'rgba(0,0,0,0.42)', 'transparent']}
+          locations={[0, 0.35, 0.72, 1]}
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: heroTitleBottom - 26,
+            height: 150,
+          }}
+        />
+
         {/* ── Hero bottom: kicker + italic title + coral squiggle ──
             box-none so the photos chip stays tappable while the texts
-            let hero taps fall through to the album Pressable. */}
-        <View style={styles.heroBottom} pointerEvents="box-none">
+            let hero taps fall through to the album Pressable. Floats just
+            above the collapsed sheet's top edge. */}
+        <View
+          style={[styles.heroBottom, { bottom: heroTitleBottom }]}
+          pointerEvents="box-none"
+        >
           {subtitle.length > 0 || album.length > 0 ? (
             <View style={styles.heroKickerRow} pointerEvents="box-none">
               <Text
@@ -362,6 +396,9 @@ function DayDetailScreen({
                     fontSize: 10,
                     letterSpacing: 10 * 0.18,
                     flex: 1,
+                    textShadowColor: 'rgba(0,0,0,0.4)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 8,
                   },
                 ]}
                 numberOfLines={1}
@@ -398,6 +435,12 @@ function DayDetailScreen({
               color: '#FFFFFF',
               marginTop: 4,
               lineHeight: 32,
+              // The hero now fills the screen, so the title floats over the
+              // mid-photo (no dark scrim there) — a soft shadow keeps it
+              // legible over any image, the Apple Photos overlay pattern.
+              textShadowColor: 'rgba(0,0,0,0.45)',
+              textShadowOffset: { width: 0, height: 1 },
+              textShadowRadius: 12,
             }}
             numberOfLines={2}
           >
@@ -435,13 +478,16 @@ function DayDetailScreen({
           <Squiggle width={120} color={colors.coral} style={{ marginTop: 4 }} />
         </View>
         </Animated.View>
+      </GestureDetector>
 
-        {/* ── Top bar (safe-area-pinned, 18px horizontal) — stays mounted
-            across day changes (only the pill label updates), rendered after
-            the paging media so it sits on top. insets.top, not a hardcoded
-            52 — a fixed offset overlaps the Dynamic Island on Pro Max
-            phones and floats too low on SE-class devices. ── */}
-        <View style={[styles.topBar, { top: insets.top + 4 }]}>
+      {/* ── Top bar — pinned above the hero AND the sheet via zIndex, so
+          back / day-nav / share stay reachable even with the sheet expanded
+          to 92%. box-none lets gap taps fall through to the hero album.
+          insets.top, never a hardcoded offset. ── */}
+      <View
+        style={[styles.topBar, { top: insets.top + 4 }]}
+        pointerEvents="box-none"
+      >
           <CircleBtn
             solid
             onPress={onBack}
@@ -506,42 +552,33 @@ function DayDetailScreen({
             </CircleBtn>
           </View>
         </View>
-      </View>
 
-      {/* ── SHEET (overlaps hero from top 260) ─────────────────────── */}
-      <View
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: colors.background,
-            top: SHEET_TOP,
-          },
-        ]}
+      {/* ── SHEET — Apple Maps place-card. Drag between a 46% peek (the day's
+          photo stays the hero) and a 92% near-full read; topInset clamps the
+          top just below the Dynamic Island (numeric snaps don't clamp — the
+          inset does). Replaces the old fixed static sheet whose grab handle
+          was decorative and could never expand. ── */}
+      <BottomSheet
+        ref={sheetRef}
+        index={0}
+        snapPoints={SHEET_SNAP_POINTS}
+        topInset={insets.top + 10}
+        // Explicit detents — opt out of v5's default content-fit sizing.
+        enableDynamicSizing={false}
+        enablePanDownToClose={false}
+        handleIndicatorStyle={[styles.grabHandle, { backgroundColor: colors.inkFaint }]}
+        backgroundStyle={[styles.sheetBg, { backgroundColor: colors.background }]}
+        style={styles.sheetShadow}
       >
-        {/* Grab handle */}
-        <View style={styles.grabHandleWrapper}>
-          <View
-            style={[
-              styles.grabHandle,
-              { backgroundColor: colors.inkFaint, opacity: 0.5 },
-            ]}
-          />
-        </View>
-
-        {/* Keyed per day: pages with the swipe and resets scroll to the
-            top of the incoming day (Apple Photos behaviour). */}
-        <Animated.View
-          key={`sheet-${dayIndex}`}
-          entering={dayEntering}
-          style={styles.sheetBody}
-        >
-        <ScrollView
+        <BottomSheetScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.sheetContent,
             { paddingBottom: insets.bottom + 40 },
           ]}
         >
+        {/* Keyed per day: directional fade-slide for the incoming day. */}
+        <Animated.View key={`sheet-${dayIndex}`} entering={dayEntering}>
           {/* Bookings woven into the day — flights departing today, stays
               covering it. Renders nothing without a startDate or matches. */}
           <DayBookingsStrip
@@ -561,6 +598,7 @@ function DayDetailScreen({
             afternoonImage={afternoonImage}
             eveningImage={eveningImage}
             stopPhotos={stopPhotos}
+            photosLoading={photosLoading}
             onOpenPhoto={openAlbumAtPhoto}
             onOpenSlotPhotos={openSlotPhotos}
           />
@@ -633,11 +671,10 @@ function DayDetailScreen({
               </Text>
             </Pressable>
           ) : null}
-        </ScrollView>
         </Animated.View>
-      </View>
+        </BottomSheetScrollView>
+      </BottomSheet>
     </View>
-    </GestureDetector>
   );
 }
 
@@ -648,13 +685,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ── Hero ───
+  // ── Hero ─── full-screen photo behind the sheet; the visible band is
+  // whatever the collapsed sheet doesn't cover.
   hero: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: HERO_HEIGHT,
+    bottom: 0,
   },
   topBar: {
     position: 'absolute',
@@ -663,6 +701,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // Above the gorhom sheet so the chrome never gets covered at 92%.
+    zIndex: 30,
+    elevation: 30,
   },
   topBarActions: {
     flexDirection: 'row',
@@ -691,7 +732,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   dayNavText: {
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: FontFamily.semibold,
     fontSize: 12,
     fontWeight: '600',
     color: '#FFFFFF',
@@ -744,33 +785,25 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
 
-  // ── Sheet ───
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+  // ── Sheet ─── (gorhom BottomSheet chrome)
+  // Soft warm shadow lifting the sheet off the photo (cast UP onto the hero).
+  sheetShadow: {
+    shadowColor: '#1F1A14',
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -6 },
+  },
+  sheetBg: {
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    overflow: 'hidden',
-  },
-  grabHandleWrapper: {
-    alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 6,
   },
   grabHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
   },
-  sheetBody: {
-    // Fills the sheet below the grab handle so the keyed remount per day
-    // doesn't change the ScrollView's available height.
-    flex: 1,
-  },
   sheetContent: {
-    paddingTop: 10,
+    paddingTop: 6,
     paddingHorizontal: 22,
   },
 });

@@ -226,14 +226,10 @@ export function GuideApplicationCard({
               </Pressable>
             ) : null}
 
-            <View
-              style={[
-                styles.iconBtn,
-                { borderColor: colors.line },
-              ]}
-            >
-              <ChevronRight size={14} color={colors.inkMute} strokeWidth={2} />
-            </View>
+            {/* Bare directional hint — NOT a bordered button. The whole card
+                is the tap target; giving the chevron the iconBtn chrome next
+                to the real delete button read as a second tappable control. */}
+            <ChevronRight size={16} color={colors.inkMute} strokeWidth={2} />
           </View>
         </View>
       </View>

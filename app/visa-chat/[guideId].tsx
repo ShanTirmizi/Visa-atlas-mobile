@@ -34,6 +34,7 @@ import { Id } from '@/convex/_generated/dataModel';
 import { Send, Sparkles } from 'lucide-react-native';
 import BackButton from '@/components/ui/BackButton';
 import TopSafeAreaBlur from '@/components/ui/TopSafeAreaBlur';
+import { MarkdownText } from '@/components/ui/MarkdownText';
 import { hapticSelect } from '@/utils/haptics';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
@@ -580,16 +581,18 @@ const MessageBubble = React.memo(function MessageBubble({
               VISA ATLAS AI
             </Text>
           </View>
-          <Text
-            style={{
+          <MarkdownText
+            text={message.content}
+            baseStyle={{
               fontFamily: FontFamily.regular,
               fontSize: 14.5,
               lineHeight: 22,
               color: colors.ink,
             }}
-          >
-            {message.content}
-          </Text>
+            accentColor={colors.coralDeep}
+            mutedColor={colors.inkMute}
+            codeBg={colors.surfaceMuted}
+          />
         </View>
       </View>
     );
@@ -612,6 +615,7 @@ const MessageBubble = React.memo(function MessageBubble({
           YOU
         </Text>
         <Text
+          selectable
           style={{
             fontFamily: FontFamily.displayItalic,
             fontStyle: 'italic',
