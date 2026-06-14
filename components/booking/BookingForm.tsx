@@ -1,4 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, {
+  useState, useMemo, useEffect, useRef, forwardRef, useImperativeHandle,
+} from 'react';
 import {
   View,
   Text,
@@ -114,13 +116,22 @@ export interface BookingFormProps {
    *  (changing a booking's type mid-edit is unsupported: the updateBooking
    *  validator has no `type` field) and switches the kicker copy. */
   isEditing?: boolean;
+  /** Reports whether the form is submittable, so the parent can drive the
+   *  pinned-footer CTA's enabled state (the CTA lives in AddBookingSheet's
+   *  BottomSheetFooter, not in this scroll body — see AddBookingSheet). */
+  onValidityChange?: (canSubmit: boolean) => void;
+}
+
+/** Imperative handle so AddBookingSheet's footer CTA can trigger submit. */
+export interface BookingFormHandle {
+  submit: () => void;
 }
 
 // ──────────────────────────────────────────────
 // Component
 // ──────────────────────────────────────────────
 
-export default function BookingForm({
+function BookingFormInner({
   type,
   onBack,
   onSubmit,
@@ -128,7 +139,8 @@ export default function BookingForm({
   defaultStartDate = '',
   prefillData,
   isEditing = false,
-}: BookingFormProps) {
+  onValidityChange,
+}: BookingFormProps, ref: React.Ref<BookingFormHandle>) {
   const { colors } = useTheme();
   const config = BOOKING_TYPES[type];
   // Signature v2 — every form uses the coral signature accent regardless of
@@ -256,6 +268,13 @@ export default function BookingForm({
       typeDetails,
     });
   };
+
+  // Report submittability up so the pinned-footer CTA (in AddBookingSheet)
+  // tracks it, and expose submit() so that CTA can fire this form's handler.
+  useEffect(() => {
+    onValidityChange?.(canSubmit);
+  }, [canSubmit, onValidityChange]);
+  useImperativeHandle(ref, () => ({ submit: handleSubmit }), [handleSubmit]);
 
   // ── Reusable style objects (Signature v2 — paper bg) ─────
   const labelStyle = {
@@ -747,41 +766,15 @@ export default function BookingForm({
           </View>
         )}
 
-        {/* ── Submit — italic Fraunces on coral. Disabled state stays
-            present (soft paper bg + muted ink) instead of fading out. ─── */}
-        <TouchableOpacity
-          onPress={handleSubmit}
-          disabled={!canSubmit}
-          activeOpacity={0.85}
-          style={[
-            styles.submitButton,
-            {
-              backgroundColor: canSubmit ? colors.coral : colors.surfaceMuted,
-              borderColor: canSubmit ? colors.coral : colors.line,
-              borderWidth: 1,
-              shadowColor: canSubmit ? colors.coral : 'transparent',
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: canSubmit ? 0.35 : 0,
-              shadowRadius: 16,
-              elevation: canSubmit ? 6 : 0,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.submitButtonText,
-              { color: canSubmit ? '#FFFFFF' : colors.inkMute },
-            ]}
-          >
-            {canSubmit ? 'Save booking' : 'Fill in the essentials'}
-            {canSubmit ? (
-              <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
-            ) : null}
-          </Text>
-        </TouchableOpacity>
+        {/* The primary submit CTA is rendered by AddBookingSheet inside a
+            pinned BottomSheetFooter (so it hugs the keyboard with no dead
+            band) — driven via the imperative handle + onValidityChange. */}
     </View>
   );
 }
+
+const BookingForm = forwardRef(BookingFormInner);
+export default BookingForm;
 
 // ──────────────────────────────────────────────
 // Static styles

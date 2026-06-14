@@ -11,18 +11,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BottomSheetModal,
   BottomSheetBackdrop,
+  BottomSheetScrollView,
+  BottomSheetFooter,
   type BottomSheetBackdropProps,
+  type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
-import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
+import { Text, TouchableOpacity, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { type Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
-import { Spacing } from '@/constants/theme';
+import { Spacing, FontFamily } from '@/constants/theme';
 import { type BookingType } from '@/constants/bookings';
 import { findMatchingTrip } from '@/utils/tripMatcher';
 import BookingTypePicker from './BookingTypePicker';
-import BookingForm, { type BookingFormData } from './BookingForm';
+import BookingForm, { type BookingFormData, type BookingFormHandle } from './BookingForm';
 
 // ── Public API ─────────────────────────────────────────────────────────
 export interface BookingForEdit {
@@ -67,6 +70,12 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+
+    // The form's submit lives in the pinned footer; drive it via this handle
+    // and mirror the form's validity so the footer CTA enables/disables.
+    const formRef = useRef<BookingFormHandle>(null);
+    const [canSubmit, setCanSubmit] = useState(false);
+    const [footerHeight, setFooterHeight] = useState(0);
 
     // Max sheet height: screen height minus status bar / Dynamic Island area
     const maxSheetHeight = Dimensions.get('window').height - insets.top - 10;
@@ -258,6 +267,63 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       [],
     );
 
+    // ── Pinned footer — the primary CTA. gorhom drives it up to sit flush on
+    // the keyboard (animatedFooterPosition), so on focus it hugs the keys with
+    // ZERO dead band while keyboardBehavior="fillParent" raises the sheet to
+    // the Dynamic Island. Only shown on the form step; the type picker has no
+    // CTA. Fires the form's submit via the imperative handle. ───────────────
+    const renderFooter = useCallback(
+      (props: BottomSheetFooterProps) => {
+        if (step !== 'form' || !selectedType) return null;
+        return (
+          <BottomSheetFooter {...props} bottomInset={0}>
+            <View
+              onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+              style={{
+                paddingHorizontal: Spacing.lg,
+                paddingTop: 12,
+                paddingBottom: Math.max(insets.bottom, 14),
+                // Opaque so the scroll body slides cleanly underneath it.
+                backgroundColor: colors.surface,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => formRef.current?.submit()}
+                disabled={!canSubmit}
+                activeOpacity={0.85}
+                style={[
+                  ftStyles.submitButton,
+                  {
+                    backgroundColor: canSubmit ? colors.coral : colors.surfaceMuted,
+                    borderColor: canSubmit ? colors.coral : colors.line,
+                    borderWidth: 1,
+                    shadowColor: canSubmit ? colors.coral : 'transparent',
+                    shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: canSubmit ? 0.35 : 0,
+                    shadowRadius: 16,
+                    elevation: canSubmit ? 6 : 0,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    ftStyles.submitButtonText,
+                    { color: canSubmit ? '#FFFFFF' : colors.inkMute },
+                  ]}
+                >
+                  {canSubmit ? 'Save booking' : 'Fill in the essentials'}
+                  {canSubmit ? (
+                    <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
+                  ) : null}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </BottomSheetFooter>
+        );
+      },
+      [step, selectedType, canSubmit, colors, insets.bottom],
+    );
+
     // ── Render ───────────────────────────────────────────────────────
     return (
       <BottomSheetModal
@@ -271,18 +337,21 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         topInset={insets.top + 10}
         stackBehavior="push"
         backdropComponent={renderBackdrop}
-        // Keyboard handling lives in BottomSheetKeyboardAwareScrollView
-        // (RNKC) below — same shape as EditDaySheet. "interactive" lets gorhom
-        // shift the sheet while the KAW scrolls the focused field above the
-        // keyboard. "restore" returns the sheet to its detent on dismiss;
-        // adjustResize is gorhom's documented Android requirement (the inherited
-        // adjustPan default pans the whole window and fights e2e). (NOTE: a
-        // short booking — e.g. a flight with few fields — could show the same
-        // keyboard-gap the planner had; the fix there is dropping the KAW for a
-        // plain BottomSheetScrollView so gorhom is the sole keyboard handler.)
-        keyboardBehavior="interactive"
+        // KEYBOARD: the premium "expand to the Dynamic Island" recipe (verified
+        // in-sim against every alternative — see TripPlannerSheet's top-of-file
+        // note). "fillParent" raises the sheet to topInset on focus; the
+        // primary CTA rides the BottomSheetFooter below, which gorhom pins
+        // flush on top of the keyboard (animatedFooterPosition) — ZERO dead
+        // band, no second keyboard owner (the old KAW + "interactive" combo
+        // double-counted and stranded short forms above the keys). "restore"
+        // returns the sheet to its detent on dismiss; adjustResize is gorhom's
+        // documented Android requirement.
+        keyboardBehavior="fillParent"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
+        // Kill the ~80pt over-drag band below the content at rest.
+        overDragResistanceFactor={0}
+        footerComponent={renderFooter}
         // Paper-bg sheet matching the rest of the Signature v2 surfaces;
         // booking-type color is moved into accents inside the form, not the
         // entire sheet background.
@@ -290,13 +359,15 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         onDismiss={resetState}
       >
-        <BottomSheetKeyboardAwareScrollView
-          contentContainerStyle={{ paddingTop: Spacing.sm, paddingBottom: 12 }}
+        <BottomSheetScrollView
+          contentContainerStyle={{
+            paddingTop: Spacing.sm,
+            // Reserve room for the pinned footer (form step only) so the last
+            // field isn't hidden behind it at rest.
+            paddingBottom: step === 'form' ? footerHeight : 12,
+          }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          // Breathing room between the focused input and the keyboard top —
-          // matches Apple Mail / Notes (and EditDaySheet).
-          bottomOffset={24}
         >
           {step === 'type' && (
             <BookingTypePicker onSelect={handleTypeSelect} onScanComplete={handleScanComplete} />
@@ -304,6 +375,8 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
 
           {step === 'form' && selectedType && (
             <BookingForm
+              ref={formRef}
+              onValidityChange={setCanSubmit}
               type={selectedType}
               isEditing={editingId != null}
               // Dismiss the keyboard BEFORE unmounting the form: gorhom's
@@ -328,7 +401,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
               prefillData={prefillData}
             />
           )}
-        </BottomSheetKeyboardAwareScrollView>
+        </BottomSheetScrollView>
       </BottomSheetModal>
     );
   },
@@ -336,3 +409,21 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
 
 AddBookingSheet.displayName = 'AddBookingSheet';
 export default AddBookingSheet;
+
+// Footer CTA styling — mirrors BookingForm's former inline submit button.
+const ftStyles = StyleSheet.create({
+  submitButton: {
+    paddingVertical: 18,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitButtonText: {
+    fontFamily: FontFamily.displayItalic,
+    fontStyle: 'italic',
+    fontSize: 17,
+    fontWeight: '500',
+    letterSpacing: -17 * 0.014,
+    lineHeight: 24,
+  },
+});

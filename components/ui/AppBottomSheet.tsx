@@ -11,6 +11,7 @@ import {
   BottomSheetModal,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
+  type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/theme-context';
@@ -92,19 +93,35 @@ interface AppBottomSheetProps {
    */
   onDismiss?: () => void;
   /**
-   * gorhom keyboard behavior. Defaults to gorhom's "interactive" (sheet
-   * shifts up by keyboard height, clamped to its max position). Sheets whose
-   * inputs sit low in long scrollable content should pass "extend" so the
-   * sheet raises to its top position and the scrollable shrinks above the
-   * keyboard (the visa-chat screen recipe — app/visa-chat/[guideId].tsx).
-   * Only engages for BottomSheetTextInput.
+   * gorhom keyboard behavior. DEFAULTS to "extend" (the safe form default —
+   * gorhom's own "interactive" default over-lifts a short dynamic sheet and
+   * leaves a keyboard-height dead band; "extend" raises the sheet to its top
+   * position with the scrollable shrinking above the keyboard). For a
+   * multi-field FORM with a primary CTA, pass "fillParent" AND a
+   * `footerComponent` holding that CTA — gorhom pins the footer flush on the
+   * keyboard and the sheet expands to the Dynamic Island with zero dead band
+   * (the verified TripPlannerSheet / AddBookingSheet recipe). Only engages for
+   * a focused BottomSheetTextInput.
    */
   keyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
+  /**
+   * Optional gorhom footer (renderFooter) for a CTA that must hug the
+   * keyboard. gorhom drives it up via animatedFooterPosition.
+   */
+  footerComponent?: React.FC<BottomSheetFooterProps>;
+  /**
+   * Forwarded to BottomSheetModal. Pass 0 to remove the ~80pt over-drag band
+   * below the content at rest (recommended for footer forms).
+   */
+  overDragResistanceFactor?: number;
 }
 
 export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
   function AppBottomSheet(
-    { children, backgroundColor, handleColor, onChange, onDismiss, keyboardBehavior },
+    {
+      children, backgroundColor, handleColor, onChange, onDismiss,
+      keyboardBehavior = 'extend', footerComponent, overDragResistanceFactor,
+    },
     ref,
   ) {
     const insets = useSafeAreaInsets();
@@ -181,6 +198,8 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
         keyboardBehavior={keyboardBehavior}
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
+        footerComponent={footerComponent}
+        overDragResistanceFactor={overDragResistanceFactor}
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: resolvedBg, borderRadius: 24 }}
         handleIndicatorStyle={{ backgroundColor: resolvedHandle, width: 36, height: 4 }}

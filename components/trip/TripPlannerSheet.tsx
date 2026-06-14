@@ -703,7 +703,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         // flush on the keyboard (see top-of-file recipe). "extend" keeps the
         // scroll BODY from also shifting while the footer rises.
         footerComponent={renderFooter}
-        keyboardBehavior="extend"
+        keyboardBehavior="fillParent"
         keyboardBlurBehavior="restore"
         // gorhom's documented Android requirement for interactive keyboard
         // handling — the inherited adjustPan default pans the whole window

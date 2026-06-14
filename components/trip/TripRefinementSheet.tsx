@@ -16,9 +16,12 @@ import {
 } from 'react-native';
 import {
   BottomSheetScrollView,
+  BottomSheetFooter,
   type BottomSheetModal,
+  type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
 import { Sparkles } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -86,6 +89,8 @@ export const TripRefinementSheet = forwardRef<
   Props
 >(function TripRefinementSheet({ onSubmit, onDismiss }, ref) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [footerHeight, setFooterHeight] = useState(0);
   const sheetRef = useRef<BottomSheetModal>(null);
   const startAnalysis = useMutation(api.tripRefinement.startAnalysis);
 
@@ -229,27 +234,24 @@ export const TripRefinementSheet = forwardRef<
     [onDismiss],
   );
 
-  return (
-    <AppBottomSheet
-      ref={sheetRef}
-      backgroundColor={colors.background}
-      onChange={handleSheetChange}
-    >
-      <BottomSheetScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
-        <Header colors={colors} />
-
-        {status === 'analyzing' && <AnalyzingIndicator colors={colors} />}
-
-        {status === 'questions' && (
-          <>
-            <QuestionsList
-              questions={questions}
-              answers={answers}
-              onAnswerChange={handleAnswerChange}
-            />
+  // ── Pinned footer — the "Generate itinerary" CTA + Skip link. Only shown on
+  // the questions step. gorhom lifts it flush onto the keyboard; paired with
+  // keyboardBehavior="fillParent" the sheet rises to the Dynamic Island and a
+  // focused question input hugs the keys with no dead band. ─────────────────
+  const renderFooter = useCallback(
+    (props: BottomSheetFooterProps) => {
+      if (status !== 'questions') return null;
+      return (
+        <BottomSheetFooter {...props} bottomInset={0}>
+          <View
+            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+            style={{
+              paddingHorizontal: 24,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 14),
+              backgroundColor: colors.background,
+            }}
+          >
             <Footer colors={colors} onSubmit={handleSubmit} />
             {/* Quiet escape hatch — questions are optional, never a gate. */}
             <Pressable
@@ -261,7 +263,39 @@ export const TripRefinementSheet = forwardRef<
                 Skip — plan from my brief as is
               </Text>
             </Pressable>
-          </>
+          </View>
+        </BottomSheetFooter>
+      );
+    },
+    [status, colors, handleSubmit, handleSkipQuestionsFallback, insets.bottom],
+  );
+
+  return (
+    <AppBottomSheet
+      ref={sheetRef}
+      backgroundColor={colors.background}
+      onChange={handleSheetChange}
+      keyboardBehavior="fillParent"
+      overDragResistanceFactor={0}
+      footerComponent={renderFooter}
+    >
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.container,
+          status === 'questions' && { paddingBottom: footerHeight },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Header colors={colors} />
+
+        {status === 'analyzing' && <AnalyzingIndicator colors={colors} />}
+
+        {status === 'questions' && (
+          <QuestionsList
+            questions={questions}
+            answers={answers}
+            onAnswerChange={handleAnswerChange}
+          />
         )}
 
         {status === 'affirmation' && <Affirmation colors={colors} />}

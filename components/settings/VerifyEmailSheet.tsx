@@ -12,7 +12,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { BottomSheetModal, BottomSheetView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import {
+  BottomSheetModal, BottomSheetView, BottomSheetTextInput, BottomSheetFooter,
+  type BottomSheetFooterProps,
+} from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAction, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
@@ -34,6 +38,8 @@ type Step = 'request' | 'verify';
 const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
   ({ email, onVerified }, ref) => {
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
+    const [footerHeight, setFooterHeight] = useState(0);
     const sheetRef = useRef<BottomSheetModal>(null);
 
     const sendCode = useAction(api.emailVerification.sendVerificationCode);
@@ -141,10 +147,92 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
       }
     }, [code, verifyCode, onVerified]);
 
+    // ── Pinned footer — CTA + Resend. gorhom lifts it flush onto the keyboard
+    // on the code step; keyboardBehavior="fillParent" raises the sheet to the
+    // Dynamic Island so the code field has Apple-2FA breathing room above the
+    // pinned action — no dead band. ──────────────────────────────────────────
+    const renderFooter = useCallback(
+      (props: BottomSheetFooterProps) => (
+        <BottomSheetFooter {...props} bottomInset={0}>
+          <View
+            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+            style={{
+              paddingHorizontal: 22,
+              paddingTop: 8,
+              paddingBottom: Math.max(insets.bottom, 14),
+              backgroundColor: colors.background,
+            }}
+          >
+            <Pressable
+              onPress={step === 'request' ? handleSendCode : handleVerify}
+              disabled={
+                step === 'request'
+                  ? sending
+                  : verifying || code.replace(/\s/g, '').length < 6
+              }
+              style={({ pressed }) => [
+                styles.cta,
+                {
+                  backgroundColor: colors.primary,
+                  opacity:
+                    (step === 'request' && sending) ||
+                    (step === 'verify' &&
+                      (verifying || code.replace(/\s/g, '').length < 6))
+                      ? 0.5
+                      : pressed
+                      ? 0.88
+                      : 1,
+                },
+              ]}
+            >
+              {(step === 'request' && sending) ||
+              (step === 'verify' && verifying) ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.ctaText}>
+                  {step === 'request' ? 'SEND CODE →' : 'VERIFY →'}
+                </Text>
+              )}
+            </Pressable>
+
+            {step === 'verify' ? (
+              <Pressable
+                onPress={handleSendCode}
+                hitSlop={8}
+                disabled={sending}
+                style={{ alignItems: 'center', marginTop: 14 }}
+              >
+                {sending ? (
+                  <ActivityIndicator color={colors.coral} size="small" />
+                ) : (
+                  <Text
+                    style={{
+                      fontFamily: FontFamily.displayItalic,
+                      fontStyle: 'italic',
+                      fontSize: 13,
+                      color: colors.coral,
+                    }}
+                  >
+                    Resend the code
+                  </Text>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+        </BottomSheetFooter>
+      ),
+      [step, sending, verifying, code, handleSendCode, handleVerify, colors, insets.bottom],
+    );
+
     return (
-      <AppBottomSheet ref={sheetRef}>
+      <AppBottomSheet
+        ref={sheetRef}
+        keyboardBehavior="fillParent"
+        overDragResistanceFactor={0}
+        footerComponent={renderFooter}
+      >
         <BottomSheetView>
-          <View style={styles.container}>
+          <View style={[styles.container, { paddingBottom: footerHeight }]}>
             {/* Mono kicker */}
             <Text
               style={[
@@ -232,63 +320,8 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
               </View>
             ) : null}
 
-            {/* Primary CTA */}
-            <Pressable
-              onPress={step === 'request' ? handleSendCode : handleVerify}
-              disabled={
-                step === 'request'
-                  ? sending
-                  : verifying || code.replace(/\s/g, '').length < 6
-              }
-              style={({ pressed }) => [
-                styles.cta,
-                {
-                  backgroundColor: colors.primary,
-                  opacity:
-                    (step === 'request' && sending) ||
-                    (step === 'verify' &&
-                      (verifying || code.replace(/\s/g, '').length < 6))
-                      ? 0.5
-                      : pressed
-                      ? 0.88
-                      : 1,
-                },
-              ]}
-            >
-              {(step === 'request' && sending) ||
-              (step === 'verify' && verifying) ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.ctaText}>
-                  {step === 'request' ? 'SEND CODE →' : 'VERIFY →'}
-                </Text>
-              )}
-            </Pressable>
-
-            {/* Secondary action — only on verify step */}
-            {step === 'verify' ? (
-              <Pressable
-                onPress={handleSendCode}
-                hitSlop={8}
-                disabled={sending}
-                style={{ alignItems: 'center', marginTop: 14 }}
-              >
-                {sending ? (
-                  <ActivityIndicator color={colors.coral} size="small" />
-                ) : (
-                  <Text
-                    style={{
-                      fontFamily: FontFamily.displayItalic,
-                      fontStyle: 'italic',
-                      fontSize: 13,
-                      color: colors.coral,
-                    }}
-                  >
-                    Resend the code
-                  </Text>
-                )}
-              </Pressable>
-            ) : null}
+            {/* CTA + Resend live in the pinned BottomSheetFooter so they hug
+                the keyboard on the code step with no dead band (renderFooter). */}
           </View>
         </BottomSheetView>
       </AppBottomSheet>

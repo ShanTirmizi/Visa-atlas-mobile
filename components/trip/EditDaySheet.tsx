@@ -11,10 +11,12 @@ import {
   BottomSheetModal,
   BottomSheetBackdrop,
   BottomSheetTextInput,
+  BottomSheetScrollView,
+  BottomSheetFooter,
   type BottomSheetBackdropProps,
+  type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
@@ -127,6 +129,9 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
       [],
     );
 
+    // Pinned-footer height (measured) so the scroll body reserves room for it.
+    const [footerHeight, setFooterHeight] = useState(0);
+
     const s = useMemo(() => makeStyles(colors), [colors]);
 
     const handleSave = async () => {
@@ -194,30 +199,62 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
       }
     };
 
+    // ── Pinned footer — the Save CTA. gorhom lifts it flush onto the keyboard
+    // (animatedFooterPosition); paired with keyboardBehavior="fillParent" the
+    // sheet rises to the Dynamic Island, the body fills, and the CTA hugs the
+    // keys with no dead band. Replaces the old KAW+interactive combo that
+    // stranded the bottom fields/CTA in a band. ────────────────────────────
+    const renderFooter = useCallback(
+      (props: BottomSheetFooterProps) => (
+        <BottomSheetFooter {...props} bottomInset={0}>
+          <View
+            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+            style={{
+              paddingHorizontal: 18,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 14),
+              // Opaque so the scroll body slides cleanly underneath it.
+              backgroundColor: colors.surface,
+            }}
+          >
+            <PillButton
+              label={saving ? 'Saving…' : 'Save changes'}
+              onPress={handleSave}
+              variant="primary"
+              fullWidth
+              disabled={saving}
+            />
+          </View>
+        </BottomSheetFooter>
+      ),
+      [saving, handleSave, colors, insets.bottom],
+    );
+
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
         enableDynamicSizing
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         topInset={insets.top + 10}
-        // "interactive" + the KAW scroller below: gorhom shifts the sheet,
-        // RNKC scrolls the focused field above the keyboard. (NOTE: if this
-        // sheet's short configs ever show the keyboard-gap that the planner
-        // had, the fix is the planner's — drop the KAW for a plain
-        // BottomSheetScrollView so gorhom is the sole handler.)
-        keyboardBehavior="interactive"
+        // KEYBOARD: premium "expand to the Dynamic Island" recipe (verified
+        // in-sim — see TripPlannerSheet's top-of-file note). "fillParent"
+        // raises the sheet to topInset on focus; the Save CTA rides the
+        // BottomSheetFooter below, which gorhom pins flush on the keyboard —
+        // ZERO dead band, no second keyboard owner (the old KAW + "interactive"
+        // double-counted and stranded the bottom fields/CTA above the keys).
+        keyboardBehavior="fillParent"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
+        overDragResistanceFactor={0}
+        footerComponent={renderFooter}
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
       >
-        <BottomSheetKeyboardAwareScrollView
-          contentContainerStyle={s.scroll}
+        <BottomSheetScrollView
+          contentContainerStyle={[s.scroll, { paddingBottom: footerHeight }]}
           keyboardShouldPersistTaps="handled"
-          // Distance between the focused input's bottom and the keyboard
-          // top after scrolling. Matches Apple Mail / Notes breathing room.
-          bottomOffset={24}
+          showsVerticalScrollIndicator={false}
         >
           {/* Editorial header */}
           <View style={s.header}>
@@ -318,15 +355,9 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
             multiline
           />
 
-          <PillButton
-            label={saving ? 'Saving…' : 'Save changes'}
-            onPress={handleSave}
-            variant="primary"
-            fullWidth
-            disabled={saving}
-            style={{ marginTop: 8, marginBottom: 8 }}
-          />
-        </BottomSheetKeyboardAwareScrollView>
+          {/* Save CTA is rendered in the pinned BottomSheetFooter (renderFooter)
+              so it hugs the keyboard with no dead band. */}
+        </BottomSheetScrollView>
       </BottomSheetModal>
     );
   },
