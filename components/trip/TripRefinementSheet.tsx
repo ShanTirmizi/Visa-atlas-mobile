@@ -15,11 +15,11 @@ import {
   View,
 } from 'react-native';
 import {
-  BottomSheetScrollView,
   BottomSheetFooter,
   type BottomSheetModal,
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
+import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
@@ -235,9 +235,10 @@ export const TripRefinementSheet = forwardRef<
   );
 
   // ── Pinned footer — the "Generate itinerary" CTA + Skip link. Only shown on
-  // the questions step. gorhom lifts it flush onto the keyboard; paired with
-  // keyboardBehavior="extend" the sheet rises to the Dynamic Island and a
-  // focused question input hugs the keys with no dead band. ─────────────────
+  // the questions step. gorhom lifts it flush onto the keyboard
+  // (animatedFooterPosition); the KAW body scrolls a focused question input to
+  // clear it (bottomOffset = footerHeight + gap), and "extend" keeps the sheet
+  // from double-counting that scroll — no dead band, no float on blur. ───────
   const renderFooter = useCallback(
     (props: BottomSheetFooterProps) => {
       if (status !== 'questions') return null;
@@ -279,7 +280,10 @@ export const TripRefinementSheet = forwardRef<
       overDragResistanceFactor={0}
       footerComponent={renderFooter}
     >
-      <BottomSheetScrollView
+      <BottomSheetKeyboardAwareScrollView
+        // A focused text-question input scrolls to sit footerHeight + a gap
+        // above the keyboard so it clears the pinned "Generate itinerary" CTA.
+        bottomOffset={(status === 'questions' ? footerHeight : 0) + 12}
         contentContainerStyle={[
           styles.container,
           status === 'questions' && { paddingBottom: footerHeight },
@@ -303,7 +307,7 @@ export const TripRefinementSheet = forwardRef<
         {status === 'error' && (
           <ErrorCard colors={colors} onFallback={handleSkipQuestionsFallback} />
         )}
-      </BottomSheetScrollView>
+      </BottomSheetKeyboardAwareScrollView>
     </AppBottomSheet>
   );
 });

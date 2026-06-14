@@ -13,9 +13,10 @@ import {
   View,
 } from 'react-native';
 import {
-  BottomSheetModal, BottomSheetView, BottomSheetTextInput, BottomSheetFooter,
+  BottomSheetModal, BottomSheetTextInput, BottomSheetFooter,
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
+import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAction, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -148,9 +149,10 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
     }, [code, verifyCode, onVerified]);
 
     // ── Pinned footer — CTA + Resend. gorhom lifts it flush onto the keyboard
-    // on the code step; keyboardBehavior="extend" raises the sheet to the
-    // Dynamic Island so the code field has Apple-2FA breathing room above the
-    // pinned action — no dead band. ──────────────────────────────────────────
+    // on the code step (animatedFooterPosition); the KAW body scrolls the
+    // autofocused code field to clear it (bottomOffset = footerHeight + gap), so
+    // the field keeps Apple-2FA breathing room above the pinned action and never
+    // hides behind it — no dead band. ────────────────────────────────────────
     const renderFooter = useCallback(
       (props: BottomSheetFooterProps) => (
         <BottomSheetFooter {...props} bottomInset={0}>
@@ -231,8 +233,17 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
         overDragResistanceFactor={0}
         footerComponent={renderFooter}
       >
-        <BottomSheetView>
-          <View style={[styles.container, { paddingBottom: footerHeight }]}>
+        <BottomSheetKeyboardAwareScrollView
+          // Short sheet, but the autofocused code input still has to clear the
+          // pinned Verify CTA + Resend that ride the keyboard. KAW scrolls it to
+          // sit footerHeight + a gap above the keys; "extend" (set on
+          // AppBottomSheet) keeps the sheet from double-counting that scroll.
+          bottomOffset={footerHeight + 12}
+          contentContainerStyle={[styles.container, { paddingBottom: footerHeight }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
             {/* Mono kicker */}
             <Text
               style={[
@@ -323,7 +334,7 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
             {/* CTA + Resend live in the pinned BottomSheetFooter so they hug
                 the keyboard on the code step with no dead band (renderFooter). */}
           </View>
-        </BottomSheetView>
+        </BottomSheetKeyboardAwareScrollView>
       </AppBottomSheet>
     );
   },

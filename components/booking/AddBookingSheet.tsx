@@ -11,11 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BottomSheetModal,
   BottomSheetBackdrop,
-  BottomSheetScrollView,
   BottomSheetFooter,
   type BottomSheetBackdropProps,
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
+import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { Text, TouchableOpacity, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -337,14 +337,26 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         topInset={insets.top + 10}
         stackBehavior="push"
         backdropComponent={renderBackdrop}
-        // KEYBOARD: "extend" — the only behavior that never moves the sheet into
-        // a temporary position (gorhom BottomSheet.tsx:640,815-846), so the
-        // float-on-blur is impossible at the source (no snapToIndex hack). The
-        // primary CTA rides a BottomSheetFooter that gorhom pins flush on the
-        // keyboard via animatedFooterPosition — no dead band. (NOTE: this is a
-        // multi-input body; the focused field's visibility under the keyboard
-        // is bounded by the content detent — see TripPlannerSheet's top-of-file
-        // note for the full rationale.) "restore" returns to the detent on
+        // KEYBOARD — the best-of-class recipe, verified against gorhom's source:
+        //
+        //   keyboardBehavior="extend"  +  BottomSheetKeyboardAwareScrollView
+        //
+        // "extend" is the only behavior that applies ZERO keyboard offset to the
+        // sheet (gorhom BottomSheet.tsx:640 gates the offset on
+        // `keyboardBehavior !== extend`) and never sets isInTemporaryPosition
+        // (BottomSheet.tsx:815-846). So (a) the float-on-blur is impossible at
+        // the source — there's no temporary position to mis-restore (no
+        // snapToIndex hack), and (b) gorhom does NOT move the sheet on focus, so
+        // it can't double-count against the keyboard-aware scroll the way
+        // "interactive"/"fillParent" did (that double-count was the old
+        // over-scroll). The sheet sits at its content height — for this tall
+        // form that's the Dynamic-Island cap. The body is a
+        // BottomSheetKeyboardAwareScrollView (RNKC's documented gorhom
+        // integration) which measures the focused BottomSheetTextInput and
+        // scrolls it to sit `bottomOffset` above the keyboard — we pass
+        // footerHeight + a gap so it clears the pinned CTA, never hides behind
+        // it. The CTA itself rides a BottomSheetFooter (animatedFooterPosition)
+        // flush on the keys — no dead band. "restore" returns to the detent on
         // dismiss; adjustResize is gorhom's documented Android requirement.
         keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
@@ -359,7 +371,14 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         onDismiss={resetState}
       >
-        <BottomSheetScrollView
+        <BottomSheetKeyboardAwareScrollView
+          // RNKC measures the focused BottomSheetTextInput and scrolls it to sit
+          // `bottomOffset` above the keyboard top. The pinned CTA footer rides
+          // the keyboard, so the input must clear footerHeight + a small gap or
+          // it'd scroll to just behind the footer. (footerHeight is 0 until the
+          // footer's onLayout fires — which happens on mount, well before any
+          // focus, so the first focus already has the real value.)
+          bottomOffset={(step === 'form' ? footerHeight : 0) + 12}
           contentContainerStyle={{
             paddingTop: Spacing.sm,
             // Reserve room for the pinned footer (form step only) so the last
@@ -401,7 +420,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
               prefillData={prefillData}
             />
           )}
-        </BottomSheetScrollView>
+        </BottomSheetKeyboardAwareScrollView>
       </BottomSheetModal>
     );
   },

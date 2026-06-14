@@ -11,11 +11,11 @@ import {
   BottomSheetModal,
   BottomSheetBackdrop,
   BottomSheetTextInput,
-  BottomSheetScrollView,
   BottomSheetFooter,
   type BottomSheetBackdropProps,
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
+import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -28,17 +28,20 @@ import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { PillButton } from '@/components/ui/PillButton';
 
-// Sheet rests at its dynamic content height — no snap points needed.
-// BottomSheetKeyboardAwareScrollView (RNKC) measures the focused TextInput
-// itself and scrolls it above the keyboard with the right delta.
+// KEYBOARD — best-of-class recipe, verified against gorhom source:
+//   keyboardBehavior="extend"  +  BottomSheetKeyboardAwareScrollView
 //
-// Keyboard ownership: gorhom has NO way to disable its keyboard handling —
-// the default keyboardBehavior is "interactive" (there is no "none"), and it
-// engages whenever a BottomSheetTextInput focuses. That's fine here: the
-// interactive shift is clamped to the sheet's max position, and because this
-// form's dynamic height sits at/near maxDynamicContentSize the sheet barely
-// moves — RNKC's KAW is the effective owner and scrolls the focused input
-// the remaining distance. We set "interactive" explicitly to document that.
+// This is a tall, 9-field form, so a field focused mid/low in the list would
+// otherwise sit behind the keyboard. "extend" is the only behavior that applies
+// ZERO keyboard offset to the sheet (BottomSheet.tsx:640 gates the offset on
+// `keyboardBehavior !== extend`) and never sets isInTemporaryPosition
+// (815-846) — so the float-on-blur is impossible at the source, and gorhom
+// never moves the sheet to double-count against the scroll (that double-count
+// was the old over-scroll, back when this paired KAW with "interactive"). The
+// sheet rests at its content height, which for this form is the Dynamic-Island
+// cap. RNKC's KeyboardAwareScrollView (the documented gorhom integration) then
+// measures the focused BottomSheetTextInput and scrolls it `bottomOffset` above
+// the keyboard — we pass footerHeight + a gap so it clears the pinned Save CTA.
 
 /** The sheet edits the shared itinerary-day contract (types/itinerary.ts)
  *  — alias retained for existing import sites. */
@@ -200,10 +203,9 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
     };
 
     // ── Pinned footer — the Save CTA. gorhom lifts it flush onto the keyboard
-    // (animatedFooterPosition); paired with keyboardBehavior="extend" the
-    // sheet rises to the Dynamic Island, the body fills, and the CTA hugs the
-    // keys with no dead band. Replaces the old KAW+interactive combo that
-    // stranded the bottom fields/CTA in a band. ────────────────────────────
+    // (animatedFooterPosition); the scroll body below clears it via the KAW's
+    // bottomOffset (footerHeight + gap) so the focused field never tucks behind
+    // the CTA, and "extend" keeps the sheet from double-counting the scroll. ──
     const renderFooter = useCallback(
       (props: BottomSheetFooterProps) => (
         <BottomSheetFooter {...props} bottomInset={0}>
@@ -236,12 +238,9 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
         enableDynamicSizing
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         topInset={insets.top + 10}
-        // KEYBOARD: premium "expand to the Dynamic Island" recipe (verified
-        // in-sim — see TripPlannerSheet's top-of-file note). "fillParent"
-        // raises the sheet to topInset on focus; the Save CTA rides the
-        // BottomSheetFooter below, which gorhom pins flush on the keyboard —
-        // ZERO dead band, no second keyboard owner (the old KAW + "interactive"
-        // double-counted and stranded the bottom fields/CTA above the keys).
+        // See the top-of-file note: "extend" applies zero sheet offset and
+        // never enters a temporary position, so the KAW body owns the focused-
+        // input scroll cleanly and the float-on-blur can't happen.
         keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
@@ -251,7 +250,10 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
         handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
         backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
       >
-        <BottomSheetScrollView
+        <BottomSheetKeyboardAwareScrollView
+          // Scroll the focused field to sit footerHeight + a gap above the
+          // keyboard, so it clears the pinned Save CTA that rides the keys.
+          bottomOffset={footerHeight + 12}
           contentContainerStyle={[s.scroll, { paddingBottom: footerHeight }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -357,7 +359,7 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
 
           {/* Save CTA is rendered in the pinned BottomSheetFooter (renderFooter)
               so it hugs the keyboard with no dead band. */}
-        </BottomSheetScrollView>
+        </BottomSheetKeyboardAwareScrollView>
       </BottomSheetModal>
     );
   },
@@ -384,8 +386,8 @@ function Field({
   placeholder?: string;
   multiline?: boolean;
 }) {
-  // KAW (BottomSheetKeyboardAwareScrollView) measures the focused
-  // TextInput itself via native focus events, so no wrapper ref or
+  // The surrounding BottomSheetKeyboardAwareScrollView measures the focused
+  // BottomSheetTextInput itself via native focus events, so no wrapper ref or
   // onFocus dance is needed here.
   return (
     <View
