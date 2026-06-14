@@ -20,6 +20,7 @@ import {
   type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
 import { Sparkles } from 'lucide-react-native';
+import { useKeyboardRestore } from '@/hooks/useKeyboardRestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -226,6 +227,9 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // model guessing a nationality per run.
     const { passports } = useVisa();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+    // Deterministic restore: force the sheet back to its content detent on
+    // keyboard hide so it can never stay floated (see useKeyboardRestore).
+    const { handleAnimateForRestore } = useKeyboardRestore(bottomSheetRef);
     const refinementSheetRef = useRef<TripRefinementSheetHandle>(null);
 
     // ── Core state ──────────────────────────────────────────────
@@ -684,6 +688,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       <>
       <BottomSheetModal
         ref={bottomSheetRef}
+        onAnimate={handleAnimateForRestore}
         enableDynamicSizing={true}
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         // CRITICAL: maxDynamicContentSize caps the sheet's HEIGHT, but the
@@ -703,7 +708,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         // flush on the keyboard (see top-of-file recipe). "extend" keeps the
         // scroll BODY from also shifting while the footer rises.
         footerComponent={renderFooter}
-        keyboardBehavior="fillParent"
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         // gorhom's documented Android requirement for interactive keyboard
         // handling — the inherited adjustPan default pans the whole window

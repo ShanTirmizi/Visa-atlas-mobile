@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { Dimensions } from 'react-native';
@@ -15,6 +16,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/theme-context';
+import { useKeyboardRestore } from '@/hooks/useKeyboardRestore';
 
 // ──────────────────────────────────────────────
 // AppBottomSheet
@@ -138,9 +140,26 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
     // index. onChange(-1) on dismiss resets it for the next present.
     const [settled, setSettled] = useState(false);
 
-    const handleAnimate = useCallback(() => {
-      setSettled(false);
-    }, []);
+    // Internal ref merged with the forwarded one so the keyboard-restore guard
+    // can call snapToIndex(0) on this modal (see useKeyboardRestore).
+    const modalRef = useRef<BottomSheetModal>(null);
+    const setRefs = useCallback(
+      (node: BottomSheetModal | null) => {
+        modalRef.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) (ref as React.MutableRefObject<BottomSheetModal | null>).current = node;
+      },
+      [ref],
+    );
+    const { handleAnimateForRestore } = useKeyboardRestore(modalRef);
+
+    const handleAnimate = useCallback(
+      (fromIndex: number, toIndex: number) => {
+        setSettled(false);
+        handleAnimateForRestore(fromIndex, toIndex);
+      },
+      [handleAnimateForRestore],
+    );
 
     const handleChange = useCallback(
       (index: number) => {
@@ -169,7 +188,7 @@ export const AppBottomSheet = forwardRef<BottomSheetModal, AppBottomSheetProps>(
 
     return (
       <BottomSheetModal
-        ref={ref}
+        ref={setRefs}
         enableDynamicSizing
         maxDynamicContentSize={maxDynamicContentSize}
         // topInset clamps the sheet's POSITION — maxDynamicContentSize only

@@ -21,6 +21,7 @@ import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { type Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
+import { useKeyboardRestore } from '@/hooks/useKeyboardRestore';
 import { Spacing, FontFamily } from '@/constants/theme';
 import { type BookingType } from '@/constants/bookings';
 import { findMatchingTrip } from '@/utils/tripMatcher';
@@ -70,6 +71,8 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+    // Deterministic restore on keyboard hide — sheet can never stay floated.
+    const { handleAnimateForRestore } = useKeyboardRestore(bottomSheetRef);
 
     // The form's submit lives in the pinned footer; drive it via this handle
     // and mirror the form's validity so the footer CTA enables/disables.
@@ -269,7 +272,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
 
     // ── Pinned footer — the primary CTA. gorhom drives it up to sit flush on
     // the keyboard (animatedFooterPosition), so on focus it hugs the keys with
-    // ZERO dead band while keyboardBehavior="fillParent" raises the sheet to
+    // ZERO dead band while keyboardBehavior="interactive" raises the sheet to
     // the Dynamic Island. Only shown on the form step; the type picker has no
     // CTA. Fires the form's submit via the imperative handle. ───────────────
     const renderFooter = useCallback(
@@ -328,6 +331,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
+        onAnimate={handleAnimateForRestore}
         enableDynamicSizing={true}
         maxDynamicContentSize={maxSheetHeight}
         // topInset is what actually CLAMPS the sheet's top position below the
@@ -346,7 +350,7 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
         // double-counted and stranded short forms above the keys). "restore"
         // returns the sheet to its detent on dismiss; adjustResize is gorhom's
         // documented Android requirement.
-        keyboardBehavior="fillParent"
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         // Kill the ~80pt over-drag band below the content at rest.

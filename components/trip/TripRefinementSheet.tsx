@@ -236,7 +236,7 @@ export const TripRefinementSheet = forwardRef<
 
   // ── Pinned footer — the "Generate itinerary" CTA + Skip link. Only shown on
   // the questions step. gorhom lifts it flush onto the keyboard; paired with
-  // keyboardBehavior="fillParent" the sheet rises to the Dynamic Island and a
+  // keyboardBehavior="interactive" the sheet rises to the Dynamic Island and a
   // focused question input hugs the keys with no dead band. ─────────────────
   const renderFooter = useCallback(
     (props: BottomSheetFooterProps) => {
@@ -275,7 +275,7 @@ export const TripRefinementSheet = forwardRef<
       ref={sheetRef}
       backgroundColor={colors.background}
       onChange={handleSheetChange}
-      keyboardBehavior="fillParent"
+      keyboardBehavior="interactive"
       overDragResistanceFactor={0}
       footerComponent={renderFooter}
     >

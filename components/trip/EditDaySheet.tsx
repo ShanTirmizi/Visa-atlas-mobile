@@ -22,6 +22,7 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { useToast } from '@/contexts/toast-context';
+import { useKeyboardRestore } from '@/hooks/useKeyboardRestore';
 import type { ItineraryDay, StopSlot } from '@/types/itinerary';
 import { FontFamily, type ThemeColors } from '@/constants/theme';
 import { Type } from '@/constants/typography';
@@ -63,6 +64,8 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
     const insets = useSafeAreaInsets();
     const { showToast } = useToast();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+    // Deterministic restore on keyboard hide — sheet can never stay floated.
+    const { handleAnimateForRestore } = useKeyboardRestore(bottomSheetRef);
     const updateField = useMutation(api.trips.updateTripField);
 
     const initial = itinerary[dayIndex];
@@ -200,7 +203,7 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
     };
 
     // ── Pinned footer — the Save CTA. gorhom lifts it flush onto the keyboard
-    // (animatedFooterPosition); paired with keyboardBehavior="fillParent" the
+    // (animatedFooterPosition); paired with keyboardBehavior="interactive" the
     // sheet rises to the Dynamic Island, the body fills, and the CTA hugs the
     // keys with no dead band. Replaces the old KAW+interactive combo that
     // stranded the bottom fields/CTA in a band. ────────────────────────────
@@ -233,6 +236,7 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
+        onAnimate={handleAnimateForRestore}
         enableDynamicSizing
         maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
         topInset={insets.top + 10}
@@ -242,7 +246,7 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
         // BottomSheetFooter below, which gorhom pins flush on the keyboard —
         // ZERO dead band, no second keyboard owner (the old KAW + "interactive"
         // double-counted and stranded the bottom fields/CTA above the keys).
-        keyboardBehavior="fillParent"
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
         overDragResistanceFactor={0}
