@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -23,15 +23,33 @@ const LINE_HEIGHT = 21; // 14 * 1.5 — matches Type.body14
 const MAX_LINES = 5;
 
 interface Props {
-  value: string;
-  onChangeText: (text: string) => void;
-  /** Called when the input receives focus. Used by the parent sheet to
-   *  scroll this (last) field above the keyboard. */
+  /** Called when the input receives focus. */
   onFocus?: () => void;
 }
 
-export function TripPlannerNotesField({ value, onChangeText, onFocus }: Props) {
+/**
+ * Imperative API so the planner can read/clear the notes WITHOUT holding the
+ * value in its own state. This is the whole point of this component owning its
+ * value: typing must not re-render the planner, or the gorhom footer this field
+ * lives in would remount and the keyboard would collapse after one character
+ * (the live-reproduced planner bug). The planner reads getValue() at generate
+ * time and calls clear() on reset.
+ */
+export interface TripPlannerNotesHandle {
+  getValue: () => string;
+  clear: () => void;
+}
+
+export const TripPlannerNotesField = forwardRef<TripPlannerNotesHandle, Props>(
+  function TripPlannerNotesField({ onFocus }, ref) {
   const { colors } = useTheme();
+  const [value, setValue] = useState('');
+  const onChangeText = setValue;
+  useImperativeHandle(
+    ref,
+    () => ({ getValue: () => value, clear: () => setValue('') }),
+    [value],
+  );
   const [focused, setFocused] = useState(false);
   const [promptIndex, setPromptIndex] = useState(() =>
     Math.floor(Math.random() * PLANNER_PROMPTS.length),
@@ -150,7 +168,7 @@ export function TripPlannerNotesField({ value, onChangeText, onFocus }: Props) {
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   headerRow: {

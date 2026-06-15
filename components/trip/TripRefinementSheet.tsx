@@ -14,21 +14,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import {
-  BottomSheetFooter,
-  type BottomSheetModal,
-  type BottomSheetFooterProps,
-} from '@gorhom/bottom-sheet';
-import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
+import { type BottomSheetModal } from '@gorhom/bottom-sheet';
 import { Sparkles } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
 import { Type } from '@/constants/typography';
 import { FontFamily, Radius, type ThemeColors } from '@/constants/theme';
-import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
+import FormSheet from '@/components/ui/FormSheet';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { RefinementChoiceCard } from './refinement/RefinementChoiceCard';
 import { RefinementTextCard } from './refinement/RefinementTextCard';
@@ -89,8 +83,6 @@ export const TripRefinementSheet = forwardRef<
   Props
 >(function TripRefinementSheet({ onSubmit, onDismiss }, ref) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const [footerHeight, setFooterHeight] = useState(0);
   const sheetRef = useRef<BottomSheetModal>(null);
   const startAnalysis = useMutation(api.tripRefinement.startAnalysis);
 
@@ -234,62 +226,35 @@ export const TripRefinementSheet = forwardRef<
     [onDismiss],
   );
 
-  // ── Pinned footer — the "Generate itinerary" CTA + Skip link. Only shown on
-  // the questions step. gorhom lifts it flush onto the keyboard
-  // (animatedFooterPosition); the KAW body scrolls a focused question input to
-  // clear it (bottomOffset = footerHeight + gap), and "extend" keeps the sheet
-  // from double-counting that scroll — no dead band, no float on blur. ───────
-  const renderFooter = useCallback(
-    (props: BottomSheetFooterProps) => {
-      if (status !== 'questions') return null;
-      return (
-        <BottomSheetFooter {...props} bottomInset={0}>
-          <View
-            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-            style={{
-              paddingHorizontal: 24,
-              paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 14),
-              backgroundColor: colors.background,
-            }}
-          >
-            <Footer colors={colors} onSubmit={handleSubmit} />
-            {/* Quiet escape hatch — questions are optional, never a gate. */}
-            <Pressable
-              onPress={handleSkipQuestionsFallback}
-              hitSlop={8}
-              style={{ alignSelf: 'center', marginTop: 14, padding: 4 }}
-            >
-              <Text style={[Type.body13, { color: colors.inkMute }]}>
-                Skip — plan from my brief as is
-              </Text>
-            </Pressable>
-          </View>
-        </BottomSheetFooter>
-      );
-    },
-    [status, colors, handleSubmit, handleSkipQuestionsFallback, insets.bottom],
-  );
+  // Pinned "Generate itinerary" CTA + Skip — in FormSheet's footer, shown only
+  // on the questions step. Text-question inputs are in the BODY, never here.
+  const footerContent =
+    status === 'questions' ? (
+      <>
+        <Footer colors={colors} onSubmit={handleSubmit} />
+        {/* Quiet escape hatch — questions are optional, never a gate. */}
+        <Pressable
+          onPress={handleSkipQuestionsFallback}
+          hitSlop={8}
+          style={{ alignSelf: 'center', marginTop: 14, padding: 4 }}
+        >
+          <Text style={[Type.body13, { color: colors.inkMute }]}>
+            Skip — plan from my brief as is
+          </Text>
+        </Pressable>
+      </>
+    ) : null;
 
+  // FormSheet's default interactive LIFT — the sheet hugs its content (1-3
+  // questions) and rises above the keyboard on focus, no empty band.
   return (
-    <AppBottomSheet
+    <FormSheet
       ref={sheetRef}
       backgroundColor={colors.background}
       onChange={handleSheetChange}
-      keyboardBehavior="extend"
-      overDragResistanceFactor={0}
-      footerComponent={renderFooter}
+      footer={footerContent}
+      contentContainerStyle={styles.container}
     >
-      <BottomSheetKeyboardAwareScrollView
-        // A focused text-question input scrolls to sit footerHeight + a gap
-        // above the keyboard so it clears the pinned "Generate itinerary" CTA.
-        bottomOffset={(status === 'questions' ? footerHeight : 0) + 12}
-        contentContainerStyle={[
-          styles.container,
-          status === 'questions' && { paddingBottom: footerHeight },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
         <Header colors={colors} />
 
         {status === 'analyzing' && <AnalyzingIndicator colors={colors} />}
@@ -307,8 +272,7 @@ export const TripRefinementSheet = forwardRef<
         {status === 'error' && (
           <ErrorCard colors={colors} onFallback={handleSkipQuestionsFallback} />
         )}
-      </BottomSheetKeyboardAwareScrollView>
-    </AppBottomSheet>
+    </FormSheet>
   );
 });
 

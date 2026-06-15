@@ -6,17 +6,12 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import {
-  BottomSheetModal,
-  BottomSheetBackdrop,
   BottomSheetTextInput,
-  BottomSheetFooter,
-  type BottomSheetBackdropProps,
-  type BottomSheetFooterProps,
+  type BottomSheetModal,
 } from '@gorhom/bottom-sheet';
-import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import FormSheet from '@/components/ui/FormSheet';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
@@ -28,20 +23,12 @@ import { Type } from '@/constants/typography';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { PillButton } from '@/components/ui/PillButton';
 
-// KEYBOARD — best-of-class recipe, verified against gorhom source:
-//   keyboardBehavior="extend"  +  BottomSheetKeyboardAwareScrollView
-//
-// This is a tall, 9-field form, so a field focused mid/low in the list would
-// otherwise sit behind the keyboard. "extend" is the only behavior that applies
-// ZERO keyboard offset to the sheet (BottomSheet.tsx:640 gates the offset on
-// `keyboardBehavior !== extend`) and never sets isInTemporaryPosition
-// (815-846) — so the float-on-blur is impossible at the source, and gorhom
-// never moves the sheet to double-count against the scroll (that double-count
-// was the old over-scroll, back when this paired KAW with "interactive"). The
-// sheet rests at its content height, which for this form is the Dynamic-Island
-// cap. RNKC's KeyboardAwareScrollView (the documented gorhom integration) then
-// measures the focused BottomSheetTextInput and scrolls it `bottomOffset` above
-// the keyboard — we pass footerHeight + a gap so it clears the pinned Save CTA.
+// KEYBOARD: routed through <FormSheet> (the one canonical keyboard recipe).
+// This is the TALL case (9 fields ≈ the Dynamic-Island cap), so it opts into
+// scrollAware + keyboardBehavior="extend": the sheet fills the cap and a focused
+// low field scrolls above the keyboard+CTA. Because the content is already ~cap,
+// the keyboard-aware scroll can't inflate it past the cap, so there's no empty
+// gap. Short/medium forms instead use FormSheet's default (interactive LIFT).
 
 /** The sheet edits the shared itinerary-day contract (types/itinerary.ts)
  *  — alias retained for existing import sites. */
@@ -63,7 +50,6 @@ export interface EditDaySheetRef {
 const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
   ({ tripId, dayIndex, itinerary, onSaved }, ref) => {
     const { colors } = useTheme();
-    const insets = useSafeAreaInsets();
     const { showToast } = useToast();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const updateField = useMutation(api.trips.updateTripField);
@@ -118,22 +104,6 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
       },
       dismiss: () => bottomSheetRef.current?.dismiss(),
     }));
-
-    const renderBackdrop = useCallback(
-      (props: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop
-          {...props}
-          disappearsOnIndex={-1}
-          appearsOnIndex={0}
-          // 0.4 — unified with AppBottomSheet / the booking sheets.
-          opacity={0.4}
-        />
-      ),
-      [],
-    );
-
-    // Pinned-footer height (measured) so the scroll body reserves room for it.
-    const [footerHeight, setFooterHeight] = useState(0);
 
     const s = useMemo(() => makeStyles(colors), [colors]);
 
@@ -202,62 +172,30 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
       }
     };
 
-    // ── Pinned footer — the Save CTA. gorhom lifts it flush onto the keyboard
-    // (animatedFooterPosition); the scroll body below clears it via the KAW's
-    // bottomOffset (footerHeight + gap) so the focused field never tucks behind
-    // the CTA, and "extend" keeps the sheet from double-counting the scroll. ──
-    const renderFooter = useCallback(
-      (props: BottomSheetFooterProps) => (
-        <BottomSheetFooter {...props} bottomInset={0}>
-          <View
-            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-            style={{
-              paddingHorizontal: 18,
-              paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 14),
-              // Opaque so the scroll body slides cleanly underneath it.
-              backgroundColor: colors.surface,
-            }}
-          >
-            <PillButton
-              label={saving ? 'Saving…' : 'Save changes'}
-              onPress={handleSave}
-              variant="primary"
-              fullWidth
-              disabled={saving}
-            />
-          </View>
-        </BottomSheetFooter>
-      ),
-      [saving, handleSave, colors, insets.bottom],
+    // Pinned Save CTA — lives in FormSheet's keyboard-riding footer. The text
+    // inputs are in the body, never here, so this can re-render freely.
+    const footerCta = (
+      <PillButton
+        label={saving ? 'Saving…' : 'Save changes'}
+        onPress={handleSave}
+        variant="primary"
+        fullWidth
+        disabled={saving}
+      />
     );
 
+    // TALL form (9 fields): scrollAware + "extend" so the sheet fills the cap
+    // and a focused low field scrolls above the keyboard+CTA. The content is
+    // already ~cap, so the keyboard-aware scroll can't inflate past it — no gap.
     return (
-      <BottomSheetModal
+      <FormSheet
         ref={bottomSheetRef}
-        enableDynamicSizing
-        maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
-        topInset={insets.top + 10}
-        // See the top-of-file note: "extend" applies zero sheet offset and
-        // never enters a temporary position, so the KAW body owns the focused-
-        // input scroll cleanly and the float-on-blur can't happen.
         keyboardBehavior="extend"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
-        overDragResistanceFactor={0}
-        footerComponent={renderFooter}
-        backdropComponent={renderBackdrop}
-        handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
-        backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
+        scrollAware
+        backgroundColor={colors.surface}
+        footer={footerCta}
+        contentContainerStyle={s.scroll}
       >
-        <BottomSheetKeyboardAwareScrollView
-          // Scroll the focused field to sit footerHeight + a gap above the
-          // keyboard, so it clears the pinned Save CTA that rides the keys.
-          bottomOffset={footerHeight + 12}
-          contentContainerStyle={[s.scroll, { paddingBottom: footerHeight }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           {/* Editorial header */}
           <View style={s.header}>
             <Text style={[Type.kicker, { color: colors.inkMute }]}>EDIT DAY {initial?.day ?? dayIndex + 1}</Text>
@@ -357,10 +295,8 @@ const EditDaySheet = forwardRef<EditDaySheetRef, EditDaySheetProps>(
             multiline
           />
 
-          {/* Save CTA is rendered in the pinned BottomSheetFooter (renderFooter)
-              so it hugs the keyboard with no dead band. */}
-        </BottomSheetKeyboardAwareScrollView>
-      </BottomSheetModal>
+          {/* Save CTA is rendered in FormSheet's pinned footer (footerCta). */}
+      </FormSheet>
     );
   },
 );
@@ -386,9 +322,8 @@ function Field({
   placeholder?: string;
   multiline?: boolean;
 }) {
-  // The surrounding BottomSheetKeyboardAwareScrollView measures the focused
-  // BottomSheetTextInput itself via native focus events, so no wrapper ref or
-  // onFocus dance is needed here.
+  // FormSheet's scrollAware body measures the focused BottomSheetTextInput
+  // itself via native focus events, so no wrapper ref / onFocus dance is needed.
   return (
     <View
       style={{

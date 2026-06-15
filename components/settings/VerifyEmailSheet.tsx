@@ -12,17 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import {
-  BottomSheetModal, BottomSheetTextInput, BottomSheetFooter,
-  type BottomSheetFooterProps,
-} from '@gorhom/bottom-sheet';
-import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheetTextInput, type BottomSheetModal } from '@gorhom/bottom-sheet';
+import FormSheet from '@/components/ui/FormSheet';
 import { useAction, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily } from '@/constants/theme';
-import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
 
 export interface VerifyEmailSheetRef {
   open: () => void;
@@ -39,8 +34,6 @@ type Step = 'request' | 'verify';
 const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
   ({ email, onVerified }, ref) => {
     const { colors } = useTheme();
-    const insets = useSafeAreaInsets();
-    const [footerHeight, setFooterHeight] = useState(0);
     const sheetRef = useRef<BottomSheetModal>(null);
 
     const sendCode = useAction(api.emailVerification.sendVerificationCode);
@@ -148,101 +141,79 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
       }
     }, [code, verifyCode, onVerified]);
 
-    // ── Pinned footer — CTA + Resend. gorhom lifts it flush onto the keyboard
-    // on the code step (animatedFooterPosition); the KAW body scrolls the
-    // autofocused code field to clear it (bottomOffset = footerHeight + gap), so
-    // the field keeps Apple-2FA breathing room above the pinned action and never
-    // hides behind it — no dead band. ────────────────────────────────────────
-    const renderFooter = useCallback(
-      (props: BottomSheetFooterProps) => (
-        <BottomSheetFooter {...props} bottomInset={0}>
-          <View
-            onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-            style={{
-              paddingHorizontal: 22,
-              paddingTop: 8,
-              paddingBottom: Math.max(insets.bottom, 14),
-              backgroundColor: colors.background,
-            }}
-          >
-            <Pressable
-              onPress={step === 'request' ? handleSendCode : handleVerify}
-              disabled={
-                step === 'request'
-                  ? sending
-                  : verifying || code.replace(/\s/g, '').length < 6
-              }
-              style={({ pressed }) => [
-                styles.cta,
-                {
-                  backgroundColor: colors.primary,
-                  opacity:
-                    (step === 'request' && sending) ||
-                    (step === 'verify' &&
-                      (verifying || code.replace(/\s/g, '').length < 6))
-                      ? 0.5
-                      : pressed
-                      ? 0.88
-                      : 1,
-                },
-              ]}
-            >
-              {(step === 'request' && sending) ||
-              (step === 'verify' && verifying) ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.ctaText}>
-                  {step === 'request' ? 'SEND CODE →' : 'VERIFY →'}
-                </Text>
-              )}
-            </Pressable>
+    // Pinned CTA + Resend — live in FormSheet's keyboard-riding footer. The code
+    // input is in the BODY, so this can re-render (per keystroke, for the
+    // disabled state) without dropping the keyboard.
+    const footerContent = (
+      <>
+        <Pressable
+          onPress={step === 'request' ? handleSendCode : handleVerify}
+          disabled={
+            step === 'request'
+              ? sending
+              : verifying || code.replace(/\s/g, '').length < 6
+          }
+          style={({ pressed }) => [
+            styles.cta,
+            {
+              backgroundColor: colors.primary,
+              opacity:
+                (step === 'request' && sending) ||
+                (step === 'verify' &&
+                  (verifying || code.replace(/\s/g, '').length < 6))
+                  ? 0.5
+                  : pressed
+                  ? 0.88
+                  : 1,
+            },
+          ]}
+        >
+          {(step === 'request' && sending) ||
+          (step === 'verify' && verifying) ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.ctaText}>
+              {step === 'request' ? 'SEND CODE →' : 'VERIFY →'}
+            </Text>
+          )}
+        </Pressable>
 
-            {step === 'verify' ? (
-              <Pressable
-                onPress={handleSendCode}
-                hitSlop={8}
-                disabled={sending}
-                style={{ alignItems: 'center', marginTop: 14 }}
+        {step === 'verify' ? (
+          <Pressable
+            onPress={handleSendCode}
+            hitSlop={8}
+            disabled={sending}
+            style={{ alignItems: 'center', marginTop: 14 }}
+          >
+            {sending ? (
+              <ActivityIndicator color={colors.coral} size="small" />
+            ) : (
+              <Text
+                style={{
+                  fontFamily: FontFamily.displayItalic,
+                  fontStyle: 'italic',
+                  fontSize: 13,
+                  color: colors.coral,
+                }}
               >
-                {sending ? (
-                  <ActivityIndicator color={colors.coral} size="small" />
-                ) : (
-                  <Text
-                    style={{
-                      fontFamily: FontFamily.displayItalic,
-                      fontStyle: 'italic',
-                      fontSize: 13,
-                      color: colors.coral,
-                    }}
-                  >
-                    Resend the code
-                  </Text>
-                )}
-              </Pressable>
-            ) : null}
-          </View>
-        </BottomSheetFooter>
-      ),
-      [step, sending, verifying, code, handleSendCode, handleVerify, colors, insets.bottom],
+                Resend the code
+              </Text>
+            )}
+          </Pressable>
+        ) : null}
+      </>
     );
 
+    // Short form → FormSheet's default interactive LIFT: the sheet hugs its
+    // content and rises above the keyboard on focus (no empty band, the
+    // autofocused code field stays visible above the pinned CTA).
     return (
-      <AppBottomSheet
+      <FormSheet
         ref={sheetRef}
-        keyboardBehavior="extend"
-        overDragResistanceFactor={0}
-        footerComponent={renderFooter}
+        backgroundColor={colors.background}
+        footer={footerContent}
+        contentContainerStyle={styles.container}
       >
-        <BottomSheetKeyboardAwareScrollView
-          // Short sheet, but the autofocused code input still has to clear the
-          // pinned Verify CTA + Resend that ride the keyboard. KAW scrolls it to
-          // sit footerHeight + a gap above the keys; "extend" (set on
-          // AppBottomSheet) keeps the sheet from double-counting that scroll.
-          bottomOffset={footerHeight + 12}
-          contentContainerStyle={[styles.container, { paddingBottom: footerHeight }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           <View>
             {/* Mono kicker */}
             <Text
@@ -331,11 +302,9 @@ const VerifyEmailSheet = forwardRef<VerifyEmailSheetRef, Props>(
               </View>
             ) : null}
 
-            {/* CTA + Resend live in the pinned BottomSheetFooter so they hug
-                the keyboard on the code step with no dead band (renderFooter). */}
+            {/* CTA + Resend live in FormSheet's pinned footer (footerContent). */}
           </View>
-        </BottomSheetKeyboardAwareScrollView>
-      </AppBottomSheet>
+      </FormSheet>
     );
   },
 );

@@ -647,11 +647,9 @@ function BookingFormInner({
 
   // ── Render ─────────────────────────────────
   // No KeyboardAvoidingView / ScrollView here: this form is mounted inside
-  // AddBookingSheet's BottomSheetKeyboardAwareScrollView, which owns both
-  // scrolling and keyboard avoidance (same shape as EditDaySheet). Nesting a
-  // KAV + ScrollView inside sheet content broke the padding math entirely —
-  // RNKC's KAV frame is relative to the sheet's scroll content, not the
-  // window.
+  // AddBookingSheet's <FormSheet>, which owns the scroll body and the keyboard
+  // recipe (content-hug + interactive lift). Nesting a scroll/KAV inside the
+  // sheet body would fight FormSheet's own scroll.
   return (
     <View style={{ padding: Spacing.lg, paddingBottom: 12 }}>
         {/* ── Editorial header — kicker + italic "Add {type}." ─ */}

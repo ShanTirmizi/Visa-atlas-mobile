@@ -6,17 +6,10 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Dimensions, Keyboard } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BottomSheetModal,
-  BottomSheetBackdrop,
-  BottomSheetFooter,
-  type BottomSheetBackdropProps,
-  type BottomSheetFooterProps,
-} from '@gorhom/bottom-sheet';
-import BottomSheetKeyboardAwareScrollView from '@/components/ui/BottomSheetKeyboardAwareScrollView';
-import { Text, TouchableOpacity, StyleSheet, View } from 'react-native';
+import { Keyboard } from 'react-native';
+import { type BottomSheetModal } from '@gorhom/bottom-sheet';
+import FormSheet from '@/components/ui/FormSheet';
+import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useMutation, useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { type Id } from '@/convex/_generated/dataModel';
@@ -68,17 +61,12 @@ const detailsKeyForType = (type: BookingType): string => {
 const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
   ({ onBookingCreated }, ref) => {
     const { colors } = useTheme();
-    const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
 
     // The form's submit lives in the pinned footer; drive it via this handle
     // and mirror the form's validity so the footer CTA enables/disables.
     const formRef = useRef<BookingFormHandle>(null);
     const [canSubmit, setCanSubmit] = useState(false);
-    const [footerHeight, setFooterHeight] = useState(0);
-
-    // Max sheet height: screen height minus status bar / Dynamic Island area
-    const maxSheetHeight = Dimensions.get('window').height - insets.top - 10;
 
     // ── State ────────────────────────────────────────────────────────
     const [step, setStep] = useState<'type' | 'form'>('type');
@@ -253,175 +241,80 @@ const AddBookingSheet = forwardRef<AddBookingSheetRef, AddBookingSheetProps>(
       return trips.find((t) => t._id === prelinkedTripId) ?? null;
     }, [prelinkedTripId, trips]);
 
-    // Dimmed backdrop — matches AppBottomSheet so the trip planner and the
-    // booking sheets feel like the same family of surfaces.
-    const renderBackdrop = useCallback(
-      (props: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop
-          {...props}
-          appearsOnIndex={0}
-          disappearsOnIndex={-1}
-          opacity={0.4}
-        />
-      ),
-      [],
-    );
-
-    // ── Pinned footer — the primary CTA. gorhom drives it up to sit flush on
-    // the keyboard (animatedFooterPosition), so on focus it hugs the keys with
-    // ZERO dead band while keyboardBehavior="extend" raises the sheet to
-    // the Dynamic Island. Only shown on the form step; the type picker has no
-    // CTA. Fires the form's submit via the imperative handle. ───────────────
-    const renderFooter = useCallback(
-      (props: BottomSheetFooterProps) => {
-        if (step !== 'form' || !selectedType) return null;
-        return (
-          <BottomSheetFooter {...props} bottomInset={0}>
-            <View
-              onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-              style={{
-                paddingHorizontal: Spacing.lg,
-                paddingTop: 12,
-                paddingBottom: Math.max(insets.bottom, 14),
-                // Opaque so the scroll body slides cleanly underneath it.
-                backgroundColor: colors.surface,
-              }}
-            >
-              <TouchableOpacity
-                onPress={() => formRef.current?.submit()}
-                disabled={!canSubmit}
-                activeOpacity={0.85}
-                style={[
-                  ftStyles.submitButton,
-                  {
-                    backgroundColor: canSubmit ? colors.coral : colors.surfaceMuted,
-                    borderColor: canSubmit ? colors.coral : colors.line,
-                    borderWidth: 1,
-                    shadowColor: canSubmit ? colors.coral : 'transparent',
-                    shadowOffset: { width: 0, height: 8 },
-                    shadowOpacity: canSubmit ? 0.35 : 0,
-                    shadowRadius: 16,
-                    elevation: canSubmit ? 6 : 0,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    ftStyles.submitButtonText,
-                    { color: canSubmit ? '#FFFFFF' : colors.inkMute },
-                  ]}
-                >
-                  {canSubmit ? 'Save booking' : 'Fill in the essentials'}
-                  {canSubmit ? (
-                    <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
-                  ) : null}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </BottomSheetFooter>
-        );
-      },
-      [step, selectedType, canSubmit, colors, insets.bottom],
-    );
+    // ── Pinned footer CTA (form step only). Fires the form's submit via the
+    // imperative handle. Text inputs stay in the BODY (BookingForm), NEVER here
+    // — a footer that re-renders per keystroke would remount and drop the
+    // keyboard (see FormSheet header). FormSheet wraps this in a keyboard-riding
+    // BottomSheetFooter and measures it. ────────────────────────────────────
+    const footerCta =
+      step === 'form' && selectedType ? (
+        <TouchableOpacity
+          onPress={() => formRef.current?.submit()}
+          disabled={!canSubmit}
+          activeOpacity={0.85}
+          style={[
+            ftStyles.submitButton,
+            {
+              backgroundColor: canSubmit ? colors.coral : colors.surfaceMuted,
+              borderColor: canSubmit ? colors.coral : colors.line,
+              borderWidth: 1,
+              shadowColor: canSubmit ? colors.coral : 'transparent',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: canSubmit ? 0.35 : 0,
+              shadowRadius: 16,
+              elevation: canSubmit ? 6 : 0,
+            },
+          ]}
+        >
+          <Text style={[ftStyles.submitButtonText, { color: canSubmit ? '#FFFFFF' : colors.inkMute }]}>
+            {canSubmit ? 'Save booking' : 'Fill in the essentials'}
+            {canSubmit ? <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text> : null}
+          </Text>
+        </TouchableOpacity>
+      ) : null;
 
     // ── Render ───────────────────────────────────────────────────────
+    // FormSheet owns the keyboard recipe: content-hug at rest (no empty band),
+    // interactive LIFT on focus (sheet rises above the keys without inflating),
+    // CTA pinned on the keyboard, inputs in the body.
     return (
-      <BottomSheetModal
+      <FormSheet
         ref={bottomSheetRef}
-        enableDynamicSizing={true}
-        maxDynamicContentSize={maxSheetHeight}
-        // topInset is what actually CLAMPS the sheet's top position below the
-        // Dynamic Island — maxDynamicContentSize only caps height, and
-        // gorhom's interactive keyboard shift can otherwise push the sheet
-        // over the island. Same shape as EditDaySheet (the reference impl).
-        topInset={insets.top + 10}
-        stackBehavior="push"
-        backdropComponent={renderBackdrop}
-        // KEYBOARD — the best-of-class recipe, verified against gorhom's source:
-        //
-        //   keyboardBehavior="extend"  +  BottomSheetKeyboardAwareScrollView
-        //
-        // "extend" is the only behavior that applies ZERO keyboard offset to the
-        // sheet (gorhom BottomSheet.tsx:640 gates the offset on
-        // `keyboardBehavior !== extend`) and never sets isInTemporaryPosition
-        // (BottomSheet.tsx:815-846). So (a) the float-on-blur is impossible at
-        // the source — there's no temporary position to mis-restore (no
-        // snapToIndex hack), and (b) gorhom does NOT move the sheet on focus, so
-        // it can't double-count against the keyboard-aware scroll the way
-        // "interactive"/"fillParent" did (that double-count was the old
-        // over-scroll). The sheet sits at its content height — for this tall
-        // form that's the Dynamic-Island cap. The body is a
-        // BottomSheetKeyboardAwareScrollView (RNKC's documented gorhom
-        // integration) which measures the focused BottomSheetTextInput and
-        // scrolls it to sit `bottomOffset` above the keyboard — we pass
-        // footerHeight + a gap so it clears the pinned CTA, never hides behind
-        // it. The CTA itself rides a BottomSheetFooter (animatedFooterPosition)
-        // flush on the keys — no dead band. "restore" returns to the detent on
-        // dismiss; adjustResize is gorhom's documented Android requirement.
-        keyboardBehavior="extend"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
-        // Kill the ~80pt over-drag band below the content at rest.
-        overDragResistanceFactor={0}
-        footerComponent={renderFooter}
-        // Paper-bg sheet matching the rest of the Signature v2 surfaces;
-        // booking-type color is moved into accents inside the form, not the
-        // entire sheet background.
-        backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
-        handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
+        backgroundColor={colors.surface}
+        keyboardBehavior="interactive"
+        footer={footerCta}
+        contentContainerStyle={{ paddingTop: Spacing.sm }}
         onDismiss={resetState}
       >
-        <BottomSheetKeyboardAwareScrollView
-          // RNKC measures the focused BottomSheetTextInput and scrolls it to sit
-          // `bottomOffset` above the keyboard top. The pinned CTA footer rides
-          // the keyboard, so the input must clear footerHeight + a small gap or
-          // it'd scroll to just behind the footer. (footerHeight is 0 until the
-          // footer's onLayout fires — which happens on mount, well before any
-          // focus, so the first focus already has the real value.)
-          bottomOffset={(step === 'form' ? footerHeight : 0) + 12}
-          contentContainerStyle={{
-            paddingTop: Spacing.sm,
-            // Reserve room for the pinned footer (form step only) so the last
-            // field isn't hidden behind it at rest.
-            paddingBottom: step === 'form' ? footerHeight : 12,
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {step === 'type' && (
-            <BookingTypePicker onSelect={handleTypeSelect} onScanComplete={handleScanComplete} />
-          )}
+        {step === 'type' && (
+          <BookingTypePicker onSelect={handleTypeSelect} onScanComplete={handleScanComplete} />
+        )}
 
-          {step === 'form' && selectedType && (
-            <BookingForm
-              ref={formRef}
-              onValidityChange={setCanSubmit}
-              type={selectedType}
-              isEditing={editingId != null}
-              // Dismiss the keyboard BEFORE unmounting the form: gorhom's
-              // keyboardBlurBehavior="restore" only fires off a blur from a
-              // still-mounted BottomSheetTextInput. Unmounting a focused
-              // input mid-keyboard strands the sheet at its lifted position
-              // — it sat visibly detached above the screen bottom
-              // (QA-reproduced: form → focus field → back arrow).
-              onBack={() => {
-                Keyboard.dismiss();
-                setStep('type');
-              }}
-              onSubmit={handleSubmit}
-              defaultCountryCode={prelinkedTrip?.countryCode}
-              defaultStartDate={prelinkedTrip?.startDate}
-              // Deliberately NOT seeding the end date from the trip window.
-              // A booking should only get an end date the user actually picked
-              // (a hotel check-out, a car drop-off) — inheriting trip.endDate
-              // made every booking a whole-trip range that rendered on EVERY
-              // day of the trip (esp. flights, which have no end-date field to
-              // correct). Start date stays as a convenience anchor.
-              prefillData={prefillData}
-            />
-          )}
-        </BottomSheetKeyboardAwareScrollView>
-      </BottomSheetModal>
+        {step === 'form' && selectedType && (
+          <BookingForm
+            ref={formRef}
+            onValidityChange={setCanSubmit}
+            type={selectedType}
+            isEditing={editingId != null}
+            // Dismiss the keyboard BEFORE unmounting the form: restore only
+            // fires off a blur from a still-mounted BottomSheetTextInput.
+            // Unmounting a focused input mid-keyboard strands the sheet lifted.
+            onBack={() => {
+              Keyboard.dismiss();
+              setStep('type');
+            }}
+            onSubmit={handleSubmit}
+            defaultCountryCode={prelinkedTrip?.countryCode}
+            defaultStartDate={prelinkedTrip?.startDate}
+            // Deliberately NOT seeding the end date from the trip window.
+            // A booking should only get an end date the user actually picked
+            // (a hotel check-out, a car drop-off) — inheriting trip.endDate
+            // made every booking a whole-trip range that rendered on EVERY
+            // day of the trip. Start date stays as a convenience anchor.
+            prefillData={prefillData}
+          />
+        )}
+      </FormSheet>
     );
   },
 );

@@ -2,7 +2,7 @@ import React, {
   useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo,
 } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Dimensions, Modal, FlatList, TextInput,
+  View, Text, TouchableOpacity, StyleSheet, Modal, FlatList, TextInput,
 } from 'react-native';
 import { ChevronRight, Search, X } from 'lucide-react-native';
 import Animated, {
@@ -13,12 +13,8 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import {
-  BottomSheetModal, BottomSheetBackdrop, BottomSheetScrollView,
-  BottomSheetFooter,
-  type BottomSheetBackdropProps,
-  type BottomSheetFooterProps,
-} from '@gorhom/bottom-sheet';
+import { type BottomSheetModal } from '@gorhom/bottom-sheet';
+import FormSheet from '@/components/ui/FormSheet';
 import { Sparkles } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation } from 'convex/react';
@@ -44,7 +40,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Platform } from 'react-native';
 import { DarkOrb } from '@/components/ui/DarkOrb';
 import { SectionKicker } from '@/components/ui/SectionKicker';
-import { TripPlannerNotesField } from './TripPlannerNotesField';
+import { TripPlannerNotesField, type TripPlannerNotesHandle } from './TripPlannerNotesField';
 import { TripRefinementSheet, type TripRefinementSheetHandle } from './TripRefinementSheet';
 
 // ── Constants ───────────────────────────────────────────────────────────
@@ -60,28 +56,19 @@ const COMPANION_OPTIONS = ['solo', 'partner', 'friends', 'family'];
 // Avatar tones for traveler stack — warm, forest, sunset palette
 const AVATAR_TONES = ['#C4A882', '#6B8F71', '#C97B4B'] as const;
 
-// Keyboard handling — the canonical, no-hack recipe (verified against gorhom's
-// own source, BottomSheet.tsx:640 + 815-846):
+// Keyboard handling — routed through <FormSheet> (the one canonical recipe).
 //
-//   keyboardBehavior="extend" is the ONLY behavior that never applies a
-//   keyboard offset to the sheet AND never sets gorhom's isInTemporaryPosition
-//   flag. With a single dynamic content detent it is a position NO-OP: the
-//   sheet does not move when the keyboard opens. Because the sheet never enters
-//   a temporary position, there is nothing to "restore" on blur — so the
-//   float-on-blur (a stranded/gapped sheet after the keyboard dismisses) is
-//   IMPOSSIBLE by construction, with no snapToIndex workaround.
+//   The "Anything else?" notes input rides the pinned FOOTER (with the CTA), so
+//   it sits flush above the keyboard and is always visible. keyboardBehavior=
+//   "extend" keeps the body still while the footer rides the keys — no lift, no
+//   float, no empty gap.
 //
-//   The "Anything else?" notes input + the primary CTA live in a gorhom
-//   BottomSheetFooter (NOT the scroll body). gorhom drives ONLY the footer up
-//   to sit flush on the keyboard via animatedFooterPosition — the sheet stays
-//   put, the footer rides the keys with zero gap. The scroll body holds the
-//   non-input fields and reserves paddingBottom = measured footer height.
-//
-// History (do not reintroduce): "fillParent"/"interactive" move the sheet into
-// a temporary position (isInTemporaryPosition) that mis-restores against the
-// keyboard-era dynamic detent → the sheet floated/gapped on blur. A
-// snapToIndex(0)-on-keyboardDidHide guard was tried to paper over it — that is
-// the hack this recipe removes. "extend" fixes it at the source.
+//   The catch that bit us before: a controlled input in a footer that
+//   re-renders per keystroke makes gorhom REMOUNT the footer, and the keyboard
+//   collapses after one character (live-reproduced). Fix: TripPlannerNotesField
+//   is SELF-CONTAINED (owns its value, read via notesFieldRef at generate
+//   time), so typing never re-renders the planner — the footer node keeps a
+//   stable reference and never remounts.
 //
 // Modals (date picker, country picker) are rendered OUTSIDE this sheet
 // so they don't pollute the contentContainer measurement.
@@ -309,9 +296,11 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
     // ── Vibes state (spec-aligned 8-chip set) ───────────────────
     const [activeVibes, setActiveVibes] = useState<Set<string>>(new Set());
 
-    // ── Free-form "Anything else?" notes (Task 8 — refinement sheet
-    //    intercept lands in Task 10; for now passes straight through).
-    const [userNotes, setUserNotes] = useState('');
+    // ── Free-form "Anything else?" notes. The value lives INSIDE
+    //    TripPlannerNotesField (self-contained), read via this ref at generate
+    //    time — so typing never re-renders the planner and the footer the field
+    //    rides in never remounts (which used to collapse the keyboard).
+    const notesFieldRef = useRef<TripPlannerNotesHandle>(null);
 
     // ── Legacy preference state (preserved for payload compat) ──
     const [vibe] = useState('balanced');
@@ -348,7 +337,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       setEndDate(d.end);
       setTravelers(2);
       setActiveVibes(new Set());
-      setUserNotes('');
+      notesFieldRef.current?.clear();
       setIsLoading(false);
       setError('');
       setPickedCode('');
@@ -538,7 +527,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         setError('Pick a destination first.');
         return;
       }
-      const trimmed = userNotes.trim();
+      const trimmed = (notesFieldRef.current?.getValue() ?? '').trim();
       if (trimmed === '') {
         void runGeneration('');
         return;
@@ -552,7 +541,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
         vibes: [...activeVibes],
         userNotes: trimmed,
       });
-    }, [resolveEffective, userNotes, days, activeVibes, runGeneration]);
+    }, [resolveEffective, days, activeVibes, runGeneration]);
 
     // Called by the refinement sheet on submit (questions answered) or after
     // its affirmation animation (no questions returned). `mergedNotes` is the
@@ -565,175 +554,107 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
       [runGeneration],
     );
 
-    // ── Backdrop ────────────────────────────────────────────────
-    const renderBackdrop = useCallback(
-      (props: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop
-          {...props}
-          disappearsOnIndex={-1}
-          appearsOnIndex={0}
-          // 0.4 — unified with AppBottomSheet / the booking sheets so every
-          // sheet in the app dims the page identically.
-          opacity={0.4}
-        />
-      ),
-      [],
-    );
 
     const s = useMemo(() => makeStyles(colors), [colors]);
 
-    // ── Footer (notes input + CTA, pinned above the keyboard) ──────
-    // Measured at layout so the scroll body can reserve exactly this much
-    // paddingBottom — nothing hides behind the footer at rest.
-    const [footerHeight, setFooterHeight] = useState(0);
-    const renderFooter = useCallback(
-      (props: BottomSheetFooterProps) => {
-        if (isLoading) return null;
-        const ready = !!effective || !!(country && meta && travel && resolved);
-        return (
-          <BottomSheetFooter {...props} bottomInset={0}>
-            <View
-              onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-              style={{
-                paddingHorizontal: Spacing.lg,
-                paddingTop: 14,
-                paddingBottom: Math.max(insets.bottom, 14),
-                // Opaque so the scroll body slides cleanly underneath it.
-                backgroundColor: colors.surface,
-              }}
+    // ── Footer = "Anything else?" notes + CTA, pinned above the keyboard. ──
+    // The notes field is self-contained (owns its value), so typing does NOT
+    // re-render the planner — which means this footer node keeps a stable
+    // reference during typing and gorhom never remounts it. THAT is what fixed
+    // the keyboard-collapses-after-one-character bug, while keeping the notes
+    // riding the keyboard (always visible) with no empty gap.
+    const ready = !!effective || !!(country && meta && travel && resolved);
+    const footerCta = isLoading ? null : (
+      <>
+        <TripPlannerNotesField ref={notesFieldRef} />
+
+        {error !== '' && (
+          <View style={[s.errorCard, {
+            borderColor: colors.danger,
+            backgroundColor: colors.dangerBg,
+          }]}>
+            <Text style={[s.errorText, { color: colors.danger }]}>{error}</Text>
+            <TouchableOpacity
+              onPress={() => setError('')}
+              style={[s.errorRetry, { borderColor: colors.danger }]}
             >
-              {/* "Anything else?" — free-form notes that flow into the
-                  generation prompt as userNotes (Task 8). */}
-              <TripPlannerNotesField
-                value={userNotes}
-                onChangeText={setUserNotes}
-              />
+              <Text style={[s.errorRetryText, { color: colors.danger }]}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-              {/* Error */}
-              {error !== '' && (
-                <View style={[s.errorCard, {
-                  borderColor: colors.danger,
-                  backgroundColor: colors.dangerBg,
-                }]}>
-                  <Text style={[s.errorText, { color: colors.danger }]}>{error}</Text>
-                  <TouchableOpacity
-                    onPress={() => setError('')}
-                    style={[s.errorRetry, { borderColor: colors.danger }]}
-                  >
-                    <Text style={[s.errorRetryText, { color: colors.danger }]}>Dismiss</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Primary CTA — italic Fraunces with coral period when ready,
-                  paper hint when waiting for a destination. */}
-              <TouchableOpacity
-                onPress={ready ? generate : undefined}
-                activeOpacity={ready ? 0.85 : 1}
-                disabled={!ready}
-                style={[
-                  s.ctaButton,
-                  {
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                    paddingVertical: 18,
-                    borderRadius: 999,
-                    backgroundColor: ready ? colors.coral : colors.surface,
-                    borderWidth: 1,
-                    borderColor: ready ? colors.coral : colors.line,
-                    shadowColor: ready ? colors.coral : 'transparent',
-                    shadowOffset: { width: 0, height: 8 },
-                    shadowOpacity: ready ? 0.35 : 0,
-                    shadowRadius: 16,
-                    elevation: ready ? 6 : 0,
-                  },
-                ]}
-              >
-                <Sparkles
-                  size={16}
-                  color={ready ? '#FFFFFF' : colors.inkMute}
-                  fill={ready ? '#FFFFFF' : 'transparent'}
-                />
-                <Text
-                  style={{
-                    fontFamily: FontFamily.displayItalic,
-                    fontStyle: 'italic',
-                    fontSize: 17,
-                    fontWeight: '500',
-                    letterSpacing: -17 * 0.014,
-                    // Italic Fraunces descenders need explicit room.
-                    lineHeight: 24,
-                    color: ready ? '#FFFFFF' : colors.inkMute,
-                  }}
-                >
-                  {ready ? 'Generate itinerary' : 'Pick a destination first'}
-                  {ready ? (
-                    <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
-                  ) : null}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </BottomSheetFooter>
-        );
-      },
-      [
-        isLoading, effective, country, meta, travel, resolved,
-        userNotes, error, generate, colors, s, insets.bottom,
-      ],
+        {/* Primary CTA — italic Fraunces with coral period when ready,
+            paper hint when waiting for a destination. */}
+        <TouchableOpacity
+          onPress={ready ? generate : undefined}
+          activeOpacity={ready ? 0.85 : 1}
+          disabled={!ready}
+          style={[
+            {
+              marginTop: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              paddingVertical: 18,
+              borderRadius: 999,
+              backgroundColor: ready ? colors.coral : colors.surface,
+              borderWidth: 1,
+              borderColor: ready ? colors.coral : colors.line,
+              shadowColor: ready ? colors.coral : 'transparent',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: ready ? 0.35 : 0,
+              shadowRadius: 16,
+              elevation: ready ? 6 : 0,
+            },
+          ]}
+        >
+          <Sparkles
+            size={16}
+            color={ready ? '#FFFFFF' : colors.inkMute}
+            fill={ready ? '#FFFFFF' : 'transparent'}
+          />
+          <Text
+            style={{
+              fontFamily: FontFamily.displayItalic,
+              fontStyle: 'italic',
+              fontSize: 17,
+              fontWeight: '500',
+              letterSpacing: -17 * 0.014,
+              lineHeight: 24,
+              color: ready ? '#FFFFFF' : colors.inkMute,
+            }}
+          >
+            {ready ? 'Generate itinerary' : 'Pick a destination first'}
+            {ready ? (
+              <Text style={{ color: colors.solidTextSub }}>{'  →'}</Text>
+            ) : null}
+          </Text>
+        </TouchableOpacity>
+      </>
     );
 
     return (
       <>
-      <BottomSheetModal
+      <FormSheet
         ref={bottomSheetRef}
-        enableDynamicSizing={true}
-        maxDynamicContentSize={Dimensions.get('window').height - insets.top - 10}
-        // CRITICAL: maxDynamicContentSize caps the sheet's HEIGHT, but the
-        // interactive keyboard shift moves its POSITION unclamped — on a
-        // real device (taller keyboard + predictive bar) the sheet shot
-        // past the Dynamic Island, and restoring from that overshoot left
-        // it stranded mid-screen with the CTA collapse stuck halfway.
-        // topInset is the prop that clamps position (CLAUDE.md).
-        topInset={insets.top + 10}
-        enablePanDownToClose={!isLoading}
-        // Cut the default 2.5 over-drag bounce padding (~80pt). The
-        // sheet doesn't get over-dragged here, so this just removes a
-        // visible empty band below the CTA at rest.
-        overDragResistanceFactor={0}
-        backdropComponent={renderBackdrop}
-        // The notes input + CTA ride in this footer; gorhom drives it flush onto
-        // the keyboard via animatedFooterPosition. keyboardBehavior="extend" is
-        // the ONLY behavior that never sets gorhom's isInTemporaryPosition flag
-        // and never applies a keyboard offset to the sheet (BottomSheet.tsx:640,
-        // 815-824) — so gorhom does NOT reposition the sheet for the keyboard,
-        // which means there is nothing to "restore" and the float-on-blur is
-        // impossible at the source. (interactive/fillParent DO set the temporary
-        // position and mis-restore against the keyboard-era dynamic detent —
-        // that was the float bug.)
-        footerComponent={renderFooter}
+        // The only keyboard input (notes) rides the footer, so the BODY never
+        // needs to move — "extend" keeps the sheet put (no lift, no float) while
+        // the footer rides the keys. No scrollAware: the body has no inputs.
         keyboardBehavior="extend"
-        keyboardBlurBehavior="restore"
-        // gorhom's documented Android requirement for interactive keyboard
-        // handling — the inherited adjustPan default pans the whole window
-        // and is jumpy with edge-to-edge. Matches EditDaySheet/VisaChatSheet.
-        android_keyboardInputMode="adjustResize"
-        handleIndicatorStyle={{ backgroundColor: colors.inkFaint, width: 36, height: 4 }}
-        backgroundStyle={{ backgroundColor: colors.surface, borderRadius: 28 }}
-        // Use onDismiss (not onChange === -1) — onChange fires when a sheet
-        // stacked above minimizes this one and would wipe state mid-flow;
-        // onDismiss only fires on a true dismissal (gesture or programmatic).
-        // Draft protection: a dismissal no longer wipes the form — it stamps
-        // the time and clears only transient UI state; present() decides
+        backgroundColor={colors.surface}
+        enablePanDownToClose={!isLoading}
+        footer={footerCta}
+        contentContainerStyle={s.scrollContent}
+        // Use onDismiss (not onChange === -1) — draft protection: a dismissal
+        // stamps the time and clears only transient UI state; present() decides
         // whether to restore the draft or start fresh (see the draft refs).
         onDismiss={() => {
           isPresentedRef.current = false;
           dismissedAtRef.current = Date.now();
           resetTransientState();
           // Post-generation handoff: navigate now that the slide-down has
-          // fully completed (this callback fires from gorhom's close-
-          // animation completion).
+          // fully completed (fires from gorhom's close-animation completion).
           if (pendingTripIdRef.current) {
             const id = pendingTripIdRef.current;
             pendingTripIdRef.current = null;
@@ -741,15 +662,6 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
           }
         }}
       >
-        <BottomSheetScrollView
-          // Reserve room for the pinned footer (notes + CTA) so the last
-          // scroll field isn't hidden behind it at rest.
-          contentContainerStyle={[s.scrollContent, { paddingBottom: footerHeight }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          // iMessage-style interactive drag-to-dismiss for the keyboard.
-          keyboardDismissMode="interactive"
-        >
           {/* ── MAIN FORM ──────────────────────────────────────── */}
           {!isLoading && (
             <View>
@@ -1037,9 +949,8 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
                   })}
                 </View>
               </View>
-              {/* The "Anything else?" notes input + primary CTA live in the
-                  BottomSheetFooter (renderFooter) so gorhom can lift them
-                  flush onto the keyboard — see the top-of-file recipe. */}
+              {/* "Anything else?" notes + CTA live in the pinned footer (see the
+                  top-of-file recipe) so they ride the keyboard and stay visible. */}
             </View>
           )}
 
@@ -1072,8 +983,7 @@ const TripPlannerSheet = forwardRef<TripPlannerSheetRef, TripPlannerSheetProps>(
               </Text>
             </View>
           )}
-        </BottomSheetScrollView>
-      </BottomSheetModal>
+      </FormSheet>
 
       {/* ── Date picker — calendar grid (iOS) / native dialog (Android) ──
           Rendered OUTSIDE the sheet so it can't affect the sheet's
