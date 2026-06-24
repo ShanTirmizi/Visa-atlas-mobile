@@ -14,7 +14,11 @@
 // unset, every call is a no-op (local dev without POSTHOG_API_KEY just works).
 
 const POSTHOG_HOST = process.env.POSTHOG_HOST ?? "https://us.i.posthog.com";
-const POSTHOG_KEY = process.env.POSTHOG_API_KEY;
+// Env var wins (set on Convex); committed default keeps the backend self-contained.
+// Public write-only project token, safe to ship.
+const POSTHOG_KEY =
+  process.env.POSTHOG_API_KEY ??
+  "phc_oNY9JDfxf8AfThtsb9e2qjFxH3FAefFkeo5vwRQJGrzU";
 
 // ── Pricing (USD per token) ──────────────────────────────────────────────
 // Every call site uses claude-sonnet-4-6. We compute cost ourselves and send

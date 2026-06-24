@@ -24,8 +24,14 @@ import { PostHogProvider, usePostHog } from 'posthog-react-native';
 /** US cloud ingestion host. Matches the project at us.posthog.com/project/484302. */
 export const POSTHOG_HOST = 'https://us.i.posthog.com';
 
-/** Public project API key (phc_...). Same value the Convex backend uses as POSTHOG_API_KEY. */
-const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_API_KEY;
+/**
+ * Public project API key (phc_...). Write-only, safe to ship in the client bundle
+ * (PostHog's own guidance). Env var wins; the committed default keeps the repo
+ * self-contained. Same value the Convex backend uses as POSTHOG_API_KEY.
+ */
+const POSTHOG_KEY =
+  process.env.EXPO_PUBLIC_POSTHOG_API_KEY ??
+  'phc_oNY9JDfxf8AfThtsb9e2qjFxH3FAefFkeo5vwRQJGrzU';
 
 /**
  * Canonical event registry. Add new events HERE, never inline a string at a call
