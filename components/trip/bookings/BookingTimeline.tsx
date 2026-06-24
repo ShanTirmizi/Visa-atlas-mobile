@@ -449,7 +449,7 @@ export function BookingTimeline({
           >
             Forward to{' '}
             <Text style={{ fontWeight: '700', color: colors.ink }}>
-              trips@visa.atlas
+              shan@tirmizilabs.com
             </Text>{' '}
             for auto-import
           </Text>
