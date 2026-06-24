@@ -56,10 +56,23 @@ export const AppleNative = ConvexCredentials({
         ? credentials.name
         : undefined;
 
-    const existing = await retrieveAccount(ctx, {
-      provider: "apple-native",
-      account: { id: payload.sub },
-    });
+    // NOTE: @convex-dev/auth@0.0.91's `retrieveAccount` THROWS
+    // `Error("InvalidAccountId")` when no account exists, despite its JSDoc
+    // promising it returns `null`. On a first-ever Apple sign-in there's no
+    // `apple-native` account yet, so we must treat that specific throw as
+    // "no existing account" and fall through to createAccount.
+    let existing: Awaited<ReturnType<typeof retrieveAccount>> | null = null;
+    try {
+      existing = await retrieveAccount(ctx, {
+        provider: "apple-native",
+        account: { id: payload.sub },
+      });
+    } catch (err) {
+      if (!(err instanceof Error) || err.message !== "InvalidAccountId") {
+        throw err;
+      }
+      existing = null;
+    }
 
     if (existing) {
       return { userId: existing.user._id };

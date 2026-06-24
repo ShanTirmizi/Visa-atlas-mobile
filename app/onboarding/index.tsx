@@ -8,7 +8,7 @@
  * Business logic preserved verbatim. Only the visual shell is replaced with
  * OnboardingScaffold.
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import { OnboardingScaffold } from '@/components/onboarding/OnboardingScaffold';
 import { Flag } from '@/components/ui/Flag';
 import { Type } from '@/constants/typography';
 import { toAlpha2 } from '@/utils/countryCode';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 const MAX_PASSPORTS = 3;
 
@@ -83,6 +84,13 @@ export default function PassportPickerScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const visa = useVisa();
+  const analytics = useAnalytics();
+
+  // Onboarding begins at this first step — fire once on mount.
+  useEffect(() => {
+    analytics.track(ANALYTICS.onboardingStarted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [selected, setSelected] = useState<string[]>([]);
   const [multiMode, setMultiMode] = useState(false);

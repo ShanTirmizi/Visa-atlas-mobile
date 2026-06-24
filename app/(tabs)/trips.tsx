@@ -30,6 +30,7 @@ import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { NextTripHero } from '@/components/trips/NextTripHero';
 import { TripRow } from '@/components/trips/TripRow';
 import { EmptyAtlasCard } from '@/components/trips/EmptyAtlasCard';
+import { DayTripsEntryCard } from '@/components/daytrip/DayTripsEntryCard';
 import { HandPickedCard } from '@/components/trips/HandPickedCard';
 import type { HandPickedTone } from '@/components/trips/HandPickedCard';
 
@@ -37,6 +38,7 @@ import TripPlannerSheet, {
   type TripPlannerSheetRef,
 } from '@/components/trip/TripPlannerSheet';
 import type { CountryVisa } from '@/data/visaData';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 // ──────────────────────────────────────────────
 // Types
@@ -49,6 +51,7 @@ interface RawTrip {
   _id: string;
   countryName: string;
   countryCode: string;
+  capital?: string;
   visaCategory: string;
   status: string;
   duration: number;
@@ -59,6 +62,7 @@ interface RawTrip {
   iataCode?: string;
   flightHours?: number;
   dailyBudget?: string;
+  isDayTrip?: boolean;
   _creationTime: number;
   [key: string]: unknown;
 }
@@ -136,6 +140,9 @@ function EmptyStateContent({
       {/* Dashed-border atlas card */}
       <EmptyAtlasCard onPlan={onPlan} onBrowse={onBrowse} />
 
+      {/* Day trips from home — same-day-return discovery */}
+      <DayTripsEntryCard style={{ marginTop: 14 }} />
+
       {/* "Try one of these" section header */}
       <View
         style={{
@@ -190,6 +197,7 @@ export default function TripsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const analytics = useAnalytics();
 
   // Planner sheet ref — used from search AI pill and empty state CTA
   const plannerRef = useRef<TripPlannerSheetRef>(null);
@@ -338,7 +346,10 @@ export default function TripsScreen() {
             travel={null}
             resolved={{ category: 'visa-required' }}
             heldVisas={new Set()}
-            onTripCreated={(tripId) => router.push(`/trip/${tripId}` as never)}
+            onTripCreated={(tripId) => {
+              analytics.track(ANALYTICS.tripGenerationStarted, { tripId });
+              router.push(`/trip/${tripId}` as never);
+            }}
           />
         </Animated.ScrollView>
         <TopSafeAreaBlur scrollY={scrollY} />
@@ -394,7 +405,7 @@ export default function TripsScreen() {
         <View style={{ marginTop: 16 }}>
           <NextTripHero
             id={featured._id}
-            name={featured.countryName}
+            name={featured.isDayTrip ? featured.capital ?? featured.countryName : featured.countryName}
             countryName={featured.countryName}
             countryCode={featured.countryCode}
             visaCategory={featured.visaCategory}
@@ -407,9 +418,13 @@ export default function TripsScreen() {
             flightHours={featured.flightHours}
             dailyBudget={featured.dailyBudget}
             loggedCost={0}
+            isDayTrip={featured.isDayTrip}
           />
         </View>
       )}
+
+      {/* Day trips from home — same-day-return discovery */}
+      <DayTripsEntryCard style={{ marginTop: 22 }} />
 
       {/* 5. More trips rows — keyed on filter so the entering animation
             replays whenever the user taps a different chip. */}
@@ -472,7 +487,10 @@ export default function TripsScreen() {
         travel={null}
         resolved={{ category: 'visa-required' }}
         heldVisas={new Set()}
-        onTripCreated={(tripId) => router.push(`/trip/${tripId}` as never)}
+        onTripCreated={(tripId) => {
+          analytics.track(ANALYTICS.tripGenerationStarted, { tripId });
+          router.push(`/trip/${tripId}` as never);
+        }}
       />
     </Animated.ScrollView>
     <TopSafeAreaBlur scrollY={scrollY} />

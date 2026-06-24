@@ -36,6 +36,7 @@ import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/Tr
 import VisaGuideSheet, { type VisaGuideSheetRef } from '@/components/guides/VisaGuideSheet';
 import { useQuery, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 import { CircleBtn } from '@/components/ui/CircleBtn';
 import { Photo } from '@/components/ui/Photo';
@@ -135,6 +136,13 @@ export default function CountryDetailScreen() {
   const router = useRouter();
 
   const { heldVisas, residence, passports, isFavorite, toggleFavorite } = useVisa();
+  const analytics = useAnalytics();
+  // countryViewed — fire once per mount, as soon as the country code is known.
+  useEffect(() => {
+    if (!code) return;
+    analytics.track(ANALYTICS.countryViewed, { code });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
   // User's home currency, derived from their residence country.
   const userCurrency = useMemo(
     () => (residence ? countryMeta[residence]?.currencyCode : undefined),
@@ -287,7 +295,11 @@ export default function CountryDetailScreen() {
         </Text>
         <CircleBtn
           solid
-          onPress={() => code && toggleFavorite(code)}
+          onPress={() => {
+            if (!code) return;
+            analytics.track(ANALYTICS.countryFavorited, { code, favorited: !saved });
+            toggleFavorite(code);
+          }}
           accessibilityLabel={saved ? 'Remove from favorites' : 'Add to favorites'}
         >
           <Heart

@@ -369,21 +369,36 @@ export const getMessages = query({
     sessionId: v.optional(v.id("tripChatSessions")),
   },
   handler: async (ctx, args) => {
-    await checkTripPermission(ctx, args.tripId, "viewer");
+    const { userId: viewerId } = await checkTripPermission(
+      ctx,
+      args.tripId,
+      "viewer",
+    );
+
+    // Collect the viewer's blocks once, then drop any message authored by a
+    // blocked user from whichever thread branch runs below (UGC safety).
+    const blocks = await ctx.db
+      .query("blockedUsers")
+      .withIndex("by_blocker", (q) => q.eq("blockerId", viewerId))
+      .collect();
+    const blockedIds = new Set(blocks.map((b) => b.blockedId));
+
     if (args.sessionId) {
       // Don't leak another trip's session by id.
       const session = await ctx.db.get(args.sessionId);
       if (!session || session.tripId !== args.tripId) return [];
       const sid = args.sessionId;
-      return await ctx.db
+      const rows = await ctx.db
         .query("tripMessages")
         .withIndex("by_session", (q) => q.eq("sessionId", sid))
         .collect();
+      return rows.filter((m) => !m.userId || !blockedIds.has(m.userId));
     }
-    return await ctx.db
+    const rows = await ctx.db
       .query("tripMessages")
       .withIndex("by_trip", (q) => q.eq("tripId", args.tripId))
       .collect();
+    return rows.filter((m) => !m.userId || !blockedIds.has(m.userId));
   },
 });
 

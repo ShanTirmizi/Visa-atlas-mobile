@@ -1,8 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, View, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
-import { useConvexAuth } from 'convex/react';
-import { usePathname, useRouter, useSegments } from 'expo-router';
+import { useConvexAuth, useQuery } from 'convex/react';
+import {
+  usePathname,
+  useRouter,
+  useSegments,
+  useGlobalSearchParams,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -48,6 +53,8 @@ import { MapPrewarm } from '@/components/map/MapPrewarm';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import type { ThemeColors } from '@/constants/theme';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { AnalyticsProvider, useAnalytics } from '@/lib/analytics';
+import { api } from '@/convex/_generated/api';
 
 // ── Splash hand-off plumbing ─────────────────────────────────────────────
 // Runs at module load — before the first React render — so the underlying
@@ -120,6 +127,22 @@ function ThemedApp() {
   const pathname = usePathname();
   const router = useRouter();
 
+  // Analytics. Hooks are called unconditionally up here, before any early
+  // return (splash / font gate), so the rules-of-hooks ordering never shifts.
+  const analytics = useAnalytics();
+  const searchParams = useGlobalSearchParams();
+  // Current user + onboarding flag for the identify effect. Same skip pattern
+  // as everywhere else (settings.tsx, visa-context.tsx): only query once auth
+  // resolves, otherwise Convex throws on the requireAuth in the handler.
+  const me = useQuery(
+    api.trips.getCurrentUser,
+    isAuthenticated ? {} : 'skip',
+  );
+  const profile = useQuery(
+    api.userProfiles.getCurrentProfile,
+    isAuthenticated ? {} : 'skip',
+  );
+
   // Animated splash: plays once on first mount. We render it as long as it
   // hasn't finished yet OR auth hasn't resolved — whichever takes longer.
   const [splashFinished, setSplashFinished] = useState(false);
@@ -139,6 +162,50 @@ function ThemedApp() {
       cancelled = true;
     };
   }, []);
+
+  // Manual screen tracking. PostHog's screen autocapture targets
+  // react-navigation; expo-router's file-based routes are invisible to it
+  // (captureScreens:false in lib/analytics.tsx), so we fire on every pathname
+  // change ourselves. Guard the empty initial pathname so we don't log a
+  // blank screen on the very first frame.
+  useEffect(() => {
+    if (!pathname) return;
+    analytics.screen(pathname, searchParams);
+    // analytics is recreated each render (a thin null-safe wrapper); only the
+    // route identity should drive a screen event, so it's intentionally out of
+    // the dep array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, searchParams]);
+
+  // Identify / reset. Tie events to the stable Convex user id once and reset
+  // on sign-out so the next session is anonymous. Refs guard against
+  // re-identifying every render and let us detect the auth → unauth edge.
+  const identifiedIdRef = useRef<string | null>(null);
+  const wasAuthedRef = useRef(false);
+  useEffect(() => {
+    if (isAuthenticated && me) {
+      // `me`/`profile` are `undefined` while loading, `null` when resolved
+      // empty — only identify once the user query has actually resolved.
+      if (identifiedIdRef.current !== me._id) {
+        analytics.identify(me._id, {
+          email: me.email ?? undefined,
+          name: me.name ?? undefined,
+          onboarded: profile?.onboarded,
+        });
+        identifiedIdRef.current = me._id;
+      }
+      wasAuthedRef.current = true;
+    } else if (!isAuthenticated && wasAuthedRef.current) {
+      // Authenticated → not authenticated transition (sign-out): clear the
+      // PostHog identity so the next session starts anonymous.
+      analytics.reset();
+      identifiedIdRef.current = null;
+      wasAuthedRef.current = false;
+    }
+    // `analytics` is a fresh null-safe wrapper each render; the auth/user
+    // state is what should drive identify/reset.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, me, profile]);
 
   // Deep-link taps on trip-ready notifications → that trip's screen.
   // Lazily required + fully guarded: dev clients built before the
@@ -304,6 +371,14 @@ function ThemedApp() {
             options={{ animation: 'slide_from_right' }}
           />
           <Stack.Screen
+            name="day-planner/index"
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="day-plan/[id]"
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
             name="country/[code]"
             options={{ animation: 'slide_from_right' }}
           />
@@ -384,6 +459,10 @@ export default function RootLayout() {
       <KeyboardProvider>
       <ErrorBoundary>
       <ConvexProvider>
+        {/* Inside ConvexProvider so the identify effect can read Convex auth +
+            user; wraps everything below so every screen can useAnalytics().
+            Transparent pass-through when no PostHog key is configured. */}
+        <AnalyticsProvider>
         <OfflineProvider>
           <ThemeProvider>
             <VisaProvider>
@@ -405,6 +484,7 @@ export default function RootLayout() {
             </VisaProvider>
           </ThemeProvider>
         </OfflineProvider>
+        </AnalyticsProvider>
       </ConvexProvider>
       </ErrorBoundary>
       </KeyboardProvider>

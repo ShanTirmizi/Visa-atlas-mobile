@@ -4,6 +4,8 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  Pressable,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/theme-context';
@@ -157,6 +159,15 @@ export default function TermsScreen() {
             access to view and edit that trip’s content. You are responsible for
             managing access to your trips.
           </P>
+          <P colors={colors}>
+            Visa Atlas has zero tolerance for objectionable content or abusive
+            behaviour. You agree not to post content in collaborative trips or
+            chats that is unlawful, harassing, threatening, hateful, or otherwise
+            objectionable. You can report any message or block any collaborator
+            by long-pressing their message in a trip chat. Reported content is
+            reviewed within 24 hours and offending users may be removed or have
+            their accounts terminated.
+          </P>
         </Section>
 
         {/* 5. Email and Calendar Integration */}
@@ -261,7 +272,9 @@ export default function TermsScreen() {
             If you have questions about these Terms of Service or need support,
             please contact us at:
           </P>
-          <P colors={colors}>shan@tirmizilabs.com</P>
+          <Pressable onPress={() => Linking.openURL('mailto:shan@tirmizilabs.com')}>
+            <P colors={colors}>shan@tirmizilabs.com</P>
+          </Pressable>
         </Section>
       </ScrollView>
 

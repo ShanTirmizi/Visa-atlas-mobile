@@ -9,6 +9,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Pressable,
+  ActionSheetIOS,
+  Alert,
+  Platform,
 } from 'react-native';
 import {
   KeyboardAvoidingView,
@@ -31,7 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
-import { useQuery, useMutation, useConvexAuth } from 'convex/react';
+import { useQuery, useMutation, useConvexAuth, useAction } from 'convex/react';
 import { Id } from '@/convex/_generated/dataModel';
 import {
   Send,
@@ -53,6 +56,7 @@ import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
 import { toAlpha2 } from '@/utils/countryCode';
 import { endpoints } from '@/constants/api';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 import {
   mergeStopsIntoProposal,
   mergeDayUpdates,
@@ -205,6 +209,7 @@ export default function ChatScreen() {
   const { passports, residence } = useVisa();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const analytics = useAnalytics();
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
@@ -274,6 +279,12 @@ export default function ChatScreen() {
   );
   const addMessage = useMutation(api.trips.addMessage);
   const currentUser = useQuery(api.trips.getCurrentUser, isAuthenticated ? {} : 'skip');
+  // Authenticated + rate-limited proxy for the trip copilot (convex/aiProxy.ts)
+  // — the raw Vercel endpoint is locked down behind it.
+  const proxyTripChat = useAction(api.aiProxy.tripChat);
+  // Moderation (Apple Guideline 1.2) — report a message / block a collaborator.
+  const reportMessage = useMutation(api.moderation.reportMessage);
+  const blockUser = useMutation(api.moderation.blockUser);
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -411,6 +422,8 @@ export default function ChatScreen() {
       if (isOffline) return;
       if (!text || isSending) return;
 
+      analytics.track(ANALYTICS.chatMessageSent, { tripId });
+
       // The thread this send belongs to — captured once so a mid-send
       // session switch can't misroute the reply or its side-effects.
       const sendSession = sessionId;
@@ -431,9 +444,13 @@ export default function ChatScreen() {
           sessionId: sendSession ?? undefined,
         });
 
-        const res = await fetch(endpoints.tripChat, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        // Routed through the authenticated, per-user rate-limited Convex proxy
+        // (api.aiProxy.tripChat) instead of a raw fetch — the action throws on
+        // auth / rate-limit / upstream failure, which the catch below turns into
+        // the retry banner exactly like the old non-2xx path. The payload is
+        // identical; only the transport changed. (trip-chat is non-streaming,
+        // so the single-value action return is a drop-in.)
+        const data = (await proxyTripChat({
           body: JSON.stringify({
             message: text,
             tripContext: {
@@ -454,13 +471,7 @@ export default function ChatScreen() {
             passports,
             residence,
           }),
-        });
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-
-        const data = (await res.json()) as {
+        })) as {
           reply?: string;
           itineraryUpdate?: string | null;
           // false → `itineraryUpdate` holds only the changed days (merge by
@@ -533,6 +544,8 @@ export default function ChatScreen() {
       residence,
       addMessage,
       applyItineraryUpdate,
+      proxyTripChat,
+      analytics,
     ],
   );
 
@@ -607,6 +620,61 @@ export default function ChatScreen() {
     router.push(`/trip/${tripId}` as never);
   }, [router, tripId]);
 
+  // Report / Block on another collaborator's message — Apple Guideline 1.2
+  // (UGC must offer a way to report objectionable content and block abusive
+  // users). Long-press a non-own message to surface the action sheet. Blocking
+  // is reactive: getMessages filters the blocked author server-side, so their
+  // bubbles vanish from the live list the instant the mutation resolves.
+  const onMessageAction = useCallback(
+    (m: ChatMessage) => {
+      if (!m.userId) return;
+      const blockedId = m.userId as Id<'users'>;
+      const messageId = m.id as Id<'tripMessages'>;
+      const name = m.userName?.trim() ? m.userName.trim() : 'this traveler';
+      hapticSelect();
+      const doReport = () => {
+        void reportMessage({ messageId });
+        Alert.alert('Reported', 'Thanks — our team reviews reports within 24 hours.');
+      };
+      const doBlock = () => {
+        Alert.alert(
+          `Block ${name}?`,
+          "You won't see their messages in shared trips. You can unblock them later from the trip's members.",
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: () => {
+                void blockUser({ blockedId });
+              },
+            },
+          ],
+        );
+      };
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ['Cancel', 'Report message', `Block ${name}`],
+            cancelButtonIndex: 0,
+            destructiveButtonIndex: 2,
+          },
+          (i) => {
+            if (i === 1) doReport();
+            else if (i === 2) doBlock();
+          },
+        );
+      } else {
+        Alert.alert('Message options', undefined, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Report message', onPress: doReport },
+          { text: `Block ${name}`, style: 'destructive', onPress: doBlock },
+        ]);
+      }
+    },
+    [reportMessage, blockUser],
+  );
+
   // Thin adapter: all rendering lives in the module-level React.memo
   // MessageBubble so rows bail out unless THEIR props changed. Note
   // `currentItinerary` is only populated for the row anchoring the pending
@@ -628,6 +696,7 @@ export default function ChatScreen() {
           onOpenTrip={openTrip}
           onApplyPending={acceptPendingUpdate}
           onDeclinePending={declinePendingUpdate}
+          onMessageAction={onMessageAction}
         />
       );
     },
@@ -640,6 +709,7 @@ export default function ChatScreen() {
       openTrip,
       acceptPendingUpdate,
       declinePendingUpdate,
+      onMessageAction,
     ],
   );
 
@@ -1073,6 +1143,8 @@ interface MessageBubbleProps {
   onOpenTrip: () => void;
   onApplyPending: () => void;
   onDeclinePending: () => void;
+  /** Long-press a non-own message → report / block. */
+  onMessageAction: (m: ChatMessage) => void;
 }
 
 const MessageBubble = React.memo(function MessageBubble({
@@ -1085,6 +1157,7 @@ const MessageBubble = React.memo(function MessageBubble({
   onOpenTrip,
   onApplyPending,
   onDeclinePending,
+  onMessageAction,
 }: MessageBubbleProps) {
   const { colors } = useTheme();
   const isAssistant = message.role === 'assistant';
@@ -1224,42 +1297,54 @@ const MessageBubble = React.memo(function MessageBubble({
     );
   }
 
+  const bubbleContent = (
+    <>
+      <Text
+        style={{
+          fontFamily: FontFamily.monoMedium,
+          fontSize: 9,
+          fontWeight: '700',
+          letterSpacing: 9 * 0.22,
+          textTransform: 'uppercase',
+          color: 'rgba(255,255,255,0.7)',
+          marginBottom: 6,
+        }}
+      >
+        {isOtherUser && message.userName ? message.userName.toUpperCase() : 'YOU'}
+      </Text>
+      <Text
+        selectable
+        style={{
+          fontFamily: FontFamily.displayItalic,
+          fontStyle: 'italic',
+          fontSize: 17,
+          lineHeight: 22,
+          letterSpacing: -17 * 0.014,
+          fontWeight: '500',
+          color: '#FFFFFF',
+        }}
+      >
+        {message.content}
+      </Text>
+    </>
+  );
+
   return (
     <View style={styles.userBubbleWrap}>
-      <View
-        style={[
-          styles.userBubble,
-          { backgroundColor: isOwnMessage ? colors.ink : colors.coral },
-        ]}
-      >
-        <Text
-          style={{
-            fontFamily: FontFamily.monoMedium,
-            fontSize: 9,
-            fontWeight: '700',
-            letterSpacing: 9 * 0.22,
-            textTransform: 'uppercase',
-            color: 'rgba(255,255,255,0.7)',
-            marginBottom: 6,
-          }}
+      {isOtherUser ? (
+        // Long-press another collaborator's message → report / block (Apple 1.2).
+        <Pressable
+          onLongPress={() => onMessageAction(message)}
+          delayLongPress={350}
+          style={[styles.userBubble, { backgroundColor: colors.coral }]}
         >
-          {isOtherUser && message.userName ? message.userName.toUpperCase() : 'YOU'}
-        </Text>
-        <Text
-          selectable
-          style={{
-            fontFamily: FontFamily.displayItalic,
-            fontStyle: 'italic',
-            fontSize: 17,
-            lineHeight: 22,
-            letterSpacing: -17 * 0.014,
-            fontWeight: '500',
-            color: '#FFFFFF',
-          }}
-        >
-          {message.content}
-        </Text>
-      </View>
+          {bubbleContent}
+        </Pressable>
+      ) : (
+        <View style={[styles.userBubble, { backgroundColor: colors.ink }]}>
+          {bubbleContent}
+        </View>
+      )}
     </View>
   );
 });

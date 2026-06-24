@@ -1,5 +1,7 @@
 // convex/lib/anthropicStream.ts
 
+import { captureAIGeneration, type AnthropicUsage } from "./posthog";
+
 interface GenerateInput {
   countryCode: string;
   countryName: string;
@@ -24,6 +26,21 @@ interface GenerateInput {
    * context for the LLM.
    */
   userNotes?: string;
+  /** True when this is a same-day-return day trip (duration is forced to 1).
+   *  Routes itinerary generation through buildDayTripItineraryPrompt. */
+  isDayTrip?: boolean;
+  /** The chosen transport spine for a day trip — the hard timing anchors the
+   *  single-day itinerary plans within. Present only when isDayTrip. */
+  dayTrip?: {
+    homeCity: string;
+    destCity: string;
+    transportMode: string;
+    transportLabel: string;
+    outboundDepart: string;
+    outboundArrive: string;
+    lastReturnDepart: string;
+    returnArrive: string;
+  };
 }
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -261,6 +278,176 @@ Output ONLY a JSON object with this shape (no preamble, no markdown fences):
 Tone: factual, current, specific. Real numbers and real provider names. Editorial voice (NYT Travel). No clichés. Output ONLY the JSON object.`;
 }
 
+// ── Day trips: discovery + single-day itinerary ──────────────────
+
+/** The home country anchor for day-trip discovery. */
+export interface DayTripHome {
+  /** Country name, e.g. "United Kingdom". */
+  name: string;
+  /** The realistic departure city, e.g. "London". */
+  city: string;
+  /** ISO currency code the cost-of-day is expressed in, e.g. "GBP". */
+  currencyCode: string;
+}
+
+/** One Stage-1 candidate handed to the model (see utils/dayTripReach.ts). */
+export interface DayTripCandidatePrompt {
+  name: string;
+  capital: string;
+  km: number;
+}
+
+/**
+ * System prompt for day-trip discovery. Country-level and identical across
+ * users, so it's cacheable and the result is cached forever per home country.
+ * The model is a transport-logistics authority — NOT a visa authority (visa
+ * is computed by us, never the model).
+ */
+export function buildDayTripDiscoverySystemPrompt(): string {
+  return `You are a meticulous travel-logistics expert for a premium iOS app called Visa Atlas. You know real scheduled-transport patterns cold — high-speed rail (Eurostar, TGV, Thalys/Eurostar, ICE, Frecciarossa, Shinkansen), short-haul flights (the typical first/last daily waves on easyJet/Ryanair/etc.), fast ferries (Dover–Calais, Holyhead–Dublin), and intercity coaches.
+
+Your job: given a home city, decide where a traveller can realistically go for ONE DAY and be back home the SAME calendar day (leave in the morning, home before roughly midnight).
+
+Hard rules:
+- Be CONSERVATIVE and HONEST. If a same-day round trip is not genuinely realistic, OMIT it. A wrong "last train" could strand someone.
+- NEVER invent exact train/flight numbers. Give realistic TYPICAL timings for that corridor (e.g. "first fast train ~06:50, last sensible return ~21:15"). These are estimates the user will confirm before booking.
+- Exclude anything that leaves under ~4 usable hours at the destination — it isn't worth the day.
+- Mark feasibility "tight" when margins are real (very early start, or the last return is the squeeze); "comfortable" otherwise.
+- Do NOT mention visas, passports, borders, or entry requirements anywhere. Entry rules are computed separately. Stick to transport, timing, cost, season, and what to do.
+
+Tone for the one-line "blurb": editorial, specific, warm — NYT Travel voice. Name the actual thing you'd do ("Lunch on the Grand-Place and home by dinner"), never clichés ("hidden gem", "explore").
+
+Output: ONLY valid JSON, no preamble, no markdown fences. Match the requested schema exactly.`;
+}
+
+/**
+ * User prompt for day-trip discovery. Asks for BOTH cross-border options
+ * (drawn from the Stage-1 candidate shortlist) AND domestic day trips within
+ * the home country itself (which the capital-distance pre-filter can't
+ * surface). Returns a visa-agnostic array matching dayTripDestinationValidator
+ * (minus visa, which we overlay per-user).
+ */
+export function buildDayTripDiscoveryUserPrompt(
+  home: DayTripHome,
+  candidates: DayTripCandidatePrompt[],
+): string {
+  const candidateLines = candidates.length
+    ? candidates
+        .map((c) => `- ${c.name} (nearest major city ${c.capital || "—"}, ~${c.km}km away)`)
+        .join("\n")
+    : "(none within same-day reach — focus on domestic options)";
+
+  return `Home city: ${home.city}, ${home.name}.
+
+Nearby foreign countries within same-day-return range (great-circle distance from the home capital — a coarse gate, you decide what's genuinely reachable):
+${candidateLines}
+
+Return a JSON array of the BEST same-day-return day trips from ${home.city}, each matching EXACTLY this shape:
+
+{
+  "destCode": "ISO 3166-1 alpha-2 code of the destination country, e.g. 'FR' (use the HOME country's code for domestic trips)",
+  "destName": "Country name",
+  "destCity": "The specific city/area you spend the day in, e.g. 'Paris' or 'Bath'",
+  "scope": "international" | "domestic",
+  "transportMode": "rail" | "flight" | "ferry" | "coach" | "road",
+  "transportLabel": "Compact label, e.g. 'Eurostar · 2h20'",
+  "outboundDepart": "Typical first sensible departure, home-city local 24h time, e.g. '06:50'",
+  "outboundArrive": "Typical arrival, destination local 24h time",
+  "lastReturnDepart": "The LAST realistic same-day return departure, destination local 24h time",
+  "returnArrive": "Typical arrival back home, home-city local 24h time (may read after midnight)",
+  "hoursOnGround": 8.5,
+  "doorToDoorLabel": "e.g. '≈2h20 each way'",
+  "costOfDay": 180,
+  "currency": "${home.currencyCode}",
+  "bestMonths": [4,5,6,9,10],
+  "seasonNote": "Optional — only if season really matters, e.g. 'Ferry is rough Nov–Feb'",
+  "feasibility": "comfortable" | "tight",
+  "operator": "Optional main operator, e.g. 'Eurostar'",
+  "bookingUrl": "Optional operator booking site, e.g. 'https://www.eurostar.com'",
+  "blurb": "ONE editorial sentence — the specific hook for the day"
+}
+
+Rules:
+- Include the genuinely same-day-returnable CROSS-BORDER options from the list above (omit the rest), AND 2-5 excellent DOMESTIC day trips within ${home.name} itself (scope "domestic", destCode = the home country's alpha-2 code, a real reachable city/area — NOT ${home.city} itself).
+- "costOfDay" is a single rounded all-in per-person estimate in ${home.currencyCode}: return transport + a meal + one paid sight.
+- "bestMonths" lists 1-12 month numbers when the trip is at its best; use [] if it's good year-round.
+- Order BEST first (appeal vs effort; put "comfortable" ahead of "tight").
+- Return 6-14 entries for a well-connected home; for a remote one return mostly or only domestic. If there is genuinely NO same-day foreign option, return domestic only — never pad with unrealistic ones.
+
+Output ONLY the JSON array. No preamble, no markdown fences.`;
+}
+
+/**
+ * Single-day itinerary prompt for a committed day trip. Emits a ONE-element
+ * array in the standard ItineraryDay shape (so makeItineraryStreamParser and
+ * the DayDeck render it unchanged), but bounded by the real transport spine:
+ * it opens with a "transport" outbound stop, fills the on-ground window with
+ * tightly-clustered stops, and closes with a "transport" return stop so the
+ * plan can never strand the traveller past the last return.
+ */
+export function buildDayTripItineraryPrompt(input: GenerateInput): string {
+  const dt = input.dayTrip;
+  const trimmedNotes = input.userNotes?.trim();
+  const notesReminder =
+    trimmedNotes && trimmedNotes.length > 0
+      ? `\n\nThe traveller asked specifically for:\n"${trimmedNotes}"\nHonour this where it fits the day.`
+      : "";
+
+  // Fallback anchors if meta is somehow absent (keeps generation robust).
+  const homeCity = dt?.homeCity ?? "home";
+  const destCity = dt?.destCity ?? input.capital;
+  const arrive = dt?.outboundArrive ?? "10:00";
+  const depart = dt?.outboundDepart ?? "07:00";
+  const lastReturn = dt?.lastReturnDepart ?? "20:00";
+  const returnArrive = dt?.returnArrive ?? "22:30";
+  const modeLabel = dt?.transportLabel ?? "transport";
+
+  return `Plan a SINGLE-DAY day trip from ${homeCity} to ${destCity}. The traveller leaves ${homeCity} and returns the SAME day.
+
+Fixed transport spine (treat as hard constraints — do NOT plan anything outside this window):
+- Depart ${homeCity}: ~${depart} (${modeLabel})
+- Arrive ${destCity}: ~${arrive}
+- LAST return from ${destCity}: ~${lastReturn} — the traveller MUST be heading back by then
+- Arrive back ${homeCity}: ~${returnArrive}
+
+Output a JSON array with EXACTLY ONE element matching:
+
+{
+  "title": "Editorial title for the day — evocative, specific to ${destCity}",
+  "subtitle": "ALL CAPS · KICKER · UNDER 5 WORDS",
+  "heroSubject": "The single most photogenic place in ${destCity} for the hero image",
+  "morning": "1-2 sentences narrating the arrival + first stops.",
+  "morningPlace": "Primary morning place",
+  "afternoon": "1-2 sentences.",
+  "afternoonPlace": "...",
+  "evening": "1-2 sentences narrating the last bites/sight and heading back.",
+  "eveningPlace": "...",
+  "tip": "Optional one-sentence local tip for a day visit.",
+  "stops": [
+    {
+      "slot": "morning" | "afternoon" | "evening",
+      "time": "HH:MM",
+      "name": "Real, named place — exact enough for Apple Maps",
+      "note": "1-2 sentences: the SPECIFIC thing to do here and why it earns a slot on a short day.",
+      "kind": "transport" | "landmark" | "museum" | "gallery" | "market" | "nature" | "walk" | "neighborhood" | "experience" | "cafe" | "viewpoint" | "shopping",
+      "duration": "1 hr",
+      "area": "Specific neighbourhood/street",
+      "tip": "Optional ONE concrete action (a dish to order, the gate to use).",
+      "reserveAhead": true
+    }
+  ]
+}
+
+Rules for "stops" (this is a tight day — make every hour count):
+- The FIRST stop is the outbound leg: slot "morning", kind "transport", time "${depart}", name "${homeCity} → ${destCity}", note the mode + journey, area "${homeCity}".
+- The LAST stop is the return leg: slot "evening", kind "transport", time "${lastReturn}", name "${destCity} → ${homeCity}", note "Head back for the last realistic return — home by ~${returnArrive}.", area "${destCity}".
+- Between them, 4-6 real, NAMED stops, ALL within easy walking or a short metro/tram hop of the arrival point (no stop more than ~20 min from the centre — there is no time to range far). Times strictly chronological and inside ${arrive}–${lastReturn}.
+- Include exactly one lunch stop (a real, named, currently-operating spot near the route) and, if time allows, a coffee/snack. Fold food into the stops — there is no separate dining guide for a day trip.
+- Every stop concrete and currently-operating; name the specific thing to do, never "explore".
+
+Emit ONLY the JSON array (one element). No preamble, no markdown fences.${notesReminder}`;
+}
+
 // ── SSE streaming over fetch ─────────────────────────────────────
 
 interface StreamOptions {
@@ -268,6 +455,19 @@ interface StreamOptions {
   systemPrompt: string;
   userPrompt: string;
   maxTokens?: number;
+  /**
+   * Optional PostHog LLM-analytics context. When present, the completion path
+   * (success OR error) emits one `$ai_generation` event with the usage
+   * accumulated off the SSE stream. Purely additive — never affects streaming
+   * behavior (the capture is internally guarded and wrapped here too).
+   */
+  analytics?: {
+    distinctId?: string;
+    traceId: string;
+    purpose: string;
+    tripId?: string;
+    planId?: string;
+  };
 }
 
 interface StreamCallbacks {
@@ -308,6 +508,39 @@ export async function streamAnthropic(
     () => controller.abort(),
     STREAM_TOTAL_TIMEOUT_MS,
   );
+
+  // ── Analytics accumulation (Task 1) ──────────────────────────────
+  // Anthropic's streaming SSE carries token usage we'd otherwise discard:
+  //   • message_start.message.usage → input/cache tokens + initial output
+  //   • message_delta.usage.output_tokens → CUMULATIVE output (keep overwriting;
+  //     the last value before stream end is the final total)
+  // We track wall-clock latency from before the fetch and the HTTP status, then
+  // emit ONE $ai_generation in the completion path (success or error). Capture
+  // is best-effort: it never throws and is wrapped so it can't affect the stream.
+  const startedAt = Date.now();
+  const usage: AnthropicUsage = { inputTokens: 0, outputTokens: 0 };
+  let httpStatus: number | undefined;
+  let isError = false;
+  let errorMessage: string | undefined;
+  const reportAnalytics = async () => {
+    if (!opts.analytics) return;
+    try {
+      await captureAIGeneration({
+        ...opts.analytics,
+        model: MODEL,
+        usage,
+        latencySeconds: (Date.now() - startedAt) / 1000,
+        httpStatus,
+        maxTokens: opts.maxTokens ?? 4096,
+        isError,
+        error: errorMessage,
+      });
+    } catch (err) {
+      // Analytics must NEVER affect the stream's behavior.
+      console.warn("[anthropicStream] analytics capture failed", String(err));
+    }
+  };
+
   try {
     armStallTimer();
     const response = await fetch(ANTHROPIC_URL, {
@@ -332,6 +565,8 @@ export async function streamAnthropic(
       }),
       signal: controller.signal,
     });
+
+    httpStatus = response.status;
 
     if (!response.ok || !response.body) {
       const errText = await response.text().catch(() => "<no body>");
@@ -363,6 +598,26 @@ export async function streamAnthropic(
             typeof parsed.delta.text === "string"
           ) {
             cb.onDelta(parsed.delta.text);
+          } else if (parsed.type === "message_start") {
+            // Input + cache tokens are final at message_start; the initial
+            // output_tokens is a placeholder that message_delta supersedes.
+            // Guard every access — a malformed usage block must never throw.
+            const u = parsed.message?.usage;
+            if (u && typeof u === "object") {
+              if (typeof u.input_tokens === "number") usage.inputTokens = u.input_tokens;
+              if (typeof u.cache_creation_input_tokens === "number")
+                usage.cacheCreationTokens = u.cache_creation_input_tokens;
+              if (typeof u.cache_read_input_tokens === "number")
+                usage.cacheReadTokens = u.cache_read_input_tokens;
+              if (typeof u.output_tokens === "number") usage.outputTokens = u.output_tokens;
+            }
+          } else if (parsed.type === "message_delta") {
+            // output_tokens here is CUMULATIVE — overwrite each time so the
+            // last value before stream end is the final total.
+            const u = parsed.usage;
+            if (u && typeof u === "object" && typeof u.output_tokens === "number") {
+              usage.outputTokens = u.output_tokens;
+            }
           }
         } catch {
           // Malformed event line — skip
@@ -371,10 +626,16 @@ export async function streamAnthropic(
     }
     cb.onComplete();
   } catch (err) {
+    isError = true;
+    errorMessage = err instanceof Error ? err.message : String(err);
     cb.onError(err instanceof Error ? err : new Error(String(err)));
   } finally {
     if (stallTimer) clearTimeout(stallTimer);
     clearTimeout(totalTimer);
+    // Emit the single $ai_generation event AFTER the stream settles — both the
+    // success (onComplete) and error (onError) paths land here. Awaited so the
+    // event is sent before the action returns; never throws.
+    await reportAnalytics();
   }
 }
 

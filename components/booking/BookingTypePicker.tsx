@@ -12,6 +12,7 @@ import {
 } from '@/constants/bookings';
 import ScanBooking from './ScanBooking';
 import type { BookingFormData } from './BookingForm';
+import { FEATURES } from '@/constants/featureFlags';
 
 interface BookingTypePickerProps {
   onSelect: (type: BookingType) => void;
@@ -71,23 +72,27 @@ export default function BookingTypePicker({ onSelect, onScanComplete }: BookingT
         <Text style={{ color: colors.coral }}>?</Text>
       </Text>
 
-      {/* Hero "Scan a confirmation" — dark ink card */}
-      <View style={{ marginTop: 18 }}>
-        <ScanBooking onScanComplete={onScanComplete} />
-      </View>
+      {FEATURES.bookingScan && (
+        <>
+          {/* Hero "Scan a confirmation" — dark ink card */}
+          <View style={{ marginTop: 18 }}>
+            <ScanBooking onScanComplete={onScanComplete} />
+          </View>
 
-      {/* Coral squiggle divider */}
-      <View style={{ marginTop: 22, marginBottom: 10, paddingHorizontal: 4 }}>
-        <Squiggle width={70} color={colors.coral} />
-        <Text
-          style={[
-            Type.kicker,
-            { color: colors.inkMute, marginTop: 8, fontSize: 10, letterSpacing: 10 * 0.22 },
-          ]}
-        >
-          OR ADD MANUALLY
-        </Text>
-      </View>
+          {/* Coral squiggle divider */}
+          <View style={{ marginTop: 22, marginBottom: 10, paddingHorizontal: 4 }}>
+            <Squiggle width={70} color={colors.coral} />
+            <Text
+              style={[
+                Type.kicker,
+                { color: colors.inkMute, marginTop: 8, fontSize: 10, letterSpacing: 10 * 0.22 },
+              ]}
+            >
+              OR ADD MANUALLY
+            </Text>
+          </View>
+        </>
+      )}
 
       {/* Numbered list of types — paper rows with tinted icon orbs */}
       <View style={styles.list}>

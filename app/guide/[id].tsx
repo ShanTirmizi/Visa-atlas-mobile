@@ -50,6 +50,7 @@ import { Guilloche } from '@/components/ui/Guilloche';
 import { Flag } from '@/components/ui/Flag';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import { toAlpha2 } from '@/utils/countryCode';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -305,6 +306,14 @@ export default function GuideDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const analytics = useAnalytics();
+
+  // visaGuideViewed — fire once per mount, as soon as the guide id is known.
+  useEffect(() => {
+    if (!id) return;
+    analytics.track(ANALYTICS.visaGuideViewed, { guideId: id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const { isAuthenticated } = useConvexAuth();
   const guide = useOfflineQuery(

@@ -42,6 +42,7 @@ import { Squiggle } from '@/components/ui/Squiggle';
 import { Flag } from '@/components/ui/Flag';
 import { toAlpha2 } from '@/utils/countryCode';
 import { FontFamily, Spacing } from '@/constants/theme';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 type GuideMessage = {
   _id: string;
@@ -70,8 +71,16 @@ export default function VisaChatScreen() {
   // Passport + residence keep the consultant's answers nationality-correct.
   const { passports, residence } = useVisa();
   const insets = useSafeAreaInsets();
+  const analytics = useAnalytics();
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+
+  // visaGuideViewed — fire once per mount, as soon as the guide id is known.
+  useEffect(() => {
+    if (!guideId) return;
+    analytics.track(ANALYTICS.visaGuideViewed, { guideId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideId]);
 
   // Re-pin the message list to the bottom the moment the keyboard finishes
   // settling — event-driven (KeyboardEvents), never a guessed duration.
@@ -123,6 +132,8 @@ export default function VisaChatScreen() {
     async (text: string) => {
       if (!text || isSending || !guide) return;
 
+      analytics.track(ANALYTICS.chatMessageSent, { guideId });
+
       setIsSending(true);
       setFailedMessage(null);
 
@@ -167,7 +178,7 @@ export default function VisaChatScreen() {
         setIsSending(false);
       }
     },
-    [isSending, guide, guideId, messages, countryName, visaType, guideJson, passports, residence, addGuideMessage, proxyVisaChat],
+    [isSending, guide, guideId, messages, countryName, visaType, guideJson, passports, residence, addGuideMessage, proxyVisaChat, analytics],
   );
 
   const sendMessage = useCallback(async () => {

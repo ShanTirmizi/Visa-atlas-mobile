@@ -9,13 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.tirmazilabs.visaatlas",
       "buildNumber": "2",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "Visa Atlas uses your location to show nearby embassies and consulates on the map."
+        "ITSAppUsesNonExemptEncryption": false
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -92,11 +91,32 @@
         }
       ],
       "expo-web-browser",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Visa Atlas uses Face ID to keep your saved visa records and account secure on this device."
+        }
+      ],
       "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Visa Atlas needs access to your photos so you can scan a booking confirmation or document and add it to your trip automatically.",
+          "cameraPermission": "Visa Atlas needs camera access so you can scan a booking confirmation or document and add it to your trip automatically.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Visa Atlas reads your calendar to detect upcoming flights and hotel stays and add them to your trip timeline.",
+          "remindersPermission": "Visa Atlas accesses your reminders to surface upcoming visa deadlines and trip tasks."
+        }
+      ],
       "@maplibre/maplibre-react-native",
       "expo-asset",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-localization"
     ],
     "extra": {
       "router": {

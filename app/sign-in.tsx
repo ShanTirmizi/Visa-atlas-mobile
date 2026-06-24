@@ -26,6 +26,7 @@ import { Squiggle } from '@/components/ui/Squiggle';
 import { VAStamp } from '@/components/auth/VAStamp';
 import { PasswordStrength } from '@/components/auth/PasswordStrength';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 // RNKC's KeyboardAwareScrollView scrolls the focused input above the keyboard
 // with the right delta (Apple Mail / Notes algorithm) — a plain ScrollView in
@@ -358,6 +359,7 @@ export default function SignInScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signIn } = useAuthActions();
+  const analytics = useAnalytics();
 
   const [mode, setMode] = useState<Mode>('signIn');
   const prevModeRef = useRef<Mode>(mode);
@@ -396,8 +398,10 @@ export default function SignInScreen() {
     }
     setSignInError(null);
     setEmailLoading(true);
+    analytics.track(ANALYTICS.authSignInStarted, { method: 'password' });
     try {
       await signIn('password', { email: email.trim().toLowerCase(), password, flow: 'signIn' });
+      analytics.track(ANALYTICS.userSignedIn, { method: 'password' });
     } catch (error: unknown) {
       const msg = String((error as any)?.message ?? error ?? '').toLowerCase();
       if (msg.includes('invalid') || msg.includes('credentials')) {
@@ -421,6 +425,7 @@ export default function SignInScreen() {
     }
     setSignUpError(null);
     setEmailLoading(true);
+    analytics.track(ANALYTICS.authSignInStarted, { method: 'password', flow: 'signUp' });
     try {
       // Email verification is decoupled from sign-up — see convex/auth.ts.
       // Convex Auth signs the user in directly; the layout auth-gate
@@ -431,6 +436,7 @@ export default function SignInScreen() {
         password,
         flow: 'signUp',
       });
+      analytics.track(ANALYTICS.userSignedUp, { method: 'password' });
     } catch (error: unknown) {
       const msg = String((error as any)?.message ?? error ?? '').toLowerCase();
       if (msg.includes('already exists')) {
@@ -447,6 +453,7 @@ export default function SignInScreen() {
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
+    analytics.track(ANALYTICS.authSignInStarted, { method: 'google' });
     try {
       const { redirect } = await signIn('google', { redirectTo });
       if (Platform.OS === 'web') return;
@@ -456,6 +463,7 @@ export default function SignInScreen() {
           const code = new URL(result.url).searchParams.get('code');
           if (code) {
             await signIn('google', { code });
+            analytics.track(ANALYTICS.userSignedIn, { method: 'google' });
           }
         }
       }
@@ -469,6 +477,7 @@ export default function SignInScreen() {
 
   const handleAppleSignIn = async () => {
     setAppleLoading(true);
+    analytics.track(ANALYTICS.authSignInStarted, { method: 'apple' });
     try {
       // Native iOS Apple Sign In sheet — no browser hop, no Services ID.
       // The returned `identityToken` is a JWT signed by Apple; the
@@ -499,6 +508,7 @@ export default function SignInScreen() {
         idToken: credential.identityToken,
         ...(fullName ? { name: fullName } : {}),
       });
+      analytics.track(ANALYTICS.userSignedIn, { method: 'apple' });
     } catch (error: unknown) {
       // The native sheet throws ERR_REQUEST_CANCELED when the user dismisses
       // it. That's not a failure — silently bail without surfacing an error.

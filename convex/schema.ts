@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
+import { dayTripDestinationValidator } from "./lib/dayTripShape";
 
 export default defineSchema({
   ...authTables,
@@ -106,6 +107,20 @@ export default defineSchema({
     // marker). The zero-content watchdog reads this to distinguish a slow
     // but live generation from a genuinely stalled one before failing it.
     lastStreamAt: v.optional(v.number()),
+    // ── Day trips ──
+    // A day trip is a same-day-return trip: a normal trips row with
+    // duration=1 and these three optional discriminators. Absent === a
+    // standard multi-day trip (back-compat: every existing row validates
+    // unchanged). Same additive-optional pattern as isMultiCountry/legs above.
+    //
+    // `isDayTrip` drives list filtering + the day-trip detail layout;
+    // `originCode` is the alpha-2 home country the trip departs from (origin
+    // isn't otherwise encoded — duration/dates can't express it); `dayTrip`
+    // is the JSON-stringified DayTripMeta (types/itinerary.ts) carrying the
+    // chosen transport spine, cost-of-day, and border reminder.
+    isDayTrip: v.optional(v.boolean()),
+    originCode: v.optional(v.string()),
+    dayTrip: v.optional(v.string()),
   })
     .index("by_status", ["status"])
     .index("by_country", ["countryCode"])
@@ -184,6 +199,78 @@ export default defineSchema({
     currencyTip: v.optional(v.string()),
     generatedAt: v.number(),
   }).index("by_country", ["countryCode"]),
+
+  // ── Day Trip Discovery Cache ──
+  // Per-home-country ranked list of genuinely same-day-returnable
+  // destinations (cross-border AND domestic). Visa-AGNOSTIC by design —
+  // transport facts are identical for every traveller from a home country,
+  // so one row is generated once (first user from that country pays the LLM
+  // cost) and reused forever; per-user visa status is overlaid at read time
+  // on the client via resolveCountry(). Exact economics + write discipline of
+  // countryTipsCache. Keyed by alpha-3 home country code.
+  dayTripDiscoveryCache: defineTable({
+    homeCode: v.string(), // alpha-3, e.g. "GBR"
+    homeName: v.string(),
+    homeCity: v.string(),
+    destinations: v.array(dayTripDestinationValidator),
+    generatedAt: v.number(),
+    // Shape/prompt version — a bump invalidates stale rows (see
+    // DAY_TRIP_MODEL_VERSION in convex/lib/dayTripShape.ts).
+    modelVersion: v.string(),
+  }).index("by_home", ["homeCode"]),
+
+  // ── Day Trip Discovery Sessions ──
+  // Status row so the client watches a reactive doc (pending → ready/error)
+  // instead of awaiting the discovery action over the websocket — the same
+  // pattern as refinementSessions. The cache row above is shared per home
+  // country; this status is per (user, home) so each client gets its own
+  // spinner / error surface.
+  dayTripDiscoverySessions: defineTable({
+    userId: v.id("users"),
+    homeCode: v.string(), // alpha-3
+    status: v.union(
+      v.literal("pending"),
+      v.literal("ready"),
+      v.literal("error"),
+    ),
+    errorMessage: v.optional(v.string()),
+  }).index("by_user_home", ["userId", "homeCode"]),
+
+  // ── Day Plans ──
+  // The input-driven "Plan my day" feature. Each row is one bespoke, routed
+  // door-to-door day built from the user's own start location, transport,
+  // reach, and vibe — generated fresh (web-grounded), never cached/shared.
+  // Deliberately its OWN table, not a trips row: a day plan is a different
+  // shape (geocoded stops + road route + provenance), not a destination trip.
+  dayPlans: defineTable({
+    userId: v.id("users"),
+    status: v.union(
+      v.literal("generating"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+    // ── Inputs (echoed back for display + re-plan) ──
+    startLat: v.number(),
+    startLng: v.number(),
+    startLabel: v.string(),
+    transport: v.union(
+      v.literal("car"),
+      v.literal("transit"),
+      v.literal("walk"),
+      v.literal("cycle"),
+    ),
+    reachMinutes: v.number(),
+    interests: v.array(v.string()),
+    notes: v.optional(v.string()),
+    startTime: v.optional(v.string()),
+    // ── Output (filled by runDayPlan) ──
+    title: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    destArea: v.optional(v.string()),
+    plan: v.optional(v.string()), // JSON-stringified DayPlan (types/dayPlan.ts)
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
 
   // ── Trip Messages ──
   tripMessages: defineTable({
@@ -449,4 +536,31 @@ export default defineSchema({
     windowStart: v.number(),
     count: v.number(),
   }).index("by_user_and_key", ["userId", "key"]),
+
+  // ── Blocked Users ──
+  // One row per (blocker → blocked) pair. App Store UGC requirement: a user
+  // can block another participant so their messages disappear from shared
+  // trip threads. blockerId is always derived server-side via requireAuth.
+  blockedUsers: defineTable({
+    blockerId: v.id("users"),
+    blockedId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_blocker", ["blockerId"])
+    .index("by_blocker_and_blocked", ["blockerId", "blockedId"]),
+
+  // ── Message Reports ──
+  // One row per report of a trip message. App Store UGC requirement: a user
+  // can report objectionable content. reporterId / reportedUserId are derived
+  // server-side; the reporter must share the trip (viewer access).
+  messageReports: defineTable({
+    reporterId: v.id("users"),
+    messageId: v.id("tripMessages"),
+    tripId: v.id("trips"),
+    reportedUserId: v.optional(v.id("users")),
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_message", ["messageId"])
+    .index("by_reporter", ["reporterId"]),
 });

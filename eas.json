@@ -40,7 +40,8 @@
     "production": {
       "ios": {
         "appleId": "tirmizishahnawaz@gmail.com",
-        "appleTeamId": "9AJR54TUUM"
+        "appleTeamId": "9AJR54TUUM",
+        "ascAppId": "6761655487"
       }
     }
   }

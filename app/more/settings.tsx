@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,7 @@ import {
   FileText,
   LogOut,
   Stamp,
+  BarChart3,
 } from 'lucide-react-native';
 import { useAuthActions } from '@convex-dev/auth/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,9 +43,12 @@ import { FontFamily, Spacing, type ThemeColors } from '@/constants/theme';
 import { Type } from '@/constants/typography';
 import BackButton from '@/components/ui/BackButton';
 import { Squiggle } from '@/components/ui/Squiggle';
+import { AnimatedSwitch } from '@/components/ui/AnimatedSwitch';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
 import VerifyEmailSheet, { type VerifyEmailSheetRef } from '@/components/settings/VerifyEmailSheet';
 import { isPassportStampTrip } from '@/components/passport/passportData';
+import { FEATURES } from '@/constants/featureFlags';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 function buildWishlistRowValue(tripCount: number, countryCount: number): string {
   if (tripCount === 0 && countryCount === 0) return 'None';
@@ -154,6 +158,69 @@ function SettingsRow({
   );
 }
 
+interface SettingsToggleRowProps {
+  icon: React.ReactNode;
+  label: string;
+  subtitle?: string;
+  value: boolean;
+  onToggle: () => void;
+  isFirst?: boolean;
+}
+
+// Same chrome as SettingsRow, but the trailing affordance is the premium
+// AnimatedSwitch (CLAUDE.md reference toggle) instead of a chevron. The whole
+// row is the tap target, matching the SurpriseMeSheet toggle pattern.
+function SettingsToggleRow({
+  icon,
+  label,
+  subtitle,
+  value,
+  onToggle,
+  isFirst,
+}: SettingsToggleRowProps) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onToggle}
+      style={({ pressed }) => [
+        styles.row,
+        {
+          borderTopWidth: isFirst ? 0 : 1,
+          borderTopColor: colors.line,
+          opacity: pressed ? 0.85 : 1,
+        },
+      ]}
+    >
+      <View style={[styles.rowIconBox, { backgroundColor: colors.tealBg }]}>
+        <View style={{ opacity: 0.85 }}>{icon}</View>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{
+            fontFamily: FontFamily.semibold,
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.ink,
+          }}
+        >
+          {label}
+        </Text>
+        {subtitle ? (
+          <Text
+            style={[
+              Type.body12_5,
+              { color: colors.inkMute, marginTop: 1, fontSize: 11 },
+            ]}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <AnimatedSwitch value={value} />
+    </Pressable>
+  );
+}
+
 // ──────────────────────────────────────────────
 // Main screen
 // ──────────────────────────────────────────────
@@ -165,6 +232,10 @@ export default function SettingsScreen() {
   const { gmailAccount } = useEmail();
   const { signOut } = useAuthActions();
   const { isAuthenticated } = useConvexAuth();
+  const analytics = useAnalytics();
+  // Visual state for the analytics switch. PostHog persists the real opt-out
+  // across launches, so this is just the rendered value, seeded from it.
+  const [shareUsageData, setShareUsageData] = useState(!analytics.isOptedOut());
   const deleteAccount = useMutation(api.account.deleteAccount);
   const userData = useQuery(
     api.account.exportUserData,
@@ -272,10 +343,28 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleToggleUsageData = () => {
+    setShareUsageData((prev) => {
+      const next = !prev;
+      // ON = sharing = opted in; OFF = opted out. PostHog persists this.
+      if (next) analytics.optIn();
+      else analytics.optOut();
+      return next;
+    });
+  };
+
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: () => {
+          // Capture before identity is cleared (reset() lives in _layout).
+          analytics.track(ANALYTICS.userSignedOut);
+          signOut();
+        },
+      },
     ]);
   };
 
@@ -497,30 +586,52 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Connections — Gmail import for parsing booking confirmations */}
+          {/* Privacy — analytics opt-out */}
           <View>
-            <GroupHeading label="CONNECTIONS" colors={colors} />
+            <GroupHeading label="PRIVACY" colors={colors} />
             <View
               style={[
                 styles.groupCard,
                 { backgroundColor: colors.surface, borderColor: colors.line },
               ]}
             >
-              <SettingsRow
+              <SettingsToggleRow
                 isFirst
-                icon={<Mail size={16} color={colors.teal} />}
-                label="Gmail"
-                value={
-                  gmailAccount
-                    ? `Connected · ${gmailAccount.email ?? 'syncing'}`
-                    : 'Not connected'
-                }
-                onPress={() =>
-                  router.push('/more/email' as import('expo-router').Href)
-                }
+                icon={<BarChart3 size={16} color={colors.teal} />}
+                label="Share usage data"
+                subtitle="Helps us improve Visa Atlas. No data is sold."
+                value={shareUsageData}
+                onToggle={handleToggleUsageData}
               />
             </View>
           </View>
+
+          {/* Connections — Gmail import for parsing booking confirmations */}
+          {FEATURES.gmailSync && (
+            <View>
+              <GroupHeading label="CONNECTIONS" colors={colors} />
+              <View
+                style={[
+                  styles.groupCard,
+                  { backgroundColor: colors.surface, borderColor: colors.line },
+                ]}
+              >
+                <SettingsRow
+                  isFirst
+                  icon={<Mail size={16} color={colors.teal} />}
+                  label="Gmail"
+                  value={
+                    gmailAccount
+                      ? `Connected · ${gmailAccount.email ?? 'syncing'}`
+                      : 'Not connected'
+                  }
+                  onPress={() =>
+                    router.push('/more/email' as import('expo-router').Href)
+                  }
+                />
+              </View>
+            </View>
+          )}
 
           {/* Legal */}
           <View>

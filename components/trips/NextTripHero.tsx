@@ -54,6 +54,8 @@ interface NextTripHeroProps {
   dailyBudget?: string;
   /** Sum of logged booking costs in EUR — used for % logged. */
   loggedCost?: number;
+  /** Same-day-return day trip — relabels nights → "DAY TRIP". */
+  isDayTrip?: boolean;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -81,19 +83,23 @@ function formatMonoDateRange(
   startDate: string | undefined,
   endDate: string | undefined,
   duration: number,
+  isDayTrip?: boolean,
 ): string {
-  if (!startDate) return `${duration} NIGHTS`;
+  // A day trip is a same-day return — zero nights. Label it as such rather
+  // than "1 NIGHTS", which reads as wrong for a leave-and-return-today trip.
+  const tail = isDayTrip ? 'DAY TRIP' : `${duration} NIGHTS`;
+  if (!startDate) return tail;
   const start = new Date(startDate);
   const sm = start.toLocaleString('en-US', { month: 'short' }).toUpperCase();
   const sd = start.getDate();
-  if (endDate) {
+  if (endDate && !isDayTrip) {
     const end = new Date(endDate);
     const em = end.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const ed = end.getDate();
     const range = em === sm ? `${sm} ${sd} → ${ed}` : `${sm} ${sd} → ${em} ${ed}`;
     return `${range} · ${duration} NIGHTS`;
   }
-  return `${sm} ${sd} · ${duration} NIGHTS`;
+  return `${sm} ${sd} · ${tail}`;
 }
 
 function countdownParts(startDate: string | undefined): { d: number; h: number } | null {
@@ -260,6 +266,7 @@ export function NextTripHero({
   status,
   dailyBudget,
   loggedCost,
+  isDayTrip,
 }: NextTripHeroProps) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -271,7 +278,7 @@ export function NextTripHero({
   const isFailed = status === 'failed';
 
   const imageUri = parseHeroImage(heroImage);
-  const monoDate = formatMonoDateRange(startDate, endDate, duration);
+  const monoDate = formatMonoDateRange(startDate, endDate, duration, isDayTrip);
   const cd = countdownParts(startDate);
   const alpha2 = toAlpha2(countryCode);
 

@@ -33,6 +33,7 @@ const LIMITS = {
   visaGuide: { route: "visa-guide", key: "aiProxy:visaGuide", max: 5 },
   visaChat: { route: "visa-chat", key: "aiProxy:visaChat", max: 30 },
   scanBooking: { route: "scan-booking", key: "aiProxy:scanBooking", max: 10 },
+  tripChat: { route: "trip-chat", key: "aiProxy:tripChat", max: 30 },
 } as const;
 
 // Generic, user-safe copy — upstream details are logged, never surfaced
@@ -138,4 +139,11 @@ export const scanBooking = action({
   args: { body: v.string() },
   handler: async (ctx, { body }): Promise<unknown> =>
     forwardToVercel(ctx, LIMITS.scanBooking, body),
+});
+
+/** Trip copilot chat replies. 30/hour. */
+export const tripChat = action({
+  args: { body: v.string() },
+  handler: async (ctx, { body }): Promise<unknown> =>
+    forwardToVercel(ctx, LIMITS.tripChat, body),
 });

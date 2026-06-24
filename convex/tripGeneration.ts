@@ -18,6 +18,7 @@ import {
   buildBudgetUserPrompt,
   buildHighlightsUserPrompt,
   buildCountryTipsPrompt,
+  buildDayTripItineraryPrompt,
   streamAnthropic,
   makeWholeSectionBuffer,
   makeItineraryStreamParser,
@@ -26,6 +27,7 @@ import type { DiningDayContext } from "./lib/anthropicStream";
 import { normalizeDiningGuide, isUsableStop } from "../types/itinerary";
 import { localInfo } from "../data/localInfo";
 import { toAlpha3 } from "../utils/countryCode";
+import { captureServerEvent } from "./lib/posthog";
 
 /** Coerce a value into a string. Strings pass through; arrays/objects get
  * JSON.stringify'd; nullish becomes the supplied fallback (use "[]" for
@@ -121,6 +123,35 @@ const generateTripArgs = {
   // trails"), stored separately so the trip brief readout can render them
   // as chips. The merged prose in userNotes remains the LLM's context.
   refinementAnswers: v.optional(v.array(v.string())),
+  // ── Day trips ──
+  // When true, this is a same-day-return trip: duration is forced to 1 and
+  // the itinerary streams through buildDayTripItineraryPrompt (transport-
+  // bookended single day). originCode is the alpha-2 home country departed
+  // from. `dayTrip` is the chosen transport spine — it both feeds the
+  // itinerary prompt AND is stored (as DayTripMeta) on the trip doc.
+  isDayTrip: v.optional(v.boolean()),
+  originCode: v.optional(v.string()),
+  dayTrip: v.optional(
+    v.object({
+      homeCity: v.string(),
+      destCity: v.string(),
+      scope: v.union(v.literal("international"), v.literal("domestic")),
+      transportMode: v.string(),
+      transportLabel: v.string(),
+      outboundDepart: v.string(),
+      outboundArrive: v.string(),
+      lastReturnDepart: v.string(),
+      returnArrive: v.string(),
+      hoursOnGround: v.number(),
+      doorToDoorLabel: v.string(),
+      costOfDay: v.number(),
+      currency: v.string(),
+      operator: v.optional(v.string()),
+      bookingUrl: v.optional(v.string()),
+      borderReminder: v.boolean(),
+      feasibility: v.union(v.literal("comfortable"), v.literal("tight")),
+    }),
+  ),
 };
 
 /**
@@ -140,11 +171,11 @@ export const generateTrip = mutation({
   args: generateTripArgs,
   handler: async (ctx, input): Promise<Id<"trips">> => {
     const userId = await requireAuth(ctx);
-    if (
-      !Number.isInteger(input.duration) ||
-      input.duration < 1 ||
-      input.duration > 60
-    ) {
+    // A day trip is always a single day; ignore whatever duration the client
+    // sent and pin it to 1 so the rest of the pipeline (itinerary length,
+    // completeGeneration's realDays check) stays consistent.
+    const duration = input.isDayTrip ? 1 : input.duration;
+    if (!Number.isInteger(duration) || duration < 1 || duration > 60) {
       throw new Error("duration must be between 1 and 60 days");
     }
     const facts = lookupStaticFacts(input.countryCode);
@@ -164,12 +195,24 @@ export const generateTrip = mutation({
     // 5+ parallel Anthropic streams — the most expensive call in the app.
     await checkRateLimit(ctx, userId, "generateTrip", 5, HOUR_MS);
 
+    // Effective input with duration normalized — stored in originalInputs and
+    // handed to the action so the prompts/maxTokens see the real day count.
+    const effInput = { ...input, duration };
+
+    // The stored day-trip transport spine (DayTripMeta, types/itinerary.ts):
+    // the chosen legs + cost-of-day + border reminder, so the detail screen
+    // renders the spine without re-deriving. homeCode = the alpha-2 origin.
+    const dayTripMeta =
+      input.isDayTrip && input.dayTrip
+        ? JSON.stringify({ homeCode: input.originCode ?? "", ...input.dayTrip })
+        : undefined;
+
     const tripId = await ctx.db.insert("trips", {
       userId,
       countryCode: input.countryCode,
       countryName: input.countryName,
       capital: input.capital,
-      duration: input.duration,
+      duration,
       // Static facts (instant, free, no LLM):
       currency: facts?.currency ?? "",
       language: facts?.language ?? "",
@@ -181,13 +224,22 @@ export const generateTrip = mutation({
       // Generation state:
       status: "generating",
       generationStartedAt: Date.now(),
-      originalInputs: JSON.stringify(input),
+      originalInputs: JSON.stringify(effInput),
+      // Day-trip discriminators (absent on standard trips):
+      isDayTrip: input.isDayTrip ? true : undefined,
+      originCode: input.isDayTrip ? input.originCode : undefined,
+      dayTrip: dayTripMeta,
       // Empty content fields — populated by streaming patches:
       itinerary: "",
       budgetBreakdown: "",
       packingSuggestions: "",
       visaChecklist: "",
-      visaCategory: "",
+      // A domestic day trip stays inside the home country — no border, no
+      // visa. Pre-set visa-free so the trip card/detail never shows the
+      // passport's general "visa required" for the user's own country (the
+      // visa stream is skipped for domestic day trips in runGenerationStream).
+      visaCategory:
+        input.isDayTrip && input.dayTrip?.scope === "domestic" ? "visa-free" : "",
       highlights: "",
       accommodationTips: "",
       dailyBudget: "",
@@ -211,7 +263,10 @@ export const generateTrip = mutation({
     });
     await ctx.scheduler.runAfter(0, internal.tripGeneration.runGenerationStream, {
       tripId,
-      input,
+      input: effInput,
+      // Threaded so the streaming action can attribute LLM-analytics events
+      // to the authenticated owner (distinctId) without re-deriving auth.
+      userId,
     });
     return tripId;
   },
@@ -352,6 +407,11 @@ function streamItineraryIntoTrip(
   input: any,
   apiKey: string,
   systemPrompt: string,
+  // Optional PostHog LLM-analytics context (distinctId = the trip owner's
+  // userId, traceId = the tripId so all sections of one trip share a trace).
+  // `fireActivation` is set ONLY by the main generation run — a retry re-runs
+  // the same stream and must not re-emit the once-per-trip activation event.
+  analytics?: { distinctId?: string; traceId: string; tripId: string; fireActivation?: boolean },
 ): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
@@ -360,7 +420,11 @@ function streamItineraryIntoTrip(
       settled = true;
       resolve();
     };
-    const userPrompt = buildItineraryUserPrompt(input);
+    // Day trips emit ONE transport-bookended day bounded by the real last
+    // return; standard trips emit `duration` editorial days.
+    const userPrompt = input?.isDayTrip
+      ? buildDayTripItineraryPrompt(input)
+      : buildItineraryUserPrompt(input);
     // The parser fire-and-forgets the day callback, so collect each
     // patch's promise and await them all in onComplete — otherwise the
     // final day's patchTripSection may not have committed when the stream
@@ -396,6 +460,18 @@ function streamItineraryIntoTrip(
         systemPrompt,
         userPrompt,
         maxTokens: itineraryMaxTokens(Number(input?.duration) || 7),
+        // Forward only the LLM-analytics fields streamAnthropic knows about —
+        // `fireActivation` is a local control flag, not a PostHog property.
+        ...(analytics
+          ? {
+              analytics: {
+                distinctId: analytics.distinctId,
+                traceId: analytics.traceId,
+                tripId: analytics.tripId,
+                purpose: "itinerary",
+              },
+            }
+          : {}),
       },
       {
         onDelta: (text) => itineraryParser.onDelta(text),
@@ -411,6 +487,19 @@ function streamItineraryIntoTrip(
             // day's stop names), so they fetch once, here — not on the
             // fast Day-1 hero pass above.
             await ctx.scheduler.runAfter(0, internal.tripGeneration.fetchStopPhotos, { tripId });
+            // Activation funnel: the itinerary settling is the moment a trip
+            // becomes usable. Fire server-side (never lost to a backgrounded
+            // client) and ONCE — `fireActivation` is set only by the main
+            // generation run, so a later itinerary retry won't double-count.
+            // `pending` holds one entry per day the parser emitted = the
+            // delivered day count. captureServerEvent never throws.
+            if (analytics?.fireActivation && analytics.distinctId) {
+              await captureServerEvent(analytics.distinctId, "trip:itinerary_generated", {
+                tripId,
+                dayCount: pending.length,
+                destination: input?.countryName ?? "",
+              });
+            }
           } catch (err) {
             console.error("Itinerary completion hook failed:", err);
           } finally {
@@ -467,6 +556,9 @@ async function streamDiningIntoTrip(
   input: any,
   apiKey: string,
   systemPrompt: string,
+  // Optional PostHog LLM-analytics context (distinctId = the trip owner's
+  // userId, traceId = the tripId so dining joins the trip's trace).
+  analytics?: { distinctId?: string; traceId: string; tripId: string },
 ): Promise<void> {
   // Mark the section failed without ever letting the marker's own failure
   // escape — same shape as runSection's markFailed.
@@ -538,6 +630,7 @@ async function streamDiningIntoTrip(
         // unbalanced JSON, and every retry rebuilt the identical
         // prompt+budget, failing forever.
         maxTokens: 8192,
+        ...(analytics ? { analytics: { ...analytics, purpose: "dining" } } : {}),
       },
       makeWholeSectionBuffer(
         async (full) => {
@@ -847,8 +940,12 @@ export const runGenerationStream = internalAction({
   args: {
     tripId: v.id("trips"),
     input: v.object(generateTripArgs),
+    // The trip owner — used only as the LLM-analytics distinctId. Optional so
+    // any pre-existing scheduled job (queued before this field existed) still
+    // typechecks; analytics simply falls back to the server bucket if absent.
+    userId: v.optional(v.id("users")),
   },
-  handler: async (ctx, { tripId, input }) => {
+  handler: async (ctx, { tripId, input, userId }) => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       await ctx.runMutation(internal.tripGeneration.failGeneration, {
@@ -859,6 +956,12 @@ export const runGenerationStream = internalAction({
     }
 
     const systemPrompt = buildSystemPrompt(input);
+
+    // Shared LLM-analytics context for every section of this trip. traceId =
+    // tripId so all sections (itinerary, visa, budget, highlights, dining,
+    // country tips) group into ONE trace in PostHog LLM Analytics. Each call
+    // site stamps its own `purpose`.
+    const analyticsBase = { distinctId: userId, traceId: tripId, tripId };
 
     // Schedule the 60s zero-content watchdog and the 12-minute stuck-
     // generation finalizer (actions cap at 10 minutes, so by 12 this run
@@ -871,6 +974,9 @@ export const runGenerationStream = internalAction({
       sectionName: string,
       userPrompt: string,
       maxTokens: number,
+      // Short LLM-analytics label for this section (e.g. "visa", "budget",
+      // "highlights") — joins the trip's trace under analyticsBase.
+      purpose: string,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onDoneTransform?: (raw: string) => Array<{ section: string; content: string }>,
     ): Promise<void> => {
@@ -898,7 +1004,13 @@ export const runGenerationStream = internalAction({
           }
         };
         streamAnthropic(
-          { apiKey, systemPrompt, userPrompt, maxTokens },
+          {
+            apiKey,
+            systemPrompt,
+            userPrompt,
+            maxTokens,
+            analytics: { ...analyticsBase, purpose },
+          },
           makeWholeSectionBuffer(
             async (full) => {
               try {
@@ -938,9 +1050,14 @@ export const runGenerationStream = internalAction({
       });
     };
 
-    // Itinerary streams day-by-day with its own parser
+    // Itinerary streams day-by-day with its own parser. fireActivation marks
+    // THIS as the main run, so the once-per-trip activation event fires here
+    // (and never on a later itinerary retry, which omits the flag).
     const runItinerary = (): Promise<void> =>
-      streamItineraryIntoTrip(ctx, tripId, input, apiKey, systemPrompt);
+      streamItineraryIntoTrip(ctx, tripId, input, apiKey, systemPrompt, {
+        ...analyticsBase,
+        fireActivation: true,
+      });
 
     // ── Country tips — static-first, cache-second, LLM-fallback ─────
     //
@@ -975,6 +1092,7 @@ export const runGenerationStream = internalAction({
             systemPrompt,
             userPrompt: buildCountryTipsPrompt(input.countryCode, input.countryName),
             maxTokens: 2048,
+            analytics: { ...analyticsBase, purpose: "country_tips" },
           },
           makeWholeSectionBuffer(
             async (full) => {
@@ -1055,28 +1173,44 @@ export const runGenerationStream = internalAction({
     // retry path) — see "Shared section parsers" above.
 
     try {
-      const promises: Array<Promise<void>> = [
-        // Dining is sequential-after-itinerary by design — it anchors its
-        // restaurant picks to the streamed day areas, so it needs the final
-        // days as prompt context. But it runs as its OWN scheduled action
-        // (via _beginDiningRun → runRetrySection), not chained inside this
-        // action: a long itinerary plus dining would overrun the 10-minute
-        // action budget. The Food tab shows the reactive 'retrying' state
-        // via the retryingSections marker while it runs, and the trip can
-        // flip 'planned' before dining lands — by design (the trip is
-        // usable immediately; dining trickles in). The .catch ensures a
-        // kickoff failure can never reject the Promise.all.
-        runItinerary()
-          .then(async () => {
-            await ctx.runMutation(internal.tripGeneration._beginDiningRun, { tripId });
-          })
-          .catch((err) => {
-            console.error("Dining kickoff failed:", err);
-          }),
-        runSection("__visa-bundle__", buildVisaUserPrompt(input), 1024, visaTransform),
-        runSection("__budget-bundle__", buildBudgetUserPrompt(input), 1024, budgetTransform),
-        runSection("highlights", buildHighlightsUserPrompt(input), 512),
-      ];
+      // A day trip is one transport-bookended day: skip the multi-day budget
+      // breakdown (its cost lives in the DayTripMeta cost-of-day) and skip the
+      // dining-guide run entirely (lunch/coffee are inline itinerary stops).
+      // Everything else — visa bundle, highlights, country tips — still runs.
+      const promises: Array<Promise<void>> = input.isDayTrip
+        ? [
+            runItinerary().catch((err) => {
+              console.error("Day-trip itinerary failed:", err);
+            }),
+            // Cross-border day trips still need the passport-aware visa
+            // bundle; domestic ones don't (visaCategory is pre-set visa-free).
+            ...(input.dayTrip?.scope === "domestic"
+              ? []
+              : [runSection("__visa-bundle__", buildVisaUserPrompt(input), 1024, "visa", visaTransform)]),
+            runSection("highlights", buildHighlightsUserPrompt(input), 512, "highlights"),
+          ]
+        : [
+            // Dining is sequential-after-itinerary by design — it anchors its
+            // restaurant picks to the streamed day areas, so it needs the final
+            // days as prompt context. But it runs as its OWN scheduled action
+            // (via _beginDiningRun → runRetrySection), not chained inside this
+            // action: a long itinerary plus dining would overrun the 10-minute
+            // action budget. The Food tab shows the reactive 'retrying' state
+            // via the retryingSections marker while it runs, and the trip can
+            // flip 'planned' before dining lands — by design (the trip is
+            // usable immediately; dining trickles in). The .catch ensures a
+            // kickoff failure can never reject the Promise.all.
+            runItinerary()
+              .then(async () => {
+                await ctx.runMutation(internal.tripGeneration._beginDiningRun, { tripId });
+              })
+              .catch((err) => {
+                console.error("Dining kickoff failed:", err);
+              }),
+            runSection("__visa-bundle__", buildVisaUserPrompt(input), 1024, "visa", visaTransform),
+            runSection("__budget-bundle__", buildBudgetUserPrompt(input), 1024, "budget", budgetTransform),
+            runSection("highlights", buildHighlightsUserPrompt(input), 512, "highlights"),
+          ];
       // Only burn tokens on country tips when neither the static table
       // nor the Convex cache has them. Once this fires for any uncovered
       // country, the result is cached forever — every future trip to
@@ -1329,7 +1463,18 @@ Keep the exact same JSON shape (same keys), keep "day": ${dayIndex + 1}, recomme
 
       await new Promise<void>((resolve) => {
         streamAnthropic(
-          { apiKey, systemPrompt, userPrompt, maxTokens: 4096 },
+          {
+            apiKey,
+            systemPrompt,
+            userPrompt,
+            maxTokens: 4096,
+            analytics: {
+              distinctId: trip.userId,
+              traceId: tripId,
+              purpose: "day_tweak",
+              tripId,
+            },
+          },
           makeWholeSectionBuffer(
             async (full) => {
               try {
@@ -1504,6 +1649,11 @@ async function runRetrySectionInner(
 
     const systemPrompt = buildSystemPrompt(input);
 
+    // LLM-analytics context for the retry, distinctId = the owner off the doc
+    // (no auth re-derive needed) and traceId = tripId so a retried section
+    // joins the same trip trace. `purpose` is stamped per call site below.
+    const analyticsBase = { distinctId: trip.userId, traceId: tripId, tripId };
+
     if (section === "itinerary") {
       // Snapshot the surviving partial days BEFORE clearing. The clean
       // clear is still needed (stale days from the failed run could
@@ -1516,7 +1666,7 @@ async function runRetrySectionInner(
         field: "itinerary",
         value: "",
       });
-      await streamItineraryIntoTrip(ctx, tripId, input, apiKey, systemPrompt);
+      await streamItineraryIntoTrip(ctx, tripId, input, apiKey, systemPrompt, analyticsBase);
       const after = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
       if (!after) return; // deleted mid-retry
       const days = after.itinerary ? safeParseArray(after.itinerary) : [];
@@ -1565,7 +1715,7 @@ async function runRetrySectionInner(
       // Also the backfill path for trips created before dining existed —
       // generateDiningGuide schedules this even when the section was never
       // marked failed, and _clearFailedSection no-ops harmlessly then.
-      await streamDiningIntoTrip(ctx, tripId, input, apiKey, systemPrompt);
+      await streamDiningIntoTrip(ctx, tripId, input, apiKey, systemPrompt, analyticsBase);
       // Only clear the failure marker if the run actually produced a guide.
       const after = await ctx.runQuery(internal.tripGeneration._getTripForRetry, { tripId });
       if (after?.diningGuide) {
@@ -1612,9 +1762,24 @@ async function runRetrySectionInner(
       }
     };
 
+    // Collapse the bundle section keys to the same purpose labels the main
+    // run uses, so a retried visa/budget joins its trip's trace cleanly.
+    const retryPurpose =
+      section === "highlights"
+        ? "highlights"
+        : section === "visaChecklist" || section === "visaNotes"
+          ? "visa"
+          : "budget";
+
     await new Promise<void>((resolve) => {
       streamAnthropic(
-        { apiKey, systemPrompt, userPrompt, maxTokens },
+        {
+          apiKey,
+          systemPrompt,
+          userPrompt,
+          maxTokens,
+          analytics: { ...analyticsBase, purpose: retryPurpose },
+        },
         makeWholeSectionBuffer(
           async (full) => {
             // The failure marker is cleared ONLY on confirmed success —
@@ -1762,7 +1927,16 @@ Output ONLY the JSON object. No preamble, no markdown fences.`;
 
       await new Promise<void>((resolve) => {
         streamAnthropic(
-          { apiKey, systemPrompt, userPrompt, maxTokens },
+          {
+            apiKey,
+            systemPrompt,
+            userPrompt,
+            maxTokens,
+            // CLI-only internal action — no authenticated user in scope, so
+            // distinctId is omitted (the helper falls back to a server bucket).
+            // traceId = tripId keeps the backfill in the trip's trace.
+            analytics: { traceId: tripId, purpose: "backfill_stops", tripId },
+          },
           makeWholeSectionBuffer(
             async (full) => {
               try {

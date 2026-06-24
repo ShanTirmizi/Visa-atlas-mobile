@@ -9,6 +9,7 @@ import { internal } from "./_generated/api";
 import { requireAuth } from "./lib/auth";
 import { checkRateLimit, HOUR_MS } from "./lib/rateLimit";
 import type { Id } from "./_generated/dataModel";
+import { captureAIGeneration } from "./lib/posthog";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -174,6 +175,9 @@ export const startAnalysis = mutation({
     });
     await ctx.scheduler.runAfter(0, internal.tripRefinement.runAnalysis, {
       sessionId,
+      // Threaded so the LLM-analytics event can attribute to the owner without
+      // re-deriving auth inside the scheduled action.
+      userId,
       countryCode: args.countryCode,
       countryName: args.countryName,
       duration: args.duration,
@@ -208,10 +212,19 @@ export const getSession = query({
 
 /** Scheduled LLM call. Always settles the session row — success or error. */
 export const runAnalysis = internalAction({
-  args: { sessionId: v.id("refinementSessions"), ...analyzeArgs },
-  handler: async (ctx, { sessionId, ...args }) => {
+  args: {
+    sessionId: v.id("refinementSessions"),
+    // Owner — only used as the LLM-analytics distinctId. Optional so a job
+    // queued before this field existed still typechecks.
+    userId: v.optional(v.id("users")),
+    ...analyzeArgs,
+  },
+  handler: async (ctx, { sessionId, userId, ...args }) => {
     try {
-      const questions = await fetchQuestionsWithRetry(args);
+      const questions = await fetchQuestionsWithRetry({
+        ...args,
+        analytics: { distinctId: userId, traceId: sessionId, purpose: "refinement" },
+      });
       await ctx.runMutation(internal.tripRefinement.finishAnalysis, {
         sessionId,
         status: "ready",
@@ -244,11 +257,15 @@ export const finishAnalysis = internalMutation({
 
 // ── Anthropic call ───────────────────────────────────────────────
 
+// LLM-analytics context for the refinement call (sessionId is the trace).
+type RefinementAnalytics = { distinctId?: string; traceId: string; purpose: string };
+
 async function fetchQuestionsWithRetry(args: {
   countryName: string;
   duration: number;
   vibes: string[];
   userNotes: string;
+  analytics?: RefinementAnalytics;
 }): Promise<RefinementQuestion[]> {
   try {
     return await fetchQuestions(args);
@@ -265,6 +282,7 @@ async function fetchQuestions(args: {
   duration: number;
   vibes: string[];
   userNotes: string;
+  analytics?: RefinementAnalytics;
 }): Promise<RefinementQuestion[]> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -310,7 +328,36 @@ async function fetchQuestions(args: {
 
   const body = (await response.json()) as {
     content: Array<{ type: string; text?: string }>;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
   };
+
+  // Report token usage for this (non-streaming) call. Guarded field access so
+  // an odd usage block can never throw; captureAIGeneration never throws either.
+  if (args.analytics) {
+    const u = body.usage;
+    await captureAIGeneration({
+      ...args.analytics,
+      model: MODEL,
+      usage: {
+        inputTokens: typeof u?.input_tokens === "number" ? u.input_tokens : 0,
+        outputTokens: typeof u?.output_tokens === "number" ? u.output_tokens : 0,
+        cacheReadTokens:
+          typeof u?.cache_read_input_tokens === "number" ? u.cache_read_input_tokens : undefined,
+        cacheCreationTokens:
+          typeof u?.cache_creation_input_tokens === "number"
+            ? u.cache_creation_input_tokens
+            : undefined,
+      },
+      httpStatus: response.status,
+      maxTokens: 1024,
+    });
+  }
+
   const text = body.content
     .filter((b) => b.type === "text")
     .map((b) => b.text ?? "")

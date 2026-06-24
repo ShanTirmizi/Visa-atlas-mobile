@@ -36,6 +36,7 @@ import { VAStamp } from '@/components/auth/VAStamp';
 import { Squiggle } from '@/components/ui/Squiggle';
 import { TypingDots } from '@/components/ui/TypingDots';
 import { toAlpha2 } from '@/utils/countryCode';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 // ── Alpha-3 → flag emoji ─────────────────────────────────────────────────
 function getFlag(a3: string): string {
@@ -124,6 +125,7 @@ export default function BuildingScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const visa = useVisa();
+  const analytics = useAnalytics();
 
   const [state, setState] = useState<ScreenState>('loading');
   const [tick, setTick] = useState(0);
@@ -166,6 +168,9 @@ export default function BuildingScreen() {
         }
         visa.setVisaMap(data.countries);
         visa.setOnboarded(true);
+        analytics.track(ANALYTICS.onboardingCompleted, {
+          passports: visa.passports.length,
+        });
         const countries = data.countries as Array<{ category: string }>;
         setStats({
           visaFree: countries.filter((c) => c.category === 'visa-free').length,
@@ -204,6 +209,9 @@ export default function BuildingScreen() {
         }
         visa.setVisaMap(data.countries);
         visa.setOnboarded(true);
+        analytics.track(ANALYTICS.onboardingCompleted, {
+          passports: visa.passports.length,
+        });
         const countries = data.countries as Array<{ category: string }>;
         setStats({
           visaFree: countries.filter((c) => c.category === 'visa-free').length,

@@ -59,6 +59,7 @@ import { VerdictCard } from '@/components/compare/VerdictCard';
 import TripPlannerSheet, { type TripPlannerSheetRef } from '@/components/trip/TripPlannerSheet';
 import { useRouter } from 'expo-router';
 import { TopSafeAreaBlur } from '@/components/ui/TopSafeAreaBlur';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 // ---------------------------------------------------------------------------
 // Enable LayoutAnimation on Android
@@ -408,6 +409,7 @@ export default function CompareScreen() {
   const router = useRouter();
   const { heldVisas, residence, passports } = useVisa();
   const proxyCompare = useAction(api.aiProxy.compare);
+  const analytics = useAnalytics();
   const plannerRef = useRef<TripPlannerSheetRef>(null);
   const [planTarget, setPlanTarget] = useState<'a' | 'b'>('a');
 
@@ -489,6 +491,11 @@ export default function CompareScreen() {
       residence,
     };
 
+    analytics.track(ANALYTICS.countryCompared, {
+      codeA: selectedA.code,
+      codeB: selectedB.code,
+    });
+
     // Authenticated + rate-limited proxy (convex/aiProxy.ts). Convex actions
     // can't be aborted mid-flight, so the controller now acts as a staleness
     // flag: a newer selection discards this response instead of applying it.
@@ -507,7 +514,7 @@ export default function CompareScreen() {
       });
 
     return () => controller.abort();
-  }, [countryA, countryB, heldVisasSet, passports, residence, attempt, proxyCompare]);
+  }, [countryA, countryB, heldVisasSet, passports, residence, attempt, proxyCompare, analytics]);
 
   // ── Swap handler ─────────────────────────────────────────────────────────
   const swap = useCallback(() => {

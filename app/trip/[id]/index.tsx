@@ -24,6 +24,7 @@ import { useToast } from '@/contexts/toast-context';
 import { hapticImpact, hapticSuccess } from '@/utils/haptics';
 import { Spacing, getVisaCategoryColor, FontFamily } from '@/constants/theme';
 import { Type } from '@/constants/typography';
+import { useAnalytics, ANALYTICS } from '@/lib/analytics';
 
 // ── UI Primitives ──────────────────────────────────────────
 import BackButton from '@/components/ui/BackButton';
@@ -52,7 +53,8 @@ import DayDeck from '@/components/trip/DayDeck';
 
 // ── Food tab — per-trip dining guide ───────────────────────
 import { FoodTab } from '@/components/trip/food/FoodTab';
-import { parseDiningGuide, parseStopPhotos, type ItineraryDay } from '@/types/itinerary';
+import { parseDiningGuide, parseStopPhotos, parseDayTripMeta, type ItineraryDay } from '@/types/itinerary';
+import { DayTripLogisticsCard } from '@/components/daytrip/DayTripLogisticsCard';
 
 // ── Photos — full-screen album viewer ──────────────────────
 import { usePhotoViewer } from '@/components/photos/PhotoViewer';
@@ -176,6 +178,14 @@ export default function TripDetailScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const analytics = useAnalytics();
+
+  // tripViewed — fire once per mount, as soon as the trip id is known.
+  useEffect(() => {
+    if (!id) return;
+    analytics.track(ANALYTICS.tripViewed, { tripId: id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
   const addBookingRef = useRef<AddBookingSheetRef>(null);
   const bookingDetailRef = useRef<BookingDetailSheetRef>(null);
   const guideSheetRef = useRef<VisaGuideSheetRef>(null);
@@ -234,6 +244,7 @@ export default function TripDetailScreen() {
     // of a confirmation dialog. The server soft-deletes and only hard-deletes
     // after a 10s window, so Undo just clears the soft-delete flag.
     hapticImpact();
+    analytics.track(ANALYTICS.tripDeleted, { tripId: id });
     // Navigate AWAY first so the live `getTrip` query stops re-running
     // against a record we're about to delete (which would throw "no
     // access" into render and surface as a Render Error).
@@ -262,7 +273,10 @@ export default function TripDetailScreen() {
     Alert.alert('Trip options', undefined, [
       {
         text: 'Share this trip',
-        onPress: () => shareSheetRef.current?.present(),
+        onPress: () => {
+          analytics.track(ANALYTICS.tripShared, { tripId: id });
+          shareSheetRef.current?.present();
+        },
       },
       {
         text: 'Chat with AI',
@@ -270,7 +284,10 @@ export default function TripDetailScreen() {
       },
       {
         text: 'Edit itinerary',
-        onPress: () => router.push(`/trip/${id}/day/0` as never),
+        onPress: () => {
+          analytics.track(ANALYTICS.dayTweaked, { tripId: id, source: 'edit_itinerary' });
+          router.push(`/trip/${id}/day/0` as never);
+        },
       },
       {
         text: 'Invite a travel partner',
@@ -331,6 +348,12 @@ export default function TripDetailScreen() {
       ? parsed.filter((d): d is ItineraryDay => Boolean(d))
       : [];
   }, [trip?.itinerary]);
+
+  // Day-trip transport spine (null on standard multi-day trips).
+  const dayTripMeta = useMemo(
+    () => parseDayTripMeta(trip?.dayTrip),
+    [trip?.dayTrip],
+  );
 
   // ── Streaming-generation derived state ───────────────────
   // getTabDotIndicators / getCompletedSectionCount / getStreamingDayIndex
@@ -444,10 +467,15 @@ export default function TripDetailScreen() {
   }, [itinerary, dayImages, id, router]);
 
   // ── Destination label ────────────────────────────────────
+  // A day trip is about the CITY you spend the day in (Paris), not the
+  // country (France) — the logistics spine already reads LONDON → PARIS, so
+  // headline the city everywhere for consistency.
   const destinationLabel = trip
-    ? trip.isMultiCountry && trip.routeTitle
-      ? trip.routeTitle.split(/\s*→\s*/)[0]
-      : trip.countryName ?? 'Destination'
+    ? trip.isDayTrip
+      ? trip.capital ?? trip.countryName ?? 'Destination'
+      : trip.isMultiCountry && trip.routeTitle
+        ? trip.routeTitle.split(/\s*→\s*/)[0]
+        : trip.countryName ?? 'Destination'
     : 'Destination';
 
   const cityLabel = trip?.capital ?? destinationLabel;
@@ -569,6 +597,10 @@ export default function TripDetailScreen() {
               solid
               onPress={() => {
                 if (!trip) return;
+                analytics.track(ANALYTICS.tripStarred, {
+                  tripId: trip._id,
+                  starred: !saved,
+                });
                 setStarredMutation({
                   id: trip._id as Id<'trips'>,
                   starred: !saved,
@@ -593,6 +625,11 @@ export default function TripDetailScreen() {
           </View>
         </View>
 
+        {/* ─── DAY-TRIP LOGISTICS — transport spine pinned above the tabs ─── */}
+        {trip.isDayTrip && dayTripMeta && (
+          <DayTripLogisticsCard meta={dayTripMeta} />
+        )}
+
         {/* ─── SEGMENTED TABS — squiggle variant for trip tabs ─── */}
         <View style={{ paddingHorizontal: 16 }}>
           <SegmentedControl
@@ -614,7 +651,11 @@ export default function TripDetailScreen() {
                 is reached without an image. */}
             {trip.heroImage ? (
               <TripOverviewHero
-                tripName={trip.routeTitle ?? trip.countryName ?? ''}
+                tripName={
+                  trip.isDayTrip
+                    ? trip.capital ?? trip.countryName ?? ''
+                    : trip.routeTitle ?? trip.countryName ?? ''
+                }
                 cityName={cityLabel}
                 heroImageUrl={heroImage?.url}
                 duration={typeof trip.duration === 'number' ? trip.duration : undefined}

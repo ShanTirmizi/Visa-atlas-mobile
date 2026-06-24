@@ -29,6 +29,10 @@ export const STOP_KINDS = [
   'viewpoint',
   'beach',
   'shopping',
+  // Day-trip transport legs (the outbound/return bookends on a single-day
+  // plan) render with a train/plane glyph on the timeline instead of a map
+  // pin. Legacy multi-day trips never emit this.
+  'transport',
 ] as const;
 export type StopKind = (typeof STOP_KINDS)[number];
 
@@ -73,6 +77,61 @@ export interface ItineraryDay {
   /** Structured stops across the three slots. Absent on legacy trips —
    *  the day detail screen falls back to prose rendering per slot. */
   stops?: ItineraryStop[];
+}
+
+// ── Day trip (per trip) ──────────────────────────────────────────
+//
+// The transport spine of a same-day-return trip, chosen from the discovery
+// cache when the user taps "Plan this day". Stored JSON-stringified in
+// `trips.dayTrip` so the trip detail screen renders the outbound/return
+// bookends and the "back home by" guarantee without re-deriving anything.
+// Present only on day trips (trips.isDayTrip === true); absent on every
+// multi-day trip.
+
+export type DayTripMode = 'rail' | 'flight' | 'ferry' | 'coach' | 'road';
+export const DAY_TRIP_MODES: readonly DayTripMode[] = ['rail', 'flight', 'ferry', 'coach', 'road'];
+
+export interface DayTripMeta {
+  /** alpha-2 home country the trip departs from. */
+  homeCode: string;
+  homeCity: string;
+  /** The city/area the day is spent in. */
+  destCity: string;
+  scope: 'international' | 'domestic';
+  transportMode: DayTripMode;
+  /** "Eurostar · 2h20" */
+  transportLabel: string;
+  /** Typical local times — NOT booked. Confirmed live before travel. */
+  outboundDepart: string;
+  outboundArrive: string;
+  lastReturnDepart: string;
+  returnArrive: string;
+  hoursOnGround: number;
+  doorToDoorLabel: string;
+  costOfDay: number;
+  currency: string;
+  operator?: string;
+  bookingUrl?: string;
+  /** True when the day crosses a real (non-Schengen-internal) border, so the
+   *  "bring your passport" reminder fires. Domestic trips: false. */
+  borderReminder: boolean;
+  feasibility: 'comfortable' | 'tight';
+}
+
+/** Parse `trips.dayTrip`. Tolerates absence (every multi-day trip) and
+ *  malformed JSON; a light shape guard, not a validator (the server wrote it
+ *  from the validated discovery cache). */
+export function parseDayTripMeta(raw: string | undefined | null): DayTripMeta | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const m = parsed as DayTripMeta;
+    if (typeof m.destCity !== 'string' || typeof m.transportMode !== 'string') return null;
+    return m;
+  } catch {
+    return null;
+  }
 }
 
 // ── Dining guide (per trip) ──────────────────────────────────────
