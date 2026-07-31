@@ -284,6 +284,27 @@ export default defineSchema({
     timestamp: v.number(),
     userId: v.optional(v.id("users")),
     userName: v.optional(v.string()),
+    // ── Durable generation fields (convex/tripChat.ts) ──
+    // All optional so pre-existing rows validate unchanged; absent === legacy
+    // "ready". The assistant row is inserted as "thinking" in the SAME
+    // transaction as the user turn, so a user message with no reply slot is
+    // unrepresentable, and a dropped socket costs a re-subscribe rather than
+    // a permanently stuck spinner.
+    status: v.optional(
+      v.union(
+        v.literal("thinking"),
+        v.literal("ready"),
+        v.literal("failed"),
+      ),
+    ),
+    errorMessage: v.optional(v.string()),
+    // Itinerary proposal returned alongside the reply. Held here rather than
+    // applied server-side: the client still runs the existing merge → diff →
+    // accept/decline flow so edits stay explicit.
+    itineraryUpdate: v.optional(v.string()),
+    // false → itineraryUpdate holds only changed days (merge by day number);
+    // true/absent → it is the complete new itinerary.
+    replaceAll: v.optional(v.boolean()),
   })
     .index("by_trip", ["tripId", "timestamp"])
     .index("by_session", ["sessionId", "timestamp"]),
@@ -571,6 +592,25 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_and_pair", ["userId", "codeA", "codeB"]),
+
+  // ── Durable AI Jobs ──
+  // One row per one-shot AI generation (Surprise Me, visa-guide). Exists for
+  // the same reason as `comparisons`: these run 3s–58s, and holding a client
+  // websocket open that long means a backgrounded app leaves the promise
+  // dangling forever. See convex/aiJobs.ts.
+  aiJobs: defineTable({
+    userId: v.id("users"),
+    kind: v.union(v.literal("surprise"), v.literal("visaGuide")),
+    status: v.union(
+      v.literal("generating"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+    payload: v.string(),
+    result: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_user_and_kind", ["userId", "kind"]),
 
   // ── Feature Flags ──
   // Global release kill switches, one row per flag key (see

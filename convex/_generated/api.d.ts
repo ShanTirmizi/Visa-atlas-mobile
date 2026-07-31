@@ -12,6 +12,7 @@ import type * as AppleNative from "../AppleNative.js";
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as account from "../account.js";
+import type * as aiJobs from "../aiJobs.js";
 import type * as aiProxy from "../aiProxy.js";
 import type * as auth from "../auth.js";
 import type * as bookings from "../bookings.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
   ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
   account: typeof account;
+  aiJobs: typeof aiJobs;
   aiProxy: typeof aiProxy;
   auth: typeof auth;
   bookings: typeof bookings;
