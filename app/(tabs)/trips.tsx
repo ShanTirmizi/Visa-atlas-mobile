@@ -31,8 +31,10 @@ import { NextTripHero } from '@/components/trips/NextTripHero';
 import { TripRow } from '@/components/trips/TripRow';
 import { EmptyAtlasCard } from '@/components/trips/EmptyAtlasCard';
 import { DayTripsEntryCard } from '@/components/daytrip/DayTripsEntryCard';
+import { FilterEmptyCard } from '@/components/trips/FilterEmptyCard';
 import { HandPickedCard } from '@/components/trips/HandPickedCard';
 import type { HandPickedTone } from '@/components/trips/HandPickedCard';
+import { useFeatureFlag } from '@/contexts/feature-flags-context';
 
 import TripPlannerSheet, {
   type TripPlannerSheetRef,
@@ -115,6 +117,16 @@ function applyFilter(trips: RawTrip[], filter: FilterTab): RawTrip[] {
   }
 }
 
+// The rows heading depends on whether a hero sits above them: with a hero the
+// list is the remainder ("More trips"); without one it IS the filter's result,
+// so it takes the filter's own name (Airbnb Trips / Apple Mail mailboxes).
+const ROWS_HEADING: Record<FilterTab, string> = {
+  All: 'More trips',
+  Upcoming: 'More trips',
+  Past: 'Past trips',
+  Dreaming: 'Dreaming',
+};
+
 // Stub country for TripPlannerSheet when there's no country context.
 const STUB_COUNTRY: CountryVisa = {
   name: '',
@@ -134,6 +146,7 @@ function EmptyStateContent({
 }) {
   const { colors } = useTheme();
   const router = useRouter();
+  const dayTripsEnabled = useFeatureFlag('dayTrips');
 
   return (
     <>
@@ -141,7 +154,7 @@ function EmptyStateContent({
       <EmptyAtlasCard onPlan={onPlan} onBrowse={onBrowse} />
 
       {/* Day trips from home — same-day-return discovery */}
-      <DayTripsEntryCard style={{ marginTop: 14 }} />
+      {dayTripsEnabled && <DayTripsEntryCard style={{ marginTop: 14 }} />}
 
       {/* "Try one of these" section header */}
       <View
@@ -198,6 +211,9 @@ export default function TripsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const analytics = useAnalytics();
+  // Remote kill switch (Convex `featureFlags` table) — the day-trip planner
+  // stays dark until it's switched on from the backend.
+  const dayTripsEnabled = useFeatureFlag('dayTrips');
 
   // Planner sheet ref — used from search AI pill and empty state CTA
   const plannerRef = useRef<TripPlannerSheetRef>(null);
@@ -269,22 +285,35 @@ export default function TripsScreen() {
     });
   }, [trips]);
 
-  // Featured = first upcoming trip; fallback = first trip overall
-  const featured = useMemo<RawTrip | null>(() => {
-    if (sortedTrips.length === 0) return null;
-    const upcoming = sortedTrips.find((t) => isUpcoming(t));
-    return upcoming ?? sortedTrips[0];
-  }, [sortedTrips]);
+  // The filter governs the WHOLE list area, hero included. It used to be
+  // applied only to the rows beneath the hero, so tapping Past/Dreaming left
+  // the upcoming hero sitting there and (with nothing left to list) rendered
+  // no rows and no empty state — the filters looked inert.
+  const filtered = useMemo<RawTrip[]>(
+    () => applyFilter(sortedTrips, filter),
+    [sortedTrips, filter],
+  );
 
-  // Rows = all trips except featured, filtered by tab. (The search query
-  // doesn't filter these rows — a non-empty query swaps the whole list
-  // area for UniversalSearchResults instead.)
-  const rows = useMemo<RawTrip[]>(() => {
-    const withoutFeatured = featured
-      ? sortedTrips.filter((t) => t._id !== featured._id)
-      : sortedTrips;
-    return applyFilter(withoutFeatured, filter);
-  }, [sortedTrips, filter, featured]);
+  // Hero = the next upcoming trip. Only the forward-looking tabs get one:
+  // NextTripHero is a countdown module ("26d : 13h" + NEXT TRIP pill), which
+  // is meaningless for a finished trip and impossible for a dateless one, so
+  // Past and Dreaming render as plain lists instead.
+  const featured = useMemo<RawTrip | null>(() => {
+    if (filter === 'Past' || filter === 'Dreaming') return null;
+    if (filtered.length === 0) return null;
+    const upcoming = filtered.find((t) => isUpcoming(t));
+    // Under All, fall back to the newest trip so a user whose trips have all
+    // ended still gets a hero rather than a bare list.
+    return upcoming ?? (filter === 'All' ? filtered[0] : null);
+  }, [filtered, filter]);
+
+  // Rows = the filtered set minus whatever the hero already shows. (The
+  // search query doesn't filter these rows — a non-empty query swaps the
+  // whole list area for UniversalSearchResults instead.)
+  const rows = useMemo<RawTrip[]>(
+    () => (featured ? filtered.filter((t) => t._id !== featured._id) : filtered),
+    [filtered, featured],
+  );
 
   // ── Loading ──────────────────────────────────────
   if (trips === undefined) {
@@ -400,7 +429,10 @@ export default function TripsScreen() {
         />
       </View>
 
-      {/* 4. Featured hero — NextTripHero (4-block composition) */}
+      {/* 4. Filtered content — hero, day-trips card, rows and the per-filter
+            empty state all swap together, keyed on the active chip so the
+            whole area fade-slides in from the side of the tap. */}
+      <Animated.View key={filter} entering={tabSlideIn(filterDirection * 18)}>
       {featured && (
         <View style={{ marginTop: 16 }}>
           <NextTripHero
@@ -423,17 +455,16 @@ export default function TripsScreen() {
         </View>
       )}
 
-      {/* Day trips from home — same-day-return discovery */}
-      <DayTripsEntryCard style={{ marginTop: 22 }} />
+      {/* Day trips from home — same-day-return discovery. Discovery, not a
+          trip, so it belongs to the unfiltered view only; a narrowed filter
+          should show that filter's trips and nothing else. */}
+      {dayTripsEnabled && filter === 'All' && (
+        <DayTripsEntryCard style={{ marginTop: 22 }} />
+      )}
 
-      {/* 5. More trips rows — keyed on filter so the entering animation
-            replays whenever the user taps a different chip. */}
+      {/* 5. Trip rows */}
       {rows.length > 0 && (
-        <Animated.View
-          key={filter}
-          entering={tabSlideIn(filterDirection * 18)}
-          style={{ marginTop: 28, paddingHorizontal: 22, gap: 8 }}
-        >
+        <View style={{ marginTop: 28, paddingHorizontal: 22, gap: 8 }}>
           <View
             style={{
               flexDirection: 'row',
@@ -453,7 +484,7 @@ export default function TripsScreen() {
                 color: colors.ink,
               }}
             >
-              More trips
+              {ROWS_HEADING[filter]}
             </Text>
             {/* "SEE ALL" removed — the rows below already ARE all matching
                 trips, so the label was dead UI (looked tappable, did
@@ -474,8 +505,19 @@ export default function TripsScreen() {
               status={trip.status}
             />
           ))}
-        </Animated.View>
+        </View>
       )}
+
+      {/* 6. Per-filter empty state — a filter that matches nothing must still
+            say so. Rendering nothing (the old behaviour) read as a dead
+            control. `All` can't land here: an empty trip list is handled by
+            the whole-screen empty branch above. */}
+      {filtered.length === 0 && filter !== 'All' && (
+        <View style={{ marginTop: 22, paddingHorizontal: 22 }}>
+          <FilterEmptyCard filter={filter} />
+        </View>
+      )}
+      </Animated.View>
       </>
       )}
 

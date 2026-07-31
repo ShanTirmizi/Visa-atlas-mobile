@@ -20,6 +20,7 @@ import type * as dayPlanner from "../dayPlanner.js";
 import type * as emailAccounts from "../emailAccounts.js";
 import type * as emailSync from "../emailSync.js";
 import type * as emailVerification from "../emailVerification.js";
+import type * as featureFlags from "../featureFlags.js";
 import type * as http from "../http.js";
 import type * as lib_anthropicStream from "../lib/anthropicStream.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   emailAccounts: typeof emailAccounts;
   emailSync: typeof emailSync;
   emailVerification: typeof emailVerification;
+  featureFlags: typeof featureFlags;
   http: typeof http;
   "lib/anthropicStream": typeof lib_anthropicStream;
   "lib/auth": typeof lib_auth;

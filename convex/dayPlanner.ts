@@ -22,6 +22,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireAuth } from "./lib/auth";
+import { requireFeatureEnabled } from "./featureFlags";
 import { checkRateLimit, HOUR_MS } from "./lib/rateLimit";
 import { geocode, routeDriving, haversineKm, estimateLegMinutes } from "./lib/geo";
 import { generateGroundedPlan, type DayPlanInput } from "./lib/dayPlanLLM";
@@ -50,6 +51,14 @@ export const generateDayPlan = mutation({
   returns: v.id("dayPlans"),
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
+    // Real kill switch. The client hides the entry points when `dayTrips` is
+    // off, but that's cosmetic — a build shipped before the flag flipped, or
+    // a replayed request, would otherwise reach a paid LLM generation.
+    await requireFeatureEnabled(
+      ctx,
+      "dayTrips",
+      "Day planning isn't available right now.",
+    );
     // Each plan is a fresh web-grounded generation — meter it like generateTrip.
     await checkRateLimit(ctx, userId, "dayPlan", 8, HOUR_MS);
 

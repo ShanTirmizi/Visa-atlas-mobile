@@ -15,6 +15,7 @@ import { Car, TrainFront, Footprints, Bike, ExternalLink, Clock, MapPin, ArrowDo
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useTheme } from '@/contexts/theme-context';
+import { useFeatureRouteGuard } from '@/contexts/feature-flags-context';
 import { FontFamily } from '@/constants/theme';
 import { parseDayPlan, formatDuration, transportLabel, type DayPlanTransport } from '@/types/dayPlan';
 import { BackButton } from '@/components/ui/BackButton';
@@ -41,6 +42,12 @@ export default function DayPlanScreen() {
 
   const plan = useMemo(() => parseDayPlan(data?.plan), [data?.plan]);
   const ModeIcon = plan ? MODE_ICON[plan.transport] ?? Car : Car;
+
+  // Remote kill switch — a saved plan is still reachable by deep link / back
+  // stack after `dayTrips` is turned off. The guard bounces us out; render
+  // nothing rather than a half-screen in the meantime.
+  const dayTripsEnabled = useFeatureRouteGuard('dayTrips');
+  if (!dayTripsEnabled) return null;
 
   // ── Loading / error ──
   if (data === undefined || (data && data.status === 'generating')) {

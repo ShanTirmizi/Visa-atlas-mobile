@@ -25,6 +25,7 @@ import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { FontFamily } from '@/constants/theme';
 import { useVisa } from '@/contexts/visa-context';
+import { useFeatureRouteGuard } from '@/contexts/feature-flags-context';
 import { countryCoordinates } from '@/data/countryCoordinates';
 import { countryMeta } from '@/data/countryMeta';
 import { LIGHT_STYLE, DARK_STYLE } from '@/components/map/mapStyles';
@@ -64,6 +65,7 @@ export default function DayPlannerScreen() {
   const { isAuthenticated } = useConvexAuth();
   const { residence } = useVisa();
   const generate = useMutation(api.dayPlanner.generateDayPlan);
+  const dayTripsEnabled = useFeatureRouteGuard('dayTrips');
   const analytics = useAnalytics();
 
   // Default the start to the user's residence capital.
@@ -155,6 +157,9 @@ export default function DayPlannerScreen() {
   };
 
   if (isAuthenticated === false) return null;
+  // Remote kill switch — the entry card is hidden when `dayTrips` is off, but
+  // a deep link or a stale back-stack entry can still reach this route.
+  if (!dayTripsEnabled) return null;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>

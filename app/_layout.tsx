@@ -48,6 +48,7 @@ import { EmailProvider } from '@/contexts/email-context';
 import { ToastProvider } from '@/contexts/toast-context';
 import { PhotoViewerProvider } from '@/components/photos/PhotoViewer';
 import { OfflineProvider, useOffline } from '@/contexts/offline-context';
+import { FeatureFlagsProvider } from '@/contexts/feature-flags-context';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { MapPrewarm } from '@/components/map/MapPrewarm';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
@@ -463,6 +464,10 @@ export default function RootLayout() {
             user; wraps everything below so every screen can useAnalytics().
             Transparent pass-through when no PostHog key is configured. */}
         <AnalyticsProvider>
+        {/* Remote kill switches (Convex `featureFlags` table). Inside
+            ConvexProvider so it can subscribe; above everything else so any
+            screen can useFeatureFlag() to gate itself. */}
+        <FeatureFlagsProvider>
         <OfflineProvider>
           <ThemeProvider>
             <VisaProvider>
@@ -484,6 +489,7 @@ export default function RootLayout() {
             </VisaProvider>
           </ThemeProvider>
         </OfflineProvider>
+        </FeatureFlagsProvider>
         </AnalyticsProvider>
       </ConvexProvider>
       </ErrorBoundary>

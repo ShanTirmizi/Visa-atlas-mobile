@@ -549,6 +549,18 @@ export default defineSchema({
     .index("by_blocker", ["blockerId"])
     .index("by_blocker_and_blocked", ["blockerId", "blockedId"]),
 
+  // ── Feature Flags ──
+  // Global release kill switches, one row per flag key (see
+  // convex/featureFlags.ts for the key list and defaults). Not user-scoped:
+  // every signed-in client resolves the same values, and the client
+  // subscribes to featureFlags:getFlags so a dashboard toggle reaches
+  // running apps without a rebuild. Writes are internal-only.
+  featureFlags: defineTable({
+    key: v.string(),
+    enabled: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   // ── Message Reports ──
   // One row per report of a trip message. App Store UGC requirement: a user
   // can report objectionable content. reporterId / reportedUserId are derived
