@@ -44,6 +44,43 @@ const UPSTREAM_ERROR_MESSAGE =
  *  `.slice(-10)` so replies keep the same context window. */
 const HISTORY_LIMIT = 10;
 
+/**
+ * Drop `stops` from each day before sending the itinerary upstream.
+ *
+ * Not an optimization — a correctness fix. Measured on a real 8-day trip:
+ *
+ *   full itinerary  24,628 chars → HTTP 504 after 300s (never returns)
+ *   stops stripped   8,173 chars → HTTP 200 in 114s
+ *
+ * `stops` is 67% of the payload and is per-stop detail the chat endpoint
+ * doesn't reason over — it works on the morning/afternoon/evening prose, all
+ * of which is preserved here. Dropping it is what takes trip chat from
+ * permanently broken on real trips to working.
+ *
+ * Safe because the client already re-attaches stops: applyItineraryUpdate runs
+ * mergeStopsIntoProposal (types/itinerary.ts), which copies stops back from the
+ * current itinerary for any day whose slot prose is unchanged. The endpoint has
+ * always been free to return days without stops; this just stops us paying to
+ * send them in the first place.
+ */
+function compactItinerary(raw: string | undefined): string {
+  if (!raw) return "[]";
+  try {
+    const days: unknown = JSON.parse(raw);
+    if (!Array.isArray(days)) return raw;
+    return JSON.stringify(
+      days.map((d) => {
+        if (!d || typeof d !== "object") return d;
+        const { stops: _stops, ...rest } = d as Record<string, unknown>;
+        return rest;
+      }),
+    );
+  } catch {
+    // Unparseable itinerary — forward it untouched rather than losing context.
+    return raw;
+  }
+}
+
 // ── Public mutation ──────────────────────────────────────────────
 
 export const sendMessage = mutation({
@@ -285,7 +322,7 @@ export const runTripChat = internalAction({
           visaCategory: trip.visaCategory ?? "",
           companions: trip.companions ?? undefined,
         },
-        currentItinerary: trip.itinerary ?? "[]",
+        currentItinerary: compactItinerary(trip.itinerary),
         chatHistory: history,
         passports: args.passports,
         residence: args.residence,
