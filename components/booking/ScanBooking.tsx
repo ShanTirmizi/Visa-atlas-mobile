@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useAIBackend } from '@/utils/aiBackend';
 import {
   View,
   Text,
@@ -26,7 +27,7 @@ interface ScanBookingProps {
 export default function ScanBooking({ onScanComplete }: ScanBookingProps) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(false);
-  const proxyScanBooking = useAction(api.aiProxy.scanBooking);
+  const proxyScanBooking = useAIBackend('scan-booking');
 
   const processImage = useCallback(
     async (base64String: string) => {

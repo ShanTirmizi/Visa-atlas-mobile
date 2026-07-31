@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useAIBackend } from '@/utils/aiBackend';
 import {
   View,
   Text,
@@ -112,7 +113,7 @@ export default function VisaChatScreen() {
     isAuthenticated && guideId ? { guideId: guideId as Id<'visaGuides'> } : 'skip',
   ) as GuideMessage[] | undefined;
   const addGuideMessage = useMutation(api.visaGuides.addGuideMessage);
-  const proxyVisaChat = useAction(api.aiProxy.visaChat);
+  const proxyVisaChat = useAIBackend('visa-chat');
 
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);

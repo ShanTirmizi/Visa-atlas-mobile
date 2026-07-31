@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useAIBackend } from '@/utils/aiBackend';
 import {
   View,
   Text,
@@ -408,7 +409,7 @@ export default function CompareScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { heldVisas, residence, passports } = useVisa();
-  const proxyCompare = useAction(api.aiProxy.compare);
+  const proxyCompare = useAIBackend('compare');
   const analytics = useAnalytics();
   const plannerRef = useRef<TripPlannerSheetRef>(null);
   const [planTarget, setPlanTarget] = useState<'a' | 'b'>('a');

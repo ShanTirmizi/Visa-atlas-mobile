@@ -42,6 +42,20 @@ const PRICING: Record<string, ModelPricing> = {
     cacheRead: 0.3 / 1_000_000,
     cacheWrite: 3.75 / 1_000_000,
   },
+  // Voyage embeddings for the visa RAG corpus. Embeddings have no output and no
+  // cache tiers, so only `input` is ever non-zero.
+  //
+  // Listed at $0.06/1M, but the first 200M tokens per account are free on the
+  // voyage-4 family — and the whole visa corpus is ~1.2M tokens, so in practice
+  // this line bills $0. It's here so the arithmetic stays honest if that free
+  // allowance is ever exhausted. (voyage-3.5 is the superseded model and gets NO
+  // free allowance, which is why we're on voyage-4.)
+  "voyage-4": {
+    input: 0.06 / 1_000_000,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
 };
 
 /** Anthropic web search tool: $10 per 1,000 searches. */
@@ -169,6 +183,55 @@ export async function captureAIGeneration(ev: AiGenerationEvent): Promise<void> 
     purpose: ev.purpose,
     ...(ev.tripId ? { tripId: ev.tripId } : {}),
     ...(ev.planId ? { planId: ev.planId } : {}),
+    $lib: "convex",
+  });
+}
+
+export interface AiEmbeddingEvent {
+  distinctId?: string;
+  /** Ingest runId for corpus work, or the assistant messageId for a query —
+   *  so one answer's embedding + generation share a trace. */
+  traceId: string;
+  /** "corpus_curated" | "corpus_guide" | "corpus_crawl" | "visa_chat_query" */
+  purpose: string;
+  model: string;
+  /** Voyage bills on total tokens; there is no input/output split. */
+  tokens: number;
+  /** Number of texts in the batch — cost per call is what we actually control. */
+  inputCount?: number;
+  latencySeconds?: number;
+  httpStatus?: number;
+  isError?: boolean;
+  error?: string;
+}
+
+/**
+ * Capture one embeddings call as `$ai_embedding`, deliberately NOT
+ * `$ai_generation`. Corpus ingestion fires thousands of embedding calls; folding
+ * those into the generation stream would swamp the per-answer LLM dashboards and
+ * make median generation cost meaningless.
+ *
+ * Same never-throws contract as everything else in this file.
+ */
+export async function captureEmbedding(ev: AiEmbeddingEvent): Promise<void> {
+  if (!POSTHOG_KEY) return;
+  const cost = aiCostUsd(ev.model, { inputTokens: ev.tokens, outputTokens: 0 });
+  const distinctId = ev.distinctId ?? "server:anonymous";
+
+  await capture(distinctId, "$ai_embedding", {
+    $ai_trace_id: ev.traceId,
+    $ai_span_name: ev.purpose,
+    $ai_model: ev.model,
+    $ai_provider: "voyage",
+    $ai_base_url: "https://api.voyageai.com",
+    $ai_input_tokens: ev.tokens,
+    $ai_total_cost_usd: cost.totalCostUsd,
+    ...(ev.inputCount != null ? { $ai_input_count: ev.inputCount } : {}),
+    ...(ev.latencySeconds != null ? { $ai_latency: ev.latencySeconds } : {}),
+    ...(ev.httpStatus != null ? { $ai_http_status: ev.httpStatus } : {}),
+    ...(ev.isError ? { $ai_is_error: true } : {}),
+    ...(ev.error ? { $ai_error: ev.error } : {}),
+    purpose: ev.purpose,
     $lib: "convex",
   });
 }

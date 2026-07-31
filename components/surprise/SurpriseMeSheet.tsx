@@ -1,6 +1,7 @@
 import React, {
   useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo,
 } from 'react';
+import { useAIBackend } from '@/utils/aiBackend';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions,
 } from 'react-native';
@@ -159,7 +160,7 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
     const dynamicVisaData = useVisaData();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
-    const proxySurprise = useAction(api.aiProxy.surprise);
+    const proxySurprise = useAIBackend('surprise');
 
     // ── Step state ──────────────────────────────────────────────────
     const [step, setStep] = useState<Step>('vibes');

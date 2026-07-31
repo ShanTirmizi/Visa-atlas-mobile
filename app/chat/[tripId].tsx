@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useAIBackend } from '@/utils/aiBackend';
 import {
   View,
   Text,
@@ -281,7 +282,7 @@ export default function ChatScreen() {
   const currentUser = useQuery(api.trips.getCurrentUser, isAuthenticated ? {} : 'skip');
   // Authenticated + rate-limited proxy for the trip copilot (convex/aiProxy.ts)
   // — the raw Vercel endpoint is locked down behind it.
-  const proxyTripChat = useAction(api.aiProxy.tripChat);
+  const proxyTripChat = useAIBackend('trip-chat');
   // Moderation (Apple Guideline 1.2) — report a message / block a collaborator.
   const reportMessage = useMutation(api.moderation.reportMessage);
   const blockUser = useMutation(api.moderation.blockUser);

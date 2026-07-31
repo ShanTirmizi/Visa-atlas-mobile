@@ -1,6 +1,7 @@
 import React, {
   useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle, useMemo,
 } from 'react';
+import { useAIBackend } from '@/utils/aiBackend';
 import {
   View, Text, Pressable, StyleSheet, Dimensions,
 } from 'react-native';
@@ -179,7 +180,7 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
     const [tick, setTick] = useState(0);
 
     const createGuide = useMutation(api.visaGuides.createGuide);
-    const proxyVisaGuide = useAction(api.aiProxy.visaGuide);
+    const proxyVisaGuide = useAIBackend('visa-guide');
     const shieldStyle = useShieldAnimation(step === 'loading');
 
     useEffect(() => {

@@ -312,6 +312,34 @@ export default defineSchema({
     content: v.string(),
     timestamp: v.number(),
     userId: v.optional(v.id("users")),
+    // ── RAG fields (all optional so pre-RAG rows validate unchanged) ──
+    // An assistant row is inserted as "thinking" in the SAME transaction as
+    // the user turn, so "user message with no reply" is unrepresentable.
+    // Absent === legacy "ready".
+    status: v.optional(
+      v.union(v.literal("thinking"), v.literal("ready"), v.literal("failed"))
+    ),
+    errorMessage: v.optional(v.string()),
+    // Bounded (hard-capped at MAX_SOURCES on write) — a fixed fact about one
+    // message, not a growing collection, so it doesn't violate the
+    // no-unbounded-arrays rule. Markers are densely renumbered by the citation
+    // validator, so every `marker` here maps to a chunk actually retrieved for
+    // this turn.
+    sources: v.optional(
+      v.array(
+        v.object({
+          marker: v.number(),
+          label: v.string(),
+          url: v.optional(v.string()),
+          tier: v.string(),
+          asOf: v.optional(v.string()),
+          chunkId: v.optional(v.id("visaChunks")),
+        })
+      )
+    ),
+    // JSON: { retrieved, cited, stripped, strippedUrls, topScore, uncited }.
+    // `stripped` is the measured citation-hallucination count for this turn.
+    retrievalMeta: v.optional(v.string()),
   }).index("by_guide", ["guideId", "timestamp"]),
 
   // ── Email verification codes ──
@@ -348,6 +376,153 @@ export default defineSchema({
     // Point lookup for getGuideByCountry — replaces collecting every guide
     // the user owns and .find()ing client-side in the query.
     .index("by_user_and_country", ["userId", "countryCode"]),
+
+  // ── RAG corpus: sources ────────────────────────────────────────────────────
+  // One row per logical document. Three tiers feed it:
+  //   curated  — templated text off data/visaData.ts + data/localInfo.ts
+  //   guide    — a user's own generated visaGuides.guide (PRIVATE)
+  //   official — crawled embassy / gov pages
+  visaSources: defineTable({
+    tier: v.union(
+      v.literal("curated"),
+      v.literal("guide"),
+      v.literal("official")
+    ),
+    // Idempotency key. Re-ingesting the same logical doc updates in place:
+    //   "curated:visaData:THA" | "guide:<guideId>" | "official:<normalized-url>"
+    externalId: v.string(),
+    // Set ONLY for tier "guide". Drives the private scope string.
+    ownerUserId: v.optional(v.id("users")),
+    countryCode: v.optional(v.string()), // alpha-3; absent = global
+    title: v.string(),
+    label: v.string(), // citation chip text: "gov.uk", "Visa Atlas data"
+    url: v.optional(v.string()),
+    lang: v.optional(v.string()),
+    // ── freshness ──
+    asOf: v.optional(v.string()), // publisher date if parseable, e.g. "2026-03"
+    fetchedAt: v.optional(v.number()),
+    lastIngestedAt: v.optional(v.number()),
+    nextCheckAt: v.optional(v.number()),
+    // ── crawl state ──
+    status: v.union(
+      v.literal("pending"),
+      v.literal("fetching"),
+      v.literal("ready"),
+      v.literal("failed"),
+      v.literal("blocked"), // robots, content-type, or the quality gate
+      v.literal("disabled")
+    ),
+    httpStatus: v.optional(v.number()),
+    etag: v.optional(v.string()),
+    lastModified: v.optional(v.string()),
+    failureCount: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    // ── content ──
+    // sha256 of the normalized extracted text. Unchanged => skip chunking AND
+    // embedding entirely, just push nextCheckAt out.
+    docHash: v.string(),
+    // Tiers A/B inline (small, deterministic). Tier C spills to _storage so a
+    // long gov page can't approach the 1 MiB document cap.
+    extractedText: v.optional(v.string()),
+    textStorageId: v.optional(v.id("_storage")),
+    chunkCount: v.optional(v.number()),
+    contentVersion: v.number(), // bumps only on real content change
+  })
+    .index("by_externalId", ["externalId"])
+    .index("by_tier_and_countryCode", ["tier", "countryCode"])
+    .index("by_status_and_nextCheckAt", ["status", "nextCheckAt"])
+    .index("by_ownerUserId", ["ownerUserId"]),
+
+  // ── RAG corpus: chunks (the vector-indexed table) ──────────────────────────
+  // Own table with a sourceId FK — never an array on the source doc
+  // (convex/_generated/ai/guidelines.md: no unbounded arrays in a document).
+  visaChunks: defineTable({
+    sourceId: v.id("visaSources"),
+    // ── retrieval filter keys, denormalized ──
+    // ctx.vectorSearch's filter builder supports ONLY eq and or — there is no
+    // and — so every AND condition has to be baked into one string. See
+    // convex/lib/visaScope.ts. "pub:THA" | "pub:*" | "usr:<userId>:THA"
+    scope: v.string(),
+    // Coarser key: "pub" | "usr:<userId>". Lets us express an unscoped-by-
+    // country search without needing an AND, and backs the hydration re-check.
+    ownerScope: v.string(),
+    // ── payload ──
+    // EXACTLY the string that was embedded, breadcrumb prefix included, so
+    // re-embedding is reproducible and contentHash is meaningful.
+    text: v.string(),
+    heading: v.optional(v.string()),
+    ordinal: v.number(),
+    contentHash: v.string(), // sha256 of `text` — dedup + re-embed skip
+    // ── provenance, denormalized so hydration is a single read ──
+    tier: v.union(
+      v.literal("curated"),
+      v.literal("guide"),
+      v.literal("official")
+    ),
+    countryCode: v.optional(v.string()),
+    sourceLabel: v.string(),
+    sourceUrl: v.optional(v.string()),
+    asOf: v.optional(v.string()),
+    // ── embedding ──
+    // REQUIRED, not optional: a chunk row is only ever inserted after its
+    // vector comes back, so there is no indexed-but-vectorless limbo. Raw text
+    // survives on visaSources and chunking is deterministic, so retrying a
+    // failed embed is a pure replay.
+    embedding: v.array(v.float64()),
+    embeddingModel: v.string(), // "voyage-4"
+    embeddedAt: v.number(),
+  })
+    .index("by_sourceId_and_ordinal", ["sourceId", "ordinal"])
+    .index("by_sourceId_and_contentHash", ["sourceId", "contentHash"])
+    .index("by_embeddingModel", ["embeddingModel"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1024, // voyage-4 default; see convex/lib/voyage.ts
+      filterFields: ["scope", "ownerScope"],
+    })
+    // Keyword leg of hybrid retrieval. Unlike ctx.vectorSearch this works in a
+    // query, and it's what finds exact tokens dense retrieval fumbles:
+    // "subclass 600", "DS-160", specific fee amounts.
+    .searchIndex("search_text", {
+      searchField: "text",
+      filterFields: ["scope"],
+    }),
+
+  // ── RAG corpus: per-origin robots.txt cache + politeness ───────────────────
+  visaCrawlOrigins: defineTable({
+    origin: v.string(), // "https://www.gov.uk"
+    disallow: v.array(v.string()), // capped on write
+    allow: v.array(v.string()), // capped on write
+    crawlDelayMs: v.number(),
+    robotsFetchedAt: v.number(),
+    robotsStatus: v.number(),
+    lastRequestAt: v.optional(v.number()),
+  }).index("by_origin", ["origin"]),
+
+  // ── RAG corpus: ingest run bookkeeping ─────────────────────────────────────
+  // Batch work self-continues via ctx.scheduler.runAfter; this row is the
+  // cursor + counters across those hops.
+  visaIngestRuns: defineTable({
+    kind: v.union(
+      v.literal("curated"),
+      v.literal("guide"),
+      v.literal("crawl"),
+      v.literal("reembed")
+    ),
+    status: v.union(
+      v.literal("running"),
+      v.literal("done"),
+      v.literal("failed")
+    ),
+    cursor: v.optional(v.string()),
+    processed: v.number(),
+    failed: v.number(),
+    chunksWritten: v.number(),
+    tokensEmbedded: v.number(),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+  }).index("by_kind_and_status", ["kind", "status"]),
 
   // ── Bookings ──
   bookings: defineTable({
