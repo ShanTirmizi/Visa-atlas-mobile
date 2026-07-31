@@ -14,7 +14,8 @@
       "buildNumber": "2",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Visa Atlas never asks for your location. This notice exists only because the map component we use includes a show-my-location feature that the app leaves switched off."
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
