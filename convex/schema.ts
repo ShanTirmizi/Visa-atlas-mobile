@@ -549,6 +549,29 @@ export default defineSchema({
     .index("by_blocker", ["blockerId"])
     .index("by_blocker_and_blocked", ["blockerId", "blockedId"]),
 
+  // ── Country Comparisons ──
+  // One row per generated Compare-tab face-off. Exists so the ~25s LLM call
+  // runs server-side on the scheduler instead of over a client-held websocket
+  // (see convex/comparisons.ts for why that hung forever). `payload` is the
+  // request echoed back so the action can forward it and so reuse can match on
+  // the exact inputs; `result` is the JSON-encoded comparison.
+  comparisons: defineTable({
+    userId: v.id("users"),
+    codeA: v.string(),
+    codeB: v.string(),
+    status: v.union(
+      v.literal("generating"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+    payload: v.string(),
+    result: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_pair", ["userId", "codeA", "codeB"]),
+
   // ── Feature Flags ──
   // Global release kill switches, one row per flag key (see
   // convex/featureFlags.ts for the key list and defaults). Not user-scoped:

@@ -27,7 +27,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, X, RefreshCw, ArrowLeftRight } from 'lucide-react-native';
-import { useAction } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
+import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa } from '@/contexts/visa-context';
@@ -408,7 +409,7 @@ export default function CompareScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { heldVisas, residence, passports } = useVisa();
-  const proxyCompare = useAction(api.aiProxy.compare);
+  const generateComparison = useMutation(api.comparisons.generateComparison);
   const analytics = useAnalytics();
   const plannerRef = useRef<TripPlannerSheetRef>(null);
   const [planTarget, setPlanTarget] = useState<'a' | 'b'>('a');
@@ -417,13 +418,15 @@ export default function CompareScreen() {
   const [countryA, setCountryA] = useState('');
   const [countryB, setCountryB] = useState('');
   const [pickerTarget, setPickerTarget] = useState<'a' | 'b' | null>(null);
-  const [aiData, setAiData] = useState<AIComparison | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The id of the comparison row we're watching. The heavy work happens
+  // server-side; this screen only holds a pointer to it.
+  const [comparisonId, setComparisonId] = useState<Id<'comparisons'> | null>(null);
+  // Set only when the kickoff mutation itself fails (offline, rate limited).
+  // Generation failures arrive through the subscription instead.
+  const [startError, setStartError] = useState<string | null>(null);
   // Retry nonce — bumping it re-runs the fetch effect without touching the
   // country selection (the old blank-and-restore hack flashed the landing UI).
   const [attempt, setAttempt] = useState(0);
-  const fetchRef = useRef<AbortController | null>(null);
 
   const heldVisasSet = useMemo(() => new Set(heldVisas as HeldVisaType[]), [heldVisas]);
 
@@ -441,21 +444,16 @@ export default function CompareScreen() {
 
   // ── AI comparison fetch ──────────────────────────────────────────────────
   useEffect(() => {
-    // Referenced so the retry nonce in the dep array re-triggers this effect.
-    void attempt;
     if (!selectedA || !selectedB || !metaA || !metaB || !travelA || !travelB) {
-      setAiData(null);
-      setError(null);
+      setComparisonId(null);
+      setStartError(null);
       return;
     }
 
-    if (fetchRef.current) fetchRef.current.abort();
-    const controller = new AbortController();
-    fetchRef.current = controller;
-
-    setLoading(true);
-    setError(null);
-    setAiData(null);
+    // Guards against applying a stale kickoff: a fast A→B swap can land two
+    // mutations, and only the newest one's id should be watched.
+    let cancelled = false;
+    setStartError(null);
 
     const rA = resolveCountry(selectedA, heldVisasSet);
     const rB = resolveCountry(selectedB, heldVisasSet);
@@ -496,25 +494,60 @@ export default function CompareScreen() {
       codeB: selectedB.code,
     });
 
-    // Authenticated + rate-limited proxy (convex/aiProxy.ts). Convex actions
-    // can't be aborted mid-flight, so the controller now acts as a staleness
-    // flag: a newer selection discards this response instead of applying it.
-    proxyCompare({ body: JSON.stringify(payload) })
-      .then((data) => {
-        if (!controller.signal.aborted) {
-          setAiData(data as AIComparison);
-          setLoading(false);
-        }
+    // Kick off generation and subscribe to the row. This mutation returns as
+    // soon as the row is inserted (milliseconds), so unlike the old 25s
+    // client-held action it can't be left dangling by a backgrounded app or a
+    // network handoff — and if it does fail, .catch actually fires.
+    generateComparison({
+      codeA: selectedA.code,
+      codeB: selectedB.code,
+      payload: JSON.stringify(payload),
+      // Retry means "ignore the cached answer and generate again".
+      force: attempt > 0,
+    })
+      .then((id) => {
+        if (!cancelled) setComparisonId(id);
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setError('Failed to generate comparison. Tap to retry.');
-          setLoading(false);
+        if (!cancelled) {
+          setComparisonId(null);
+          setStartError('Failed to generate comparison. Tap to retry.');
         }
       });
 
-    return () => controller.abort();
-  }, [countryA, countryB, heldVisasSet, passports, residence, attempt, proxyCompare, analytics]);
+    return () => {
+      cancelled = true;
+    };
+  }, [countryA, countryB, heldVisasSet, passports, residence, attempt, generateComparison, analytics]);
+
+  // ── Reactive result ──────────────────────────────────────────────────────
+  // Survives reconnects on its own: if the socket drops mid-generation, the
+  // subscription re-establishes and delivers whatever the server settled on.
+  const comparison = useQuery(
+    api.comparisons.getComparison,
+    comparisonId ? { comparisonId } : 'skip',
+  );
+
+  const aiData = useMemo<AIComparison | null>(() => {
+    if (comparison?.status !== 'ready' || !comparison.result) return null;
+    try {
+      return JSON.parse(comparison.result) as AIComparison;
+    } catch {
+      return null;
+    }
+  }, [comparison]);
+
+  const error =
+    startError ?? (comparison?.status === 'failed'
+      ? 'Failed to generate comparison. Tap to retry.'
+      : null);
+
+  // Loading covers both legs: waiting on the kickoff mutation to return an id,
+  // and waiting on the row to leave `generating`.
+  const loading =
+    bothSelected &&
+    !error &&
+    (comparisonId === null || comparison === undefined || comparison?.status === 'generating');
 
   // ── Swap handler ─────────────────────────────────────────────────────────
   const swap = useCallback(() => {

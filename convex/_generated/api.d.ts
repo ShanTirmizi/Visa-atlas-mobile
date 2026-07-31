@@ -15,6 +15,7 @@ import type * as account from "../account.js";
 import type * as aiProxy from "../aiProxy.js";
 import type * as auth from "../auth.js";
 import type * as bookings from "../bookings.js";
+import type * as comparisons from "../comparisons.js";
 import type * as countryTips from "../countryTips.js";
 import type * as dayPlanner from "../dayPlanner.js";
 import type * as emailAccounts from "../emailAccounts.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   aiProxy: typeof aiProxy;
   auth: typeof auth;
   bookings: typeof bookings;
+  comparisons: typeof comparisons;
   countryTips: typeof countryTips;
   dayPlanner: typeof dayPlanner;
   emailAccounts: typeof emailAccounts;

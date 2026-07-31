@@ -143,7 +143,11 @@ export interface Analytics {
 export function useAnalytics(): Analytics {
   const posthog = usePostHog();
 
-  return {
+  // Memoized on `posthog` alone. This object lands in effect dependency
+  // arrays across the app (compare, trips, day planner); returning a fresh
+  // literal each render re-fired every one of those effects on every render,
+  // which is how the Compare tab kept aborting its own in-flight request.
+  return React.useMemo<Analytics>(() => ({
     track: (event, properties) => {
       try {
         posthog?.capture(event, asEventProps(properties));
@@ -193,5 +197,5 @@ export function useAnalytics(): Analytics {
         return false;
       }
     },
-  };
+  }), [posthog]);
 }
