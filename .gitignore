@@ -53,3 +53,7 @@ skills-lock.json
 docs/
 _layout.tsx.backup
 .qa-shots/
+
+# Generated QA/status report PDFs. Binary, ~2MB each, and diff viewers expand
+# them into thousands of phantom "changed lines" that swamp the real diff.
+*-Report.pdf
