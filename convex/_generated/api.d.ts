@@ -36,6 +36,7 @@ import type * as lib_sharePayload from "../lib/sharePayload.js";
 import type * as lib_tripCascade from "../lib/tripCascade.js";
 import type * as moderation from "../moderation.js";
 import type * as notifications from "../notifications.js";
+import type * as tripChat from "../tripChat.js";
 import type * as tripCollaborators from "../tripCollaborators.js";
 import type * as tripGeneration from "../tripGeneration.js";
 import type * as tripInvites from "../tripInvites.js";
@@ -84,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tripCascade": typeof lib_tripCascade;
   moderation: typeof moderation;
   notifications: typeof notifications;
+  tripChat: typeof tripChat;
   tripCollaborators: typeof tripCollaborators;
   tripGeneration: typeof tripGeneration;
   tripInvites: typeof tripInvites;

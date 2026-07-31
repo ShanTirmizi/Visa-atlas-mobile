@@ -20,7 +20,8 @@ import Animated, {
   FadeIn,
   FadeOut,
 } from 'react-native-reanimated';
-import { useAction } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
+import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import { useTheme } from '@/contexts/theme-context';
 import { useVisa, useVisaData } from '@/contexts/visa-context';
@@ -159,7 +160,11 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
     const dynamicVisaData = useVisaData();
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<BottomSheetModal>(null);
-    const proxySurprise = useAction(api.aiProxy.surprise);
+    // Durable path (convex/aiJobs.ts): a fast mutation starts the job and a
+    // subscription delivers the result, so backgrounding the app mid-search
+    // can't strand the sheet on 'searching' the way a client-held action did.
+    const startJob = useMutation(api.aiJobs.startJob);
+    const [jobId, setJobId] = useState<Id<'aiJobs'> | null>(null);
 
     // ── Step state ──────────────────────────────────────────────────
     const [step, setStep] = useState<Step>('vibes');
@@ -223,11 +228,12 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
       setStep('searching');
       setError('');
       setResult(null);
+      setJobId(null);
       try {
-        // Authenticated + rate-limited proxy (convex/aiProxy.ts) — a failed
-        // call rejects into the existing catch → inline retry, unchanged UX.
-        const data = (await proxySurprise({
-          body: JSON.stringify({
+        // Returns in milliseconds — only enqueues the work.
+        const id = await startJob({
+          kind: 'surprise',
+          payload: JSON.stringify({
             vibes: [...selectedVibes],
             maxFlightHours: maxFlight,
             maxBudget: budget,
@@ -239,17 +245,48 @@ const SurpriseMeSheet = forwardRef<SurpriseMeSheetRef, SurpriseMeSheetProps>(
             passports,
             residence,
           }),
-        })) as { pick?: string | { code?: string }; reason?: string };
+        });
+        setJobId(id);
+      } catch {
+        setError('Something went wrong. Please try again.');
+        setStep('prefs');
+      }
+    }, [selectedVibes, maxFlight, budget, travelMonth, heldVisas, includeVisaReq, passports, residence, startJob]);
+
+    // ── Result subscription ─────────────────────────────────────────
+    // Re-establishes itself after any reconnect, so the answer lands even if
+    // the socket dropped while the server was working.
+    const job = useQuery(api.aiJobs.getJob, jobId ? { jobId } : 'skip');
+
+    useEffect(() => {
+      if (!job || job.status === 'generating') return;
+
+      const bail = () => {
+        setError('Something went wrong. Please try again.');
+        setStep('prefs');
+      };
+
+      if (job.status === 'failed' || !job.result) {
+        setJobId(null);
+        bail();
+        return;
+      }
+
+      try {
         // API returns { pick: { code, name, ... } | null, reason: string }
+        const data = JSON.parse(job.result) as {
+          pick?: string | { code?: string };
+          reason?: string;
+        };
         const pickCode = typeof data.pick === 'string' ? data.pick : data.pick?.code;
         if (!pickCode) throw new Error('No destination found');
         setResult({ code: pickCode, reason: data.reason || '' });
         setStep('reveal');
       } catch {
-        setError('Something went wrong. Please try again.');
-        setStep('prefs');
+        bail();
       }
-    }, [selectedVibes, maxFlight, budget, travelMonth, heldVisas, includeVisaReq, passports, residence, proxySurprise]);
+      setJobId(null);
+    }, [job]);
 
     // ── Backdrop ────────────────────────────────────────────────────
     const renderBackdrop = useCallback(

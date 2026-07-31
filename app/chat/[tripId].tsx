@@ -34,7 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOfflineQuery } from '@/hooks/use-offline-query';
 import { useOffline } from '@/contexts/offline-context';
 import { api } from '@/convex/_generated/api';
-import { useQuery, useMutation, useConvexAuth, useAction } from 'convex/react';
+import { useQuery, useMutation, useConvexAuth } from 'convex/react';
 import { Id } from '@/convex/_generated/dataModel';
 import {
   Send,
@@ -256,7 +256,6 @@ export default function ChatScreen() {
   }, [sessionId]);
   // Which session a send is in flight for — the ThinkingRow only shows on that
   // thread, so switching away mid-send doesn't strand a spinner.
-  const [sendingSession, setSendingSession] = useState<Id<'tripChatSessions'> | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || !tripId || sessionId) return;
@@ -277,19 +276,37 @@ export default function ChatScreen() {
       ? { tripId: tripId as Id<'trips'>, sessionId }
       : 'skip',
   );
-  const addMessage = useMutation(api.trips.addMessage);
   const currentUser = useQuery(api.trips.getCurrentUser, isAuthenticated ? {} : 'skip');
-  // Authenticated + rate-limited proxy for the trip copilot (convex/aiProxy.ts)
-  // — the raw Vercel endpoint is locked down behind it.
-  const proxyTripChat = useAction(api.aiProxy.tripChat);
+  // Durable copilot path (convex/tripChat.ts). /api/trip-chat measured 111.3s
+  // for an itinerary rewrite — far too long to hold a client websocket open.
+  // The mutation inserts the prompt and an empty "thinking" reply in one
+  // transaction and returns in milliseconds; the scheduler fills the reply in.
+  const sendTripMessage = useMutation(api.tripChat.sendMessage);
+  const discardMessage = useMutation(api.tripChat.discardMessage);
   // Moderation (Apple Guideline 1.2) — report a message / block a collaborator.
   const reportMessage = useMutation(api.moderation.reportMessage);
   const blockUser = useMutation(api.moderation.blockUser);
 
   const [inputText, setInputText] = useState('');
-  const [isSending, setIsSending] = useState(false);
+  // The reply row the server is still working on (or gave up on). Generation
+  // state lives on the row now, not in local component state, so a dropped
+  // socket or a screen the user navigated away from can't strand a spinner.
+  const pendingReply = useMemo(
+    () =>
+      (convexMessages ?? []).find(
+        (m) =>
+          m.role === 'assistant' && (m.status === 'thinking' || m.status === 'failed'),
+      ),
+    [convexMessages],
+  );
+
+  // Derived, not stored: the server owns generation state now. Survives a
+  // reload, a reconnect, or the user leaving and re-entering the screen.
+  const isSending = pendingReply?.status === 'thinking';
   const [isFocused, setIsFocused] = useState(false);
-  const [failedMessage, setFailedMessage] = useState<string | null>(null);
+  // Set only when the enqueue mutation itself rejects (offline, rate limit).
+  // A generation that fails server-side surfaces via the reply row instead.
+  const [enqueueFailed, setEnqueueFailed] = useState<string | null>(null);
   // Floating-header height — pre-layout estimate, corrected by onLayout on
   // the first frame (same pattern as app/guide/[id].tsx). Drives the
   // TopSafeAreaBlur `extra` band and the scroll content's top padding.
@@ -328,14 +345,19 @@ export default function ChatScreen() {
   // React.memo'd MessageBubble rows below bail out of re-rendering.
   const displayMessages = useMemo<ChatMessage[]>(
     () =>
-      (convexMessages ?? []).map((m) => ({
-        id: m._id,
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp,
-        userName: m.userName ?? undefined,
-        userId: m.userId ?? undefined,
-      })),
+      (convexMessages ?? [])
+        // Hide unfinished assistant rows — a "thinking" row has empty content
+        // and would otherwise render as a blank bubble. The ThinkingRow below
+        // represents it instead.
+        .filter((m) => !(m.role === 'assistant' && m.status && m.status !== 'ready'))
+        .map((m) => ({
+          id: m._id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+          userName: m.userName ?? undefined,
+          userId: m.userId ?? undefined,
+        })),
     [convexMessages],
   );
 
@@ -424,113 +446,25 @@ export default function ChatScreen() {
 
       analytics.track(ANALYTICS.chatMessageSent, { tripId });
 
-      // The thread this send belongs to — captured once so a mid-send
-      // session switch can't misroute the reply or its side-effects.
-      const sendSession = sessionId;
-
-      setIsSending(true);
-      setSendingSession(sendSession);
-      setFailedMessage(null);
-
       try {
-        // Attribution (userId/userName) is derived server-side in addMessage.
-        // Inside the try: if this first write fails (socket blip mid-flight),
-        // the catch surfaces the retry banner and `finally` releases the
-        // spinner — outside it, a rejection stranded isSending forever.
-        await addMessage({
+        // Clear a previous failed reply so the thread doesn't accumulate dead
+        // rows, then enqueue. Both the prompt and its reply slot are written
+        // server-side in one transaction.
+        if (pendingReply?.status === 'failed') {
+          await discardMessage({ messageId: pendingReply._id });
+        }
+        await sendTripMessage({
           tripId: tripId as Id<'trips'>,
-          role: 'user',
           content: text,
-          sessionId: sendSession ?? undefined,
+          sessionId: sessionId ?? undefined,
+          passports,
+          residence,
         });
-
-        // Routed through the authenticated, per-user rate-limited Convex proxy
-        // (api.aiProxy.tripChat) instead of a raw fetch — the action throws on
-        // auth / rate-limit / upstream failure, which the catch below turns into
-        // the retry banner exactly like the old non-2xx path. The payload is
-        // identical; only the transport changed. (trip-chat is non-streaming,
-        // so the single-value action return is a drop-in.)
-        const data = (await proxyTripChat({
-          body: JSON.stringify({
-            message: text,
-            tripContext: {
-              countryName: trip?.countryName ?? '',
-              duration: trip?.duration ?? 0,
-              region: trip?.region ?? '',
-              capital: trip?.capital ?? '',
-              currency: trip?.currency ?? '',
-              dailyBudget: trip?.dailyBudget ?? '',
-              visaCategory: trip?.visaCategory ?? '',
-              companions: trip?.companions ?? undefined,
-            },
-            currentItinerary: trip?.itinerary ?? '[]',
-            chatHistory: (convexMessages ?? []).slice(-10).map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-            passports,
-            residence,
-          }),
-        })) as {
-          reply?: string;
-          itineraryUpdate?: string | null;
-          // false → `itineraryUpdate` holds only the changed days (merge by
-          // day number); true/absent → it's the complete new itinerary.
-          replaceAll?: boolean;
-        };
-
-        if (!data.reply) {
-          throw new Error('Empty reply');
-        }
-
-        const newMessageId = await addMessage({
-          tripId: tripId as Id<'trips'>,
-          role: 'assistant',
-          content: data.reply,
-          sessionId: sendSession ?? undefined,
-        });
-
-        if (data.itineraryUpdate) {
-          const stampId = newMessageId ? String(newMessageId) : null;
-          // The endpoint may return only the days it changed (fast path).
-          // Normalize to the FULL itinerary before diffing/applying — a
-          // partial array would otherwise read as "every other day removed".
-          const fullProposal = JSON.stringify(
-            mergeDayUpdates(
-              parseItineraryDays(trip?.itinerary),
-              parseItineraryDays(data.itineraryUpdate),
-              data.replaceAll !== false,
-            ),
-          );
-          const diffs = diffItineraries(trip?.itinerary ?? '[]', fullProposal);
-          // The user may have switched to a different thread while this send
-          // was in flight — never write the itinerary out from under them.
-          const stillActive = sessionRef.current === sendSession;
-          if (diffs !== null && diffs.length === 0) {
-            // True no-op: the proposal matches what the user already has.
-            // Don't write, don't regenerate photos, don't show a misleading
-            // "Itinerary updated" stamp.
-          } else if (diffs === null || !stampId) {
-            // Unparseable proposal (or no anchor row) — legacy verbatim apply,
-            // but only on the originating thread to avoid a silent background
-            // write after the user moved on.
-            if (stillActive) await applyItineraryUpdate(fullProposal, stampId);
-          } else {
-            // A real edit — held for explicit accept/decline. Safe to set even
-            // if the user switched away: the card surfaces when they return to
-            // this thread, and nothing is written until they tap "Apply".
-            setPendingUpdate({
-              itinerary: fullProposal,
-              forMessageId: stampId,
-            });
-          }
-        }
       } catch (err) {
-        console.warn('trip-chat failed', err);
-        setFailedMessage(text);
-      } finally {
-        setIsSending(false);
-        setSendingSession(null);
+        // Only the enqueue can reject now, and it does so in milliseconds —
+        // there is no longer a minutes-long window for this to dangle.
+        console.warn('trip-chat enqueue failed', err);
+        setEnqueueFailed(text);
       }
     },
     [
@@ -538,13 +472,11 @@ export default function ChatScreen() {
       isSending,
       tripId,
       sessionId,
-      convexMessages,
-      trip,
       passports,
       residence,
-      addMessage,
-      applyItineraryUpdate,
-      proxyTripChat,
+      pendingReply,
+      discardMessage,
+      sendTripMessage,
       analytics,
     ],
   );
@@ -555,7 +487,7 @@ export default function ChatScreen() {
     if (!tripId) return;
     hapticSelect();
     setPendingUpdate(null);
-    setFailedMessage(null);
+    setEnqueueFailed(null);
     createChatSession({ tripId: tripId as Id<'trips'> })
       .then((id) => setSessionId(id))
       .catch(() => {});
@@ -569,7 +501,7 @@ export default function ChatScreen() {
   const onSelectSession = useCallback(
     (id: Id<'tripChatSessions'>) => {
       setPendingUpdate(null);
-      setFailedMessage(null);
+      setEnqueueFailed(null);
       setSessionId(id);
     },
     [],
@@ -596,13 +528,72 @@ export default function ChatScreen() {
     await sendChat(text);
   }, [inputText, sendChat]);
 
+  // The prompt to re-send: either the one whose enqueue rejected, or the user
+  // turn sitting immediately before a reply the server failed to generate.
+  const failedMessage = useMemo(() => {
+    if (enqueueFailed) return enqueueFailed;
+    if (pendingReply?.status !== 'failed') return null;
+    const rows = convexMessages ?? [];
+    const idx = rows.findIndex((m) => m._id === pendingReply._id);
+    for (let i = idx - 1; i >= 0; i -= 1) {
+      if (rows[i].role === 'user') return rows[i].content;
+    }
+    return null;
+  }, [enqueueFailed, pendingReply, convexMessages]);
+
   const retryFailed = useCallback(() => {
     if (failedMessage) {
       void sendChat(failedMessage);
     }
   }, [failedMessage, sendChat]);
 
-  const dismissFailed = useCallback(() => setFailedMessage(null), []);
+  // ── Itinerary proposals ─────────────────────────────────────────────────
+  // The reply carries any itinerary change on the row itself, so this runs
+  // when the subscription delivers it — not inline after an await that might
+  // never return. Each message is handled once; `handledUpdatesRef` survives
+  // re-renders so a reconnect replaying the same row can't double-apply.
+  const handledUpdatesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const rows = convexMessages ?? [];
+    for (const m of rows) {
+      if (m.role !== 'assistant' || m.status !== 'ready' || !m.itineraryUpdate) continue;
+      const stampId = String(m._id);
+      if (handledUpdatesRef.current.has(stampId)) continue;
+      handledUpdatesRef.current.add(stampId);
+
+      // The endpoint may return only the days it changed (fast path).
+      // Normalize to the FULL itinerary before diffing/applying — a partial
+      // array would otherwise read as "every other day removed".
+      const fullProposal = JSON.stringify(
+        mergeDayUpdates(
+          parseItineraryDays(trip?.itinerary),
+          parseItineraryDays(m.itineraryUpdate),
+          m.replaceAll !== false,
+        ),
+      );
+      const diffs = diffItineraries(trip?.itinerary ?? '[]', fullProposal);
+
+      if (diffs !== null && diffs.length === 0) {
+        // True no-op: the proposal matches what the user already has. Don't
+        // write, don't regenerate photos, don't show a misleading stamp.
+        continue;
+      }
+      if (diffs === null) {
+        // Unparseable proposal — legacy verbatim apply.
+        void applyItineraryUpdate(fullProposal, stampId);
+        continue;
+      }
+      // A real edit — held for explicit accept/decline.
+      setPendingUpdate({ itinerary: fullProposal, forMessageId: stampId });
+    }
+  }, [convexMessages, trip?.itinerary, applyItineraryUpdate]);
+
+  const dismissFailed = useCallback(() => {
+    setEnqueueFailed(null);
+    if (pendingReply?.status === 'failed') {
+      void discardMessage({ messageId: pendingReply._id });
+    }
+  }, [pendingReply, discardMessage]);
 
   // Starter chips send straight through sendChat (same guards as the input
   // bar) — never just prefill the input. Dimmed + disabled while offline or
@@ -992,7 +983,7 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
           ListFooterComponent={
-            isSending && sendingSession === sessionId ? <ThinkingRow /> : null
+            isSending ? <ThinkingRow /> : null
           }
         />
       )}

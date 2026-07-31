@@ -12,7 +12,8 @@ import {
   Shield, ChevronLeft, Sparkles,
   Briefcase, Plane, FileX, Calendar as CalendarIcon,
 } from 'lucide-react-native';
-import { useMutation, useAction } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
+import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -179,7 +180,11 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
     const [tick, setTick] = useState(0);
 
     const createGuide = useMutation(api.visaGuides.createGuide);
-    const proxyVisaGuide = useAction(api.aiProxy.visaGuide);
+    // Durable path (convex/aiJobs.ts). /api/visa-guide measured 57.7s against
+    // production — far too long to hold a client websocket open, which is how
+    // this sheet could sit on 'loading' forever after a backgrounded app.
+    const startJob = useMutation(api.aiJobs.startJob);
+    const [jobId, setJobId] = useState<Id<'aiJobs'> | null>(null);
     const shieldStyle = useShieldAnimation(step === 'loading');
 
     useEffect(() => {
@@ -210,11 +215,12 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
     const generate = useCallback(async () => {
       setStep('loading');
       setError('');
+      setJobId(null);
       try {
-        // Authenticated + rate-limited proxy (convex/aiProxy.ts) — failures
-        // reject into the existing catch → error state + retry, same UX.
-        const guide = (await proxyVisaGuide({
-          body: JSON.stringify({
+        // Returns immediately — the ~58s generation happens on the scheduler.
+        const id = await startJob({
+          kind: 'visaGuide',
+          payload: JSON.stringify({
             countryCode,
             countryName,
             employment,
@@ -225,7 +231,33 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
             passports,
             residence,
           }),
-        })) as {
+        });
+        setJobId(id);
+      } catch {
+        setError('Failed to generate guide. Please try again.');
+        setStep('month');
+      }
+    }, [countryCode, countryName, employment, purpose, rejections, travelMonth, heldVisas, passports, residence, startJob]);
+
+    // ── Result subscription ─────────────────────────────────────────
+    const job = useQuery(api.aiJobs.getJob, jobId ? { jobId } : 'skip');
+
+    useEffect(() => {
+      if (!job || job.status === 'generating') return;
+
+      const bail = () => {
+        setError('Failed to generate guide. Please try again.');
+        setStep('month');
+      };
+
+      if (job.status === 'failed' || !job.result) {
+        setJobId(null);
+        bail();
+        return;
+      }
+
+      const finish = async () => {
+        const guide = JSON.parse(job.result as string) as {
           visaType?: string;
           documents?: Array<{ id: string; label: string; category: string; tip?: string }>;
         };
@@ -254,15 +286,15 @@ const VisaGuideSheet = forwardRef<VisaGuideSheetRef, VisaGuideSheetProps>(
         // them into it from wherever they navigated to.
         if (dismissedRef.current) return;
 
-        // Dismiss + navigate synchronously — the LLM fetch already took
-        // seconds, a tacked-on delay here is pure dead time.
+        // Dismiss + navigate synchronously — the generation already took
+        // ~a minute, a tacked-on delay here is pure dead time.
         bottomSheetRef.current?.dismiss();
         onGuideCreated(String(guideId));
-      } catch {
-        setError('Failed to generate guide. Please try again.');
-        setStep('month');
-      }
-    }, [countryCode, countryName, employment, purpose, rejections, travelMonth, heldVisas, passports, residence, createGuide, proxyVisaGuide, onGuideCreated]);
+      };
+
+      finish().catch(bail);
+      setJobId(null);
+    }, [job, createGuide, employment, purpose, rejections, travelMonth, countryCode, countryName, onGuideCreated]);
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => (
