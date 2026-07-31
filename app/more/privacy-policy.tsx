@@ -220,9 +220,9 @@ export default function PrivacyPolicyScreen() {
         <Section title="7. Collaborative Content & Moderation" colors={colors}>
           <P colors={colors}>
             Trips can be shared with people you invite. Messages you post in a
-            shared trip are visible to that trip's collaborators. We have zero
+            shared trip are visible to that trip&apos;s collaborators. We have zero
             tolerance for objectionable content. You can report any message or
-            block any collaborator from within a trip's chat; reported content is
+            block any collaborator from within a trip&apos;s chat; reported content is
             reviewed within 24 hours and offending users may be removed.
           </P>
         </Section>
