@@ -33,9 +33,19 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { checkTripPermission } from "./lib/auth";
 import { checkRateLimit, HOUR_MS } from "./lib/rateLimit";
-import { aiFetch, AI_WATCHDOG_MS } from "./lib/aiFetch";
+import { AI_WATCHDOG_MS } from "./lib/aiFetch";
+import { captureAIGeneration } from "./lib/posthog";
 
-const API_BASE = "https://visa-atlas.vercel.app";
+// Anthropic direct — same constants tripRefinement/tripGeneration already use.
+// The old path went client → Convex → visa-atlas.vercel.app → Anthropic. That
+// middle hop is what broke: /api/trip-chat regenerates the whole itinerary on
+// every turn and never returned for a real trip, dying at Vercel's own 300s
+// gateway limit. Going straight to Anthropic removes the hop, the extra
+// latency, and that gateway ceiling.
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_VERSION = "2023-06-01";
+const MODEL = "claude-sonnet-4-6";
+const ANTHROPIC_TIMEOUT_MS = 120_000;
 
 const UPSTREAM_ERROR_MESSAGE =
   "Couldn't reach the copilot just now — tap retry.";
@@ -306,57 +316,143 @@ export const runTripChat = internalAction({
       });
       if (!ctxData) return fail("trip or message row missing");
 
-      const secret = process.env.AI_PROXY_SECRET;
-      if (!secret) return fail("AI_PROXY_SECRET env var is not set");
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return fail("ANTHROPIC_API_KEY env var is not set");
 
       const { trip, history } = ctxData;
-      const body = JSON.stringify({
-        message: args.userMessage,
-        tripContext: {
-          countryName: trip.countryName ?? "",
-          duration: trip.duration ?? 0,
-          region: trip.region ?? "",
-          capital: trip.capital ?? "",
-          currency: trip.currency ?? "",
-          dailyBudget: trip.dailyBudget ?? "",
-          visaCategory: trip.visaCategory ?? "",
-          companions: trip.companions ?? undefined,
-        },
-        currentItinerary: compactItinerary(trip.itinerary),
-        chatHistory: history,
-        passports: args.passports,
-        residence: args.residence,
-      });
 
+      // Edit-only contract. The old Vercel route regenerated the whole
+      // itinerary on every turn — that is why a one-line weather question came
+      // back as 18.9 KB and why it timed out. Here the model is told to answer
+      // in prose and touch the itinerary ONLY when asked, returning just the
+      // days it changed. replaceAll:false makes the client merge by day number
+      // (mergeDayUpdates), so untouched days keep their existing content.
+      const system = [
+        "You are the trip copilot inside Visa Atlas, editing a saved itinerary.",
+        "",
+        `TRIP: ${trip.countryName ?? ""} · ${trip.duration ?? 0} days · base ${trip.capital ?? ""}`,
+        `Budget ${trip.dailyBudget ?? "n/a"} · currency ${trip.currency ?? "n/a"} · visa ${trip.visaCategory ?? "n/a"}`,
+        trip.companions ? `Travelling: ${trip.companions}` : "",
+        args.passports.length ? `Passports: ${args.passports.join(", ")}` : "",
+        args.residence ? `Resident in: ${args.residence}` : "",
+        "",
+        "CURRENT ITINERARY (JSON, one object per day):",
+        compactItinerary(trip.itinerary),
+        "",
+        "Reply with ONE JSON object and nothing else:",
+        '{"reply": string, "itineraryUpdate": array|null, "replaceAll": false}',
+        "",
+        "- `reply`: your answer, 1-3 short paragraphs, warm and specific. Always required.",
+        "- `itineraryUpdate`: ONLY when the user asked you to change the plan.",
+        "  Otherwise null. Never rewrite days you were not asked about.",
+        "  Include ONLY the day objects you changed, each keeping its `day`",
+        "  number and the same field names as above.",
+        "- `replaceAll`: always false.",
+        "",
+        "A question about weather, cost, or advice is NOT an edit request —",
+        "answer it in `reply` and set `itineraryUpdate` to null.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const messages = [
+        ...history.map((m) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        })),
+        { role: "user", content: args.userMessage },
+      ];
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS);
       let res: Response;
       try {
-        res = await aiFetch(`${API_BASE}/api/trip-chat`, secret, body);
+        res = await fetch(ANTHROPIC_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": ANTHROPIC_VERSION,
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            max_tokens: 4096,
+            system,
+            messages,
+          }),
+          signal: controller.signal,
+        });
       } catch (err) {
-        // Includes AiFetchTimeout. Without the deadline the Convex runtime
-        // would kill this action at 5 minutes and `fail` would never run.
-        return fail(`fetch failed: ${String(err)}`);
+        return fail(`anthropic fetch failed: ${String(err)}`);
+      } finally {
+        clearTimeout(timer);
       }
 
       const text = await res.text();
-      if (!res.ok) return fail(`upstream ${res.status}: ${text.slice(0, 300)}`);
+      if (!res.ok) return fail(`anthropic ${res.status}: ${text.slice(0, 300)}`);
 
-      let data: {
-        reply?: string;
-        itineraryUpdate?: string | null;
-        replaceAll?: boolean;
+      let payload: {
+        content?: { type: string; text?: string }[];
+        usage?: Record<string, number | undefined>;
       };
       try {
-        data = JSON.parse(text) as typeof data;
+        payload = JSON.parse(text) as typeof payload;
       } catch {
-        return fail(`non-JSON response: ${text.slice(0, 300)}`);
+        return fail(`non-JSON anthropic response: ${text.slice(0, 300)}`);
       }
+
+      // Cost telemetry, same as every other LLM call in this codebase.
+      await captureAIGeneration({
+        traceId: String(args.assistantMessageId),
+        purpose: "trip-chat",
+        model: MODEL,
+        usage: {
+          inputTokens: payload.usage?.input_tokens ?? 0,
+          outputTokens: payload.usage?.output_tokens ?? 0,
+          cacheReadTokens: payload.usage?.cache_read_input_tokens,
+          cacheCreationTokens: payload.usage?.cache_creation_input_tokens,
+        },
+      }).catch(() => {});
+
+      const raw = (payload.content ?? [])
+        .filter((c) => c.type === "text")
+        .map((c) => c.text ?? "")
+        .join("")
+        .trim();
+
+      // Tolerate a ```json fence or stray prose around the object.
+      const jsonStart = raw.indexOf("{");
+      const jsonEnd = raw.lastIndexOf("}");
+      let data: {
+        reply?: string;
+        itineraryUpdate?: unknown;
+        replaceAll?: boolean;
+      } = {};
+      if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        try {
+          data = JSON.parse(raw.slice(jsonStart, jsonEnd + 1)) as typeof data;
+        } catch {
+          // Fall through — treat the whole thing as a plain-text reply.
+        }
+      }
+      if (!data.reply) data.reply = raw;
+
       if (!data.reply) return fail("empty reply");
+
+      // itineraryUpdate arrives as a parsed array — the client expects the
+      // JSON string form it always got from the proxy.
+      const itineraryUpdate =
+        Array.isArray(data.itineraryUpdate) && data.itineraryUpdate.length > 0
+          ? JSON.stringify(data.itineraryUpdate)
+          : undefined;
 
       await ctx.runMutation(internal.tripChat._completeMessage, {
         messageId: args.assistantMessageId,
         content: data.reply,
-        itineraryUpdate: data.itineraryUpdate ?? undefined,
-        replaceAll: data.replaceAll,
+        itineraryUpdate,
+        // Always a partial day set now, so the client merges by day number
+        // instead of replacing the whole plan.
+        replaceAll: itineraryUpdate ? false : undefined,
       });
       return null;
     } catch (err) {
