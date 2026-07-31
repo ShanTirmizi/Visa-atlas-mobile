@@ -33,6 +33,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { checkTripPermission } from "./lib/auth";
 import { checkRateLimit, HOUR_MS } from "./lib/rateLimit";
+import { aiFetch, AI_WATCHDOG_MS } from "./lib/aiFetch";
 
 const API_BASE = "https://visa-atlas.vercel.app";
 
@@ -118,6 +119,14 @@ export const sendMessage = mutation({
       residence: args.residence,
     });
 
+    // Backstop. If the action is killed outright — runtime timeout, a deploy
+    // mid-flight, an unhandled crash — its catch never runs and the row would
+    // sit on "thinking" forever. This sweeps it to "failed" so the client can
+    // offer a retry instead of spinning.
+    await ctx.scheduler.runAfter(AI_WATCHDOG_MS, internal.tripChat._watchdog, {
+      messageId: assistantMessageId,
+    });
+
     return assistantMessageId;
   },
 });
@@ -131,11 +140,25 @@ export const discardMessage = mutation({
     const row = await ctx.db.get(messageId);
     if (!row) return null;
     await checkTripPermission(ctx, row.tripId, "viewer");
-    // Only ever remove an unfinished assistant row — never a real reply and
-    // never someone's prompt.
-    if (row.role === "assistant" && row.status !== "ready") {
-      await ctx.db.delete(messageId);
-    }
+    // Only ever remove an unfinished assistant row — never a real reply.
+    if (row.role !== "assistant" || row.status === "ready") return null;
+
+    // Also drop the prompt this reply belonged to. Retry re-sends that text,
+    // so leaving it behind renders the user's message twice in the thread.
+    const preceding = await ctx.db
+      .query("tripMessages")
+      .withIndex("by_trip", (q) => q.eq("tripId", row.tripId))
+      .order("desc")
+      .take(20);
+    const orphanPrompt = preceding.find(
+      (m) =>
+        m.role === "user" &&
+        m.sessionId === row.sessionId &&
+        m.timestamp < row.timestamp,
+    );
+
+    await ctx.db.delete(messageId);
+    if (orphanPrompt) await ctx.db.delete(orphanPrompt._id);
     return null;
   },
 });
@@ -188,6 +211,20 @@ export const _completeMessage = internalMutation({
       status: "ready",
       itineraryUpdate,
       replaceAll,
+    });
+  },
+});
+
+/** No-op unless the row is still unfinished past the deadline. */
+export const _watchdog = internalMutation({
+  args: { messageId: v.id("tripMessages") },
+  handler: async (ctx, { messageId }) => {
+    const row = await ctx.db.get(messageId);
+    if (!row || row.status !== "thinking") return;
+    console.error(`tripChat watchdog: ${messageId} never finished`);
+    await ctx.db.patch(messageId, {
+      status: "failed",
+      errorMessage: UPSTREAM_ERROR_MESSAGE,
     });
   },
 });
@@ -256,15 +293,10 @@ export const runTripChat = internalAction({
 
       let res: Response;
       try {
-        res = await fetch(`${API_BASE}/api/trip-chat`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-atlas-proxy-secret": secret,
-          },
-          body,
-        });
+        res = await aiFetch(`${API_BASE}/api/trip-chat`, secret, body);
       } catch (err) {
+        // Includes AiFetchTimeout. Without the deadline the Convex runtime
+        // would kill this action at 5 minutes and `fail` would never run.
         return fail(`fetch failed: ${String(err)}`);
       }
 

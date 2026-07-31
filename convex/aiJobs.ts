@@ -37,6 +37,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
 import { checkRateLimit, HOUR_MS } from "./lib/rateLimit";
+import { aiFetch, AI_WATCHDOG_MS } from "./lib/aiFetch";
 
 const API_BASE = "https://visa-atlas.vercel.app";
 
@@ -100,6 +101,10 @@ export const startJob = mutation({
       createdAt: Date.now(),
     });
     await ctx.scheduler.runAfter(0, internal.aiJobs.runJob, { jobId });
+    // Backstop for an action killed outright — see convex/lib/aiFetch.ts.
+    await ctx.scheduler.runAfter(AI_WATCHDOG_MS, internal.aiJobs._watchdog, {
+      jobId,
+    });
     return jobId;
   },
 });
@@ -135,6 +140,20 @@ export const _completeJob = internalMutation({
   args: { jobId: v.id("aiJobs"), result: v.string() },
   handler: async (ctx, { jobId, result }) => {
     await ctx.db.patch(jobId, { status: "ready", result });
+  },
+});
+
+/** No-op unless the job is still unfinished past the deadline. */
+export const _watchdog = internalMutation({
+  args: { jobId: v.id("aiJobs") },
+  handler: async (ctx, { jobId }) => {
+    const row = await ctx.db.get(jobId);
+    if (!row || row.status !== "generating") return;
+    console.error(`aiJobs watchdog: ${jobId} never finished`);
+    await ctx.db.patch(jobId, {
+      status: "failed",
+      errorMessage: UPSTREAM_ERROR_MESSAGE,
+    });
   },
 });
 
@@ -178,15 +197,10 @@ export const runJob = internalAction({
 
       let res: Response;
       try {
-        res = await fetch(`${API_BASE}/api/${route}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-atlas-proxy-secret": secret,
-          },
-          body: row.payload,
-        });
+        res = await aiFetch(`${API_BASE}/api/${route}`, secret, row.payload);
       } catch (err) {
+        // Includes AiFetchTimeout — without it the runtime would kill this
+        // action at 5 minutes and leave the job stuck on "generating".
         return fail(`fetch failed: ${String(err)}`);
       }
 

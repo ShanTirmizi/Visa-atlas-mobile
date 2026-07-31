@@ -24,6 +24,7 @@ import type * as emailSync from "../emailSync.js";
 import type * as emailVerification from "../emailVerification.js";
 import type * as featureFlags from "../featureFlags.js";
 import type * as http from "../http.js";
+import type * as lib_aiFetch from "../lib/aiFetch.js";
 import type * as lib_anthropicStream from "../lib/anthropicStream.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_dayPlanLLM from "../lib/dayPlanLLM.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   emailVerification: typeof emailVerification;
   featureFlags: typeof featureFlags;
   http: typeof http;
+  "lib/aiFetch": typeof lib_aiFetch;
   "lib/anthropicStream": typeof lib_anthropicStream;
   "lib/auth": typeof lib_auth;
   "lib/dayPlanLLM": typeof lib_dayPlanLLM;

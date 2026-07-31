@@ -31,6 +31,7 @@ import {
 import { internal } from "./_generated/api";
 import { requireAuth } from "./lib/auth";
 import { checkRateLimit, HOUR_MS } from "./lib/rateLimit";
+import { aiFetch, AI_WATCHDOG_MS } from "./lib/aiFetch";
 
 const API_BASE = "https://visa-atlas.vercel.app";
 
@@ -108,6 +109,12 @@ export const generateComparison = mutation({
     await ctx.scheduler.runAfter(0, internal.comparisons.runComparison, {
       comparisonId,
     });
+    // Backstop for an action killed outright — see convex/lib/aiFetch.ts.
+    await ctx.scheduler.runAfter(
+      AI_WATCHDOG_MS,
+      internal.comparisons._watchdog,
+      { comparisonId },
+    );
     return comparisonId;
   },
 });
@@ -145,6 +152,20 @@ export const _writeComparison = internalMutation({
   },
 });
 
+/** No-op unless the comparison is still unfinished past the deadline. */
+export const _watchdog = internalMutation({
+  args: { comparisonId: v.id("comparisons") },
+  handler: async (ctx, { comparisonId }) => {
+    const row = await ctx.db.get(comparisonId);
+    if (!row || row.status !== "generating") return;
+    console.error(`comparisons watchdog: ${comparisonId} never finished`);
+    await ctx.db.patch(comparisonId, {
+      status: "failed",
+      errorMessage: UPSTREAM_ERROR_MESSAGE,
+    });
+  },
+});
+
 export const _failComparison = internalMutation({
   args: { comparisonId: v.id("comparisons"), errorMessage: v.string() },
   handler: async (ctx, { comparisonId, errorMessage }) => {
@@ -176,15 +197,10 @@ export const runComparison = internalAction({
 
       let res: Response;
       try {
-        res = await fetch(`${API_BASE}/api/compare`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-atlas-proxy-secret": secret,
-          },
-          body: row.payload,
-        });
+        res = await aiFetch(`${API_BASE}/api/compare`, secret, row.payload);
       } catch (err) {
+        // Includes AiFetchTimeout — without it the runtime would kill this
+        // action at 5 minutes and leave the row stuck on "generating".
         return fail(`fetch failed: ${String(err)}`);
       }
 
